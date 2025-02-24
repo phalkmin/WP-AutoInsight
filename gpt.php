@@ -10,7 +10,7 @@ use GeminiAPI\Resources\Parts\TextPart;
  * @param string $prompt Text prompt for generating content.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_claude_generate_text( $api_key, $prompt, $char_limit, $prompt_select ) {
+function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
 
 	$model_mapping = array(
 		'claude-3-haiku'  => 'claude-3-haiku-20240307',
@@ -24,9 +24,11 @@ function abcc_claude_generate_text( $api_key, $prompt, $char_limit, $prompt_sele
 		'anthropic-version' => '2023-06-01',
 	);
 
+	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
+
 	$body = array(
-		'model'      => $model_mapping[ $prompt_select ] ?? 'claude-3-sonnet-20240229',
-		'max_tokens' => 1000,
+		'model'      => $model,
+		'max_tokens' => $available_tokens,
 		'messages'   => array(
 			array(
 				'role'    => 'user',
@@ -69,9 +71,15 @@ function abcc_claude_generate_text( $api_key, $prompt, $char_limit, $prompt_sele
  * @param string $length Length of the generated content.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_gemini_generate_text( $api_key, $prompt, $char_limit ) {
+function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens ) {
+	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, 'gemini-pro' );
+
 	$gemini = new Client( $api_key );
-	$chat   = $gemini->geminiPro()->startChat();
+	$chat   = $gemini->geminiPro()->startChat(
+		array(
+			'maxOutputTokens' => $available_tokens,
+		)
+	);
 
 	$response = $chat->sendMessage( new TextPart( $prompt ) );
 
@@ -93,22 +101,10 @@ function abcc_gemini_generate_text( $api_key, $prompt, $char_limit ) {
  * @param string $prompt_select Model to use.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_openai_generate_text( $api_key, $prompt, $length, $prompt_select ) {
-	$client = new ABCC_OpenAI_Client( $api_key );
+function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
+	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
 
-	$custom_endpoint = get_option( 'openai_custom_endpoint', '' );
-	if ( ! empty( $custom_endpoint ) ) {
-		$client->set_base_url( $custom_endpoint );
-	}
-
-	$model_mapping = array(
-		'openai' => 'gpt-3.5-turbo',
-		'gpt-4'  => 'gpt-4-turbo-preview',
-		'gpt-4o' => 'gpt-4',
-	);
-
-	$model = isset( $model_mapping[ $prompt_select ] ) ? $model_mapping[ $prompt_select ] : 'gpt-3.5-turbo';
-
+	$client   = new ABCC_OpenAI_Client( $api_key );
 	$messages = array(
 		array(
 			'role'    => 'user',
@@ -118,7 +114,7 @@ function abcc_openai_generate_text( $api_key, $prompt, $length, $prompt_select )
 
 	$options = array(
 		'model'       => $model,
-		'max_tokens'  => absint( $length ),
+		'max_tokens'  => $available_tokens,
 		'temperature' => 0.8,
 	);
 

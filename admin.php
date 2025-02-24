@@ -221,6 +221,21 @@ function abcc_openai_text_settings_page() {
 												<?php wpai_category_dropdown( $selected_categories ); ?>
 											</td>
 										</tr>
+										<tr>
+											<th scope="row">
+												<label for="openai_generate_seo">
+													<?php echo esc_html__( 'Generate SEO Metadata:', 'automated-blog-content-creator' ); ?>
+												</label>
+											</th>
+											<td>
+												<input type="checkbox" id="openai_generate_seo" 
+														name="openai_generate_seo" 
+														<?php checked( get_option( 'openai_generate_seo', true ) ); ?>>
+												<p class="description">
+													<?php esc_html_e( 'Generate SEO metadata using AI (requires a compatible SEO plugin like Yoast)', 'automated-blog-content-creator' ); ?>
+												</p>
+											</td>
+										</tr>
 									</table>
 								</div>
 							</div>
@@ -503,6 +518,7 @@ function abcc_openai_blog_post_options_page() {
 												<input type="number" id="openai_char_limit" name="openai_char_limit"
 													value="<?php echo esc_attr( $char_limit ); ?>" min="1">
 												<p class="description">The maximum number of tokens (words and characters) will be used by the AI during post generation. Range: 1-4096</p>
+												<p class="token-estimate"></p>
 											</td>
 										</tr>
 
@@ -577,3 +593,41 @@ jQuery(document).ready(function($) {
 
 	<?php
 }
+
+
+function abcc_update_token_limit_description( $char_limit ) {
+	$model       = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$max_context = abcc_get_model_context_window( $model );
+
+	return sprintf(
+		__( 'Maximum tokens for content generation (1 token ≈ 4 characters). Current model (%1$s) maximum: %2$d tokens. Note: The actual content length will be less as some tokens are used by the prompt.', 'automated-blog-content-creator' ),
+		$model,
+		$max_context
+	);
+}
+
+
+add_action(
+	'wp_ajax_abcc_estimate_tokens',
+	function () {
+		check_ajax_referer( 'abcc_openai_generate_post', 'abcc_openai_nonce' );
+
+		$char_limit = absint( $_POST['char_limit'] );
+		$model      = sanitize_text_field( $_POST['model'] );
+
+		$available_tokens = abcc_calculate_available_tokens(
+			abcc_build_content_prompt( array(), 'default', array(), $char_limit ),
+			$char_limit,
+			$model
+		);
+
+		wp_send_json_success(
+			array(
+				'message' => sprintf(
+					__( 'Estimated available tokens: %d (after prompt tokens)', 'automated-blog-content-creator' ),
+					$available_tokens
+				),
+			)
+		);
+	}
+);

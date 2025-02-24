@@ -111,6 +111,30 @@ You can manually generate a blog post by clicking the "Create post manually" but
 
 == Changelog ==
 
+
+= 2.1 =
+* Added:
+  - Advanced token handling system for better content length management
+  - SEO metadata generation support with Yoast SEO integration (other plugins coming next)
+  - Improved HTML structure with better heading hierarchy (h1, h2, h3)
+  - Token estimation and validation for different AI models
+  - Real-time token usage feedback in the admin interface
+
+* Changed:
+  - Refactored content generation for better HTML structure
+  - Improved model context window handling for each AI service
+  - Enhanced error handling and logging system
+  - Better prompt management for consistent output
+  - Updated admin interface with token usage indicators
+
+* Fixed:
+  - Content formatting issues with HTML tags
+  - Token limit calculation accuracy
+  - Model selection and API handling edge cases
+  - SEO metadata integration reliability
+  - HTML structure validation and sanitization
+
+
 = 2.0 =
 * Added:
   - Claude 3 AI model integration (Haiku, Sonnet, and Opus)

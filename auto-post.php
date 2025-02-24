@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP-AutoInsight
  * Description: Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version: 1.9
+ * Version: 2.1
  * Author: Paulo H. Alkmin
  * Author URI: https://phalkmin.me/
  * Text Domain: automated-wordpress-content-creator
@@ -22,6 +22,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 require plugin_dir_path( __FILE__ ) . 'admin.php';
 require plugin_dir_path( __FILE__ ) . 'gpt.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-abcc-openai-client.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/token-handling.php';
 
 /**
  * Handle API request errors.
@@ -225,9 +226,36 @@ add_action( 'wp_ajax_abcc_refresh_models', 'abcc_refresh_models_ajax' );
  * JSON string, and the block content itself enclosed in HTML comments.
  */
 function abcc_create_block( $block_name, $attributes = array(), $content = '' ) {
-	$attributes_string = wp_json_encode( $attributes );
-	$block_content     = '<!-- wp:' . esc_attr( $block_name ) . ' ' . $attributes_string . ' -->' . wp_kses_post( $content ) . '<!-- /wp:' . esc_attr( $block_name ) . ' -->';
-	return $block_content;
+	$content = trim( $content );
+
+	if ( $block_name === 'heading' ) {
+		$level = isset( $attributes['level'] ) ? $attributes['level'] : 2;
+		return sprintf(
+			'<!-- wp:heading {"level":%d} --><h%d class="wp-block-heading">%s</h%d><!-- /wp:heading -->',
+			$level,
+			$level,
+			esc_html( $content ),
+			$level
+		);
+	}
+
+	$attributes_string = ! empty( $attributes ) ? ' ' . wp_json_encode( $attributes ) : '';
+
+	if ( $block_name === 'paragraph' ) {
+		return sprintf(
+			'<!-- wp:paragraph%s --><p>%s</p><!-- /wp:paragraph -->',
+			$attributes_string,
+			esc_html( $content )
+		);
+	}
+
+	return sprintf(
+		'<!-- wp:%s%s -->%s<!-- /wp:%s -->',
+		esc_attr( $block_name ),
+		$attributes_string,
+		wp_kses_post( $content ),
+		esc_attr( $block_name )
+	);
 }
 
 
@@ -247,21 +275,45 @@ function abcc_create_block( $block_name, $attributes = array(), $content = '' ) 
 function abcc_create_blocks( $text_array ) {
 	$blocks = array();
 	foreach ( $text_array as $item ) {
-		if ( ! empty( $item ) ) {
-			$block    = array(
-				'name'       => 'paragraph',
-				'attributes' => array(
-					'align'            => 'left',
-					'custom_attribute' => 'value',
-				),
-				'content'    => wp_kses_post( $item ),
-			);
-			$blocks[] = $block;
+		$item = trim( $item );
+		if ( empty( $item ) ) {
+			continue;
 		}
+
+		// Handle headings
+		if ( preg_match( '/<h2>(.*?)<\/h2>/', $item, $matches ) ) {
+			$blocks[] = array(
+				'name'       => 'heading',
+				'attributes' => array(
+					'level'     => 2,
+					'className' => 'wp-block-heading',
+				),
+				'content'    => wp_strip_all_tags( $matches[1] ),
+			);
+			continue;
+		}
+
+		if ( preg_match( '/<h3>(.*?)<\/h3>/', $item, $matches ) ) {
+			$blocks[] = array(
+				'name'       => 'heading',
+				'attributes' => array(
+					'level'     => 3,
+					'className' => 'wp-block-heading',
+				),
+				'content'    => wp_strip_all_tags( $matches[1] ),
+			);
+			continue;
+		}
+
+		// Handle regular paragraphs
+		$blocks[] = array(
+			'name'       => 'paragraph',
+			'attributes' => array(),
+			'content'    => wp_strip_all_tags( $item ),
+		);
 	}
 	return $blocks;
 }
-
 
 
 /**
@@ -282,6 +334,47 @@ function abcc_gutenberg_blocks( $blocks = array() ) {
 }
 
 /**
+ * Checks which SEO plugin is active and returns its identifier.
+ *
+ * @return string Identifier of the active SEO plugin or 'none'
+ */
+function abcc_get_active_seo_plugin() {
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+
+	if ( is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
+		return 'yoast';
+	}
+	return 'none';
+}
+
+
+/**
+ * Gets the appropriate meta fields based on the active SEO plugin.
+ *
+ * @param array $seo_data Array containing SEO metadata
+ * @return array Meta input array for wp_insert_post
+ */
+function abcc_get_seo_meta_fields( $seo_data ) {
+	$active_seo_plugin = abcc_get_active_seo_plugin();
+	$meta_input        = array();
+
+	switch ( $active_seo_plugin ) {
+		case 'yoast':
+			$meta_input = array(
+				'_yoast_wpseo_metadesc'              => $seo_data['meta_description'],
+				'_yoast_wpseo_focuskw'               => $seo_data['primary_keyword'],
+				'_yoast_wpseo_metakeywords'          => implode( ',', $seo_data['secondary_keywords'] ),
+				'_yoast_wpseo_opengraph-description' => $seo_data['social_excerpt'],
+			);
+			break;
+	}
+	return $meta_input;
+}
+
+
+/**
  * Generates a new post using AI services.
  *
  * @param string  $api_key        The API key for the selected service
@@ -294,48 +387,58 @@ function abcc_gutenberg_blocks( $blocks = array() ) {
  */
 function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone = 'default', $auto_create = false, $char_limit = 200 ) {
 	try {
-		$selected_categories = get_option( 'openai_selected_categories', array() );
-		$category_names      = array();
+		$generate_seo = get_option( 'openai_generate_seo', true ) && abcc_get_active_seo_plugin() !== 'none';
 
-		foreach ( $selected_categories as $category_id ) {
-			$category = get_category( $category_id );
-			if ( $category ) {
-				$category_names[] = $category->name;
-			}
+		if ( $generate_seo ) {
+			// Generate title and SEO data
+			$title_and_seo = abcc_generate_title_and_seo(
+				$api_key,
+				$keywords,
+				$prompt_select,
+				array(
+					'site_name'        => get_bloginfo( 'name' ),
+					'site_description' => get_bloginfo( 'description' ),
+				)
+			);
+			$title         = $title_and_seo['title'];
+			$seo_data      = $title_and_seo['seo_data'];
+		} else {
+			// Just generate a title
+			$title    = abcc_generate_title( $api_key, $keywords, $prompt_select );
+			$seo_data = array();
 		}
 
-		$prompt = abcc_build_content_prompt(
-			$keywords,
-			$tone,
-			$category_names,
-			$char_limit
-		);
-
-		$text_array = abcc_generate_content(
+		// Then, generate the content
+		$content_array = abcc_generate_post_content(
 			$api_key,
-			$prompt,
+			$keywords,
 			$prompt_select,
+			$title,
 			$char_limit
 		);
 
-		if ( empty( $text_array ) ) {
-			throw new Exception( 'Content generation failed - no text received from AI service' );
-		}
-
-		$title = '';
-		foreach ( $text_array as $key => $value ) {
-			if ( strpos( $value, '<h1>' ) !== false && strpos( $value, '</h1>' ) !== false ) {
-				$title = str_replace( array( '<h1>', '</h1>' ), '', $value );
-				unset( $text_array[ $key ] );
-				break;
+		$content_array = array_filter(
+			$content_array,
+			function ( $line ) {
+				return ! strpos( $line, '<title>' ) && trim( $line ) !== '';
 			}
+		);
+
+		if ( empty( $content_array ) ) {
+			throw new Exception( 'Content generation failed' );
 		}
 
-		if ( empty( $title ) ) {
-			throw new Exception( 'No title found in generated content' );
-		}
+		$content_array = array_map( 'trim', $content_array );
+		$content_array = array_filter(
+			$content_array,
+			function ( $line ) {
+				return ! empty( $line ) &&
+						! strpos( $line, '<title>' ) &&
+						! strpos( $line, '[SEO]' );
+			}
+		);
 
-		$format_content = abcc_create_blocks( $text_array );
+		$format_content = abcc_create_blocks( $content_array );
 		$post_content   = abcc_gutenberg_blocks( $format_content );
 
 		$post_data = array(
@@ -344,8 +447,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			'post_status'   => 'draft',
 			'post_author'   => get_current_user_id(),
 			'post_type'     => 'post',
-			'post_category' => $selected_categories,
+			'post_category' => get_option( 'openai_selected_categories', array() ),
 		);
+
+		// Add SEO data if Yoast is active
+		if ( $generate_seo && ! empty( $seo_data ) ) {
+			$post_data['meta_input'] = abcc_get_seo_meta_fields( $seo_data );
+		}
 
 		$post_id = wp_insert_post( $post_data, true );
 
@@ -363,7 +471,6 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			}
 		}
 
-		// Send notification if enabled
 		if ( get_option( 'openai_email_notifications', false ) ) {
 			abcc_send_post_notification( $post_id );
 		}
@@ -443,11 +550,14 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 
 	// Content structure
 	$prompt_parts[] = 'Create a comprehensive article that includes:
-		- An engaging <h1> title that includes key terms naturally
-		- A compelling introduction that hooks the reader
-		- Well-organized main sections with clear subheadings
-		- Relevant examples and references
-		- A strong conclusion that summarizes key points';
+        - An engaging <h1> title that includes key terms naturally
+        - A compelling introduction that hooks the reader
+        - Well-organized main sections with <h2> headings
+        - Subsections using <h3> headings where appropriate for detailed breakdowns
+        - A meta description (max 160 characters) summarizing the article for SEO
+        - 3-5 focus keywords for the article
+        - Relevant examples and references
+        - A strong conclusion that summarizes key points';
 
 	// Keywords and categories focus
 	if ( ! empty( $keywords ) ) {
@@ -455,6 +565,22 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 			'Focus on these main topics and keywords: %s. Integrate them naturally throughout the content.',
 			implode( ', ', array_map( 'sanitize_text_field', $keywords ) )
 		);
+	}
+
+	if ( abcc_get_active_seo_plugin() !== 'none' ) {
+		$prompt_parts[] = 'Additionally, provide the following SEO elements separated by [SEO] tags:
+            - A compelling meta description (max 160 characters)
+            - Primary keyword
+            - Secondary keywords (2-3)
+            - Social media excerpt (max 200 characters)
+            
+            Format the SEO section exactly like this:
+            [SEO]
+            Meta Description: Your meta description here
+            Primary Keyword: Your primary keyword
+            Secondary Keywords: keyword1, keyword2, keyword3
+            Social Excerpt: Your social media excerpt here
+            [SEO]';
 	}
 
 	if ( ! empty( $category_names ) ) {
@@ -811,4 +937,82 @@ register_deactivation_hook( __FILE__, 'abcc_openai_deactivate_plugin' );
 add_action( 'admin_notices', 'display_openai_settings_errors' );
 function display_openai_settings_errors() {
 	settings_errors( 'openai-settings' );
+}
+
+
+function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info ) {
+	$prompt  = 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
+	$prompt .= 'Format the response exactly as follows:
+    [TITLE]
+    Your H1 title here
+    [SEO]
+    Meta Description: (max 160 chars)
+    Primary Keyword: main keyword
+    Secondary Keywords: keyword1, keyword2, keyword3
+    Social Excerpt: (max 200 chars)
+    [END]';
+
+	// Use a small token limit for this call - 200 tokens should be plenty
+	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 200 );
+
+	if ( ! $result ) {
+		throw new Exception( 'Failed to generate title and SEO data' );
+	}
+
+	// Parse the structured response
+	$title    = '';
+	$seo_data = array();
+	$in_title = false;
+	$in_seo   = false;
+
+	foreach ( $result as $line ) {
+		if ( strpos( $line, '[TITLE]' ) !== false ) {
+			$in_title = true;
+			continue;
+		}
+		if ( strpos( $line, '[SEO]' ) !== false ) {
+			$in_seo   = true;
+			$in_title = false;
+			continue;
+		}
+		if ( strpos( $line, '[END]' ) !== false ) {
+			break;
+		}
+
+		if ( $in_title ) {
+			$title    = trim( $line );
+			$in_title = false;
+		} elseif ( $in_seo ) {
+			if ( strpos( $line, 'Meta Description:' ) !== false ) {
+				$seo_data['meta_description'] = trim( str_replace( 'Meta Description:', '', $line ) );
+			} elseif ( strpos( $line, 'Primary Keyword:' ) !== false ) {
+				$seo_data['primary_keyword'] = trim( str_replace( 'Primary Keyword:', '', $line ) );
+			} elseif ( strpos( $line, 'Secondary Keywords:' ) !== false ) {
+				$seo_data['secondary_keywords'] = array_map( 'trim', explode( ',', str_replace( 'Secondary Keywords:', '', $line ) ) );
+			} elseif ( strpos( $line, 'Social Excerpt:' ) !== false ) {
+				$seo_data['social_excerpt'] = trim( str_replace( 'Social Excerpt:', '', $line ) );
+			}
+		}
+	}
+
+	return array(
+		'title'    => $title,
+		'seo_data' => $seo_data,
+	);
+}
+
+
+function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit ) {
+	$prompt  = "Write a blog post with the following title: {$title}\n\n";
+	$prompt .= 'Using these keywords: ' . implode( ', ', $keywords ) . "\n\n";
+	$prompt .= 'Format requirements:
+    - Use <h2>Heading</h2> for main sections
+    - Use <h3>Heading</h3> for subsections
+    - Put each paragraph in its own <p> tag
+    - Do not include the title in the content
+    - Put each section on a new line
+    - Do not include empty lines or paragraphs
+    - Ensure clean HTML without extra spaces or newlines';
+
+	return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
 }

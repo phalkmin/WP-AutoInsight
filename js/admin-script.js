@@ -1,4 +1,28 @@
 jQuery(document).ready(function ($) {
+  function updateTokenEstimate() {
+    const charLimit = $("#openai_char_limit").val();
+    const model = $("#prompt_select").val();
+
+    $.post(
+      ajaxurl,
+      {
+        action: "abcc_estimate_tokens",
+        char_limit: charLimit,
+        model: model,
+        _ajax_nonce: $("#abcc_openai_nonce").val(),
+      },
+      function (response) {
+        if (response.success) {
+          $(".token-estimate").html(response.data.message);
+        }
+      }
+    );
+  }
+
+  updateTokenEstimate();
+
+  $("#openai_char_limit, #prompt_select").on("change", updateTokenEstimate);
+
   // Event listener for changing tone selection
   $('input[type="radio"][name="openai_tone"]').change(function () {
     if ($("#custom").is(":checked")) {
