@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         'gemini-api-php/client' => array(
-            'pretty_version' => 'v1.6.0',
-            'version' => '1.6.0.0',
-            'reference' => 'e3bc5201f2356755fbf10165761c58257eb72c71',
+            'pretty_version' => 'v1.7.2',
+            'version' => '1.7.2.0',
+            'reference' => 'a48e61285d82b24117a5c8928dd1e504818f908b',
             'type' => 'library',
             'install_path' => __DIR__ . '/../gemini-api-php/client',
             'aliases' => array(),
@@ -101,8 +101,8 @@
         'psr/http-factory-implementation' => array(
             'dev_requirement' => false,
             'provided' => array(
-                0 => '*',
-                1 => '1.0',
+                0 => '1.0',
+                1 => '*',
             ),
         ),
         'psr/http-message' => array(
@@ -117,8 +117,8 @@
         'psr/http-message-implementation' => array(
             'dev_requirement' => false,
             'provided' => array(
-                0 => '*',
-                1 => '1.0',
+                0 => '1.0',
+                1 => '*',
             ),
         ),
         'psr/log' => array(
@@ -140,9 +140,9 @@
             'dev_requirement' => false,
         ),
         'symfony/http-client' => array(
-            'pretty_version' => 'v6.4.17',
-            'version' => '6.4.17.0',
-            'reference' => '88898d842eb29d7e1a903724c94e90a6ca9c0509',
+            'pretty_version' => 'v7.2.4',
+            'version' => '7.2.4.0',
+            'reference' => '78981a2ffef6437ed92d4d7e2a86a82f256c6dc6',
             'type' => 'library',
             'install_path' => __DIR__ . '/../symfony/http-client',
             'aliases' => array(),

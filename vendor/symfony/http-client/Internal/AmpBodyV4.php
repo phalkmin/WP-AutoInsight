@@ -23,11 +23,10 @@ use Symfony\Component\HttpClient\Exception\TransportException;
  *
  * @internal
  */
-class AmpBody implements RequestBody, InputStream
+class AmpBodyV4 implements RequestBody, InputStream
 {
     private ResourceInputStream|\Closure|string $body;
     private array $info;
-    private \Closure $onProgress;
     private ?int $offset = 0;
     private int $length = -1;
     private ?int $uploaded = null;
@@ -35,10 +34,12 @@ class AmpBody implements RequestBody, InputStream
     /**
      * @param \Closure|resource|string $body
      */
-    public function __construct($body, &$info, \Closure $onProgress)
-    {
+    public function __construct(
+        $body,
+        &$info,
+        private \Closure $onProgress,
+    ) {
         $this->info = &$info;
-        $this->onProgress = $onProgress;
 
         if (\is_resource($body)) {
             $this->offset = ftell($body);
@@ -139,7 +140,7 @@ class AmpBody implements RequestBody, InputStream
         }
 
         if (!\is_string($data)) {
-            throw new TransportException(sprintf('Return value of the "body" option callback must be string, "%s" returned.', get_debug_type($data)));
+            throw new TransportException(\sprintf('Return value of the "body" option callback must be string, "%s" returned.', get_debug_type($data)));
         }
 
         return new Success($data);

@@ -16,13 +16,6 @@ class ABCC_OpenAI_Client {
 	 */
 	public function __construct( $api_key ) {
 		$this->api_key = $api_key;
-
-		// Check for custom endpoint
-		$custom_endpoint = get_option( 'openai_custom_endpoint', '' );
-		if ( ! empty( $custom_endpoint ) ) {
-			$this->base_url           = rtrim( $custom_endpoint, '/' );
-			$this->is_custom_endpoint = true;
-		}
 	}
 
 	/**

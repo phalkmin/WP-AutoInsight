@@ -9,8 +9,8 @@
   ],
   "minimum-stability": "stable",
   "require": {
-    "gemini-api-php/client": "^1.4",
-    "symfony/http-client": "^6.4",
+    "gemini-api-php/client": "^1.7",
+    "symfony/http-client": "^7.2",
     "nyholm/psr7": "^1.8"
   },
   "config": {

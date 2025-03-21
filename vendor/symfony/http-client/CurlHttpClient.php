@@ -115,7 +115,7 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
             \CURLOPT_PROTOCOLS => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
             \CURLOPT_REDIR_PROTOCOLS => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
             \CURLOPT_FOLLOWLOCATION => true,
-            \CURLOPT_MAXREDIRS => 0 < $options['max_redirects'] ? $options['max_redirects'] : 0,
+            \CURLOPT_MAXREDIRS => max(0, $options['max_redirects']),
             \CURLOPT_COOKIEFILE => '', // Keep track of cookies during redirects
             \CURLOPT_TIMEOUT => 0,
             \CURLOPT_PROXY => $proxy,
@@ -152,14 +152,14 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
             if (\is_array($options['auth_ntlm'])) {
                 $count = \count($options['auth_ntlm']);
                 if ($count <= 0 || $count > 2) {
-                    throw new InvalidArgumentException(sprintf('Option "auth_ntlm" must contain 1 or 2 elements, %d given.', $count));
+                    throw new InvalidArgumentException(\sprintf('Option "auth_ntlm" must contain 1 or 2 elements, %d given.', $count));
                 }
 
                 $options['auth_ntlm'] = implode(':', $options['auth_ntlm']);
             }
 
             if (!\is_string($options['auth_ntlm'])) {
-                throw new InvalidArgumentException(sprintf('Option "auth_ntlm" must be a string or an array, "%s" given.', get_debug_type($options['auth_ntlm'])));
+                throw new InvalidArgumentException(\sprintf('Option "auth_ntlm" must be a string or an array, "%s" given.', get_debug_type($options['auth_ntlm'])));
             }
 
             $curlopts[\CURLOPT_USERPWD] = $options['auth_ntlm'];
@@ -236,8 +236,12 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
         }
 
         if (!\is_string($body)) {
+            if (isset($options['auth_ntlm'])) {
+                $curlopts[\CURLOPT_FORBID_REUSE] = true; // Reusing NTLM connections requires seeking capability, which only string bodies support
+            }
+
             if (\is_resource($body)) {
-                $curlopts[\CURLOPT_INFILE] = $body;
+                $curlopts[\CURLOPT_READDATA] = $body;
             } else {
                 $curlopts[\CURLOPT_READFUNCTION] = static function ($ch, $fd, $length) use ($body) {
                     static $eof = false;
@@ -297,28 +301,31 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
             unset($multi->pushedResponses[$url]);
 
             if (self::acceptPushForRequest($method, $options, $pushedResponse)) {
-                $this->logger?->debug(sprintf('Accepting pushed response: "%s %s"', $method, $url));
+                $this->logger?->debug(\sprintf('Accepting pushed response: "%s %s"', $method, $url));
 
                 // Reinitialize the pushed response with request's options
                 $ch = $pushedResponse->handle;
                 $pushedResponse = $pushedResponse->response;
                 $pushedResponse->__construct($multi, $url, $options, $this->logger);
             } else {
-                $this->logger?->debug(sprintf('Rejecting pushed response: "%s"', $url));
+                $this->logger?->debug(\sprintf('Rejecting pushed response: "%s"', $url));
                 $pushedResponse = null;
             }
         }
 
         if (!$pushedResponse) {
             $ch = curl_init();
-            $this->logger?->info(sprintf('Request: "%s %s"', $method, $url));
+            $this->logger?->info(\sprintf('Request: "%s %s"', $method, $url));
             $curlopts += [\CURLOPT_SHARE => $multi->share];
         }
 
         foreach ($curlopts as $opt => $value) {
+            if (\PHP_INT_SIZE === 8 && \defined('CURLOPT_INFILESIZE_LARGE') && \CURLOPT_INFILESIZE === $opt && $value >= 1 << 31) {
+                $opt = \CURLOPT_INFILESIZE_LARGE;
+            }
             if (null !== $value && !curl_setopt($ch, $opt, $value) && \CURLOPT_CERTINFO !== $opt && (!\defined('CURLOPT_HEADEROPT') || \CURLOPT_HEADEROPT !== $opt)) {
                 $constantName = $this->findConstantName($opt);
-                throw new TransportException(sprintf('Curl option "%s" is not supported.', $constantName ?? $opt));
+                throw new TransportException(\sprintf('Curl option "%s" is not supported.', $constantName ?? $opt));
             }
         }
 
@@ -385,7 +392,7 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
     {
         if (!$eof && \strlen($buffer) < $length) {
             if (!\is_string($data = $body($length))) {
-                throw new TransportException(sprintf('The return value of the "body" option callback must be a string, "%s" returned.', get_debug_type($data)));
+                throw new TransportException(\sprintf('The return value of the "body" option callback must be a string, "%s" returned.', get_debug_type($data)));
             }
 
             $buffer .= $data;
@@ -472,7 +479,7 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
             \CURLOPT_RESOLVE => 'resolve',
             \CURLOPT_NOSIGNAL => 'timeout',
             \CURLOPT_HTTPHEADER => 'headers',
-            \CURLOPT_INFILE => 'body',
+            \CURLOPT_READDATA => 'body',
             \CURLOPT_READFUNCTION => 'body',
             \CURLOPT_INFILESIZE => 'body',
             \CURLOPT_POSTFIELDS => 'body',
@@ -548,16 +555,16 @@ final class CurlHttpClient implements HttpClientInterface, LoggerAwareInterface,
         foreach ($options as $opt => $optValue) {
             if (isset($curloptsToConfig[$opt])) {
                 $constName = $this->findConstantName($opt) ?? $opt;
-                throw new InvalidArgumentException(sprintf('Cannot set "%s" with "extra.curl", use option "%s" instead.', $constName, $curloptsToConfig[$opt]));
+                throw new InvalidArgumentException(\sprintf('Cannot set "%s" with "extra.curl", use option "%s" instead.', $constName, $curloptsToConfig[$opt]));
             }
 
-            if (\in_array($opt, $methodOpts)) {
+            if (\in_array($opt, $methodOpts, true)) {
                 throw new InvalidArgumentException('The HTTP method cannot be overridden using "extra.curl".');
             }
 
-            if (\in_array($opt, $curloptsToCheck)) {
+            if (\in_array($opt, $curloptsToCheck, true)) {
                 $constName = $this->findConstantName($opt) ?? $opt;
-                throw new InvalidArgumentException(sprintf('Cannot set "%s" with "extra.curl".', $constName));
+                throw new InvalidArgumentException(\sprintf('Cannot set "%s" with "extra.curl".', $constName));
             }
         }
     }

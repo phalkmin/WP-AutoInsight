@@ -1,9 +1,9 @@
 === WP-AutoInsight ===
 Contributors: phalkmin
-Tags: openai, anthropic, google-ai, blog, post, generator, gpt-4, claude-3, gemini, dall-e-3, stability-ai
+Tags: openai, anthropic, google-ai, generator, gpt-4, blog
 Requires at least: 5.8
 Tested up to: 6.7
-Stable tag: 2.0
+Stable tag: 2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,9 +14,10 @@ WP-AutoInsight revolutionizes content creation by harnessing multiple AI platfor
 = Key Features =
 
 * **Multi-Platform AI Integration**
-  - OpenAI Models
-  - Claude 3 Models 
-  - Google's Gemini Pro
+  - OpenAI Models (GPT-3.5, GPT-4, GPT-4o, GPT-4.5 Preview)
+  - Claude 3, 3.5, and 3.7 Models (Haiku, Sonnet, Opus)
+  - Gemini 1.5 and 2.0 Models (Flash, Flash-Lite, Pro)
+  - Image generation capabilities with DALL-E 3 and Stability AI
   - Cost-aware model selection with clear pricing tiers
 
 * **Advanced Image Generation**
@@ -66,6 +67,7 @@ define('GEMINI_API', 'your-key-here');
 define('STABILITY_API', 'your-key-here');
 ```
 
+
 = Content Settings =
 1. Select your preferred AI model
 2. Set your desired content tone
@@ -114,11 +116,11 @@ You can manually generate a blog post by clicking the "Create post manually" but
 
 = 2.1 =
 * Added:
-  - Advanced token handling system for better content length management
-  - SEO metadata generation support with Yoast SEO integration (other plugins coming next)
-  - Improved HTML structure with better heading hierarchy (h1, h2, h3)
-  - Token estimation and validation for different AI models
-  - Real-time token usage feedback in the admin interface
+  - Advanced Token Management: Better control over content length with intelligent token allocation across different AI models
+  - SEO Integration: Automatic generation of SEO metadata with direct Yoast SEO plugin support
+  - Improved Content Structure: Enhanced HTML output with proper heading hierarchy
+  - Real-time Token Feedback: See estimated token usage before generating content
+  - More Reliable AI Integration: Better error handling and model compatibility
 
 * Changed:
   - Refactored content generation for better HTML structure

@@ -13,10 +13,18 @@ use GeminiAPI\Resources\Parts\TextPart;
 function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
 
 	$model_mapping = array(
-		'claude-3-haiku'  => 'claude-3-haiku-20240307',
-		'claude-3-sonnet' => 'claude-3-sonnet-20240229',
-		'claude-3-opus'   => 'claude-3-opus-20240229',
+		'claude-3-haiku'             => 'claude-3-haiku-20240307',
+		'claude-3-sonnet'            => 'claude-3-sonnet-20240229',
+		'claude-3-opus'              => 'claude-3-opus-20240229',
+		'claude-3.5-haiku-20241022'  => 'claude-3.5-haiku-20241022',
+		'claude-3.5-sonnet-20241022' => 'claude-3.5-sonnet-20241022',
+		'claude-3.7-sonnet-20250219' => 'claude-3.7-sonnet-20250219',
 	);
+
+		// For backward compatibility
+	if ( isset( $model_mapping[ $model ] ) ) {
+		$model = $model_mapping[ $model ];
+	}
 
 	$headers = array(
 		'Content-Type'      => 'application/json',
@@ -71,25 +79,48 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
  * @param string $length Length of the generated content.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens ) {
-	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, 'gemini-pro' );
-
-	$gemini = new Client( $api_key );
-	$chat   = $gemini->geminiPro()->startChat(
-		array(
-			'maxOutputTokens' => $available_tokens,
-		)
+function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-pro' ) {
+	// Map plugin model names to Gemini library model names
+	$model_mapping = array(
+		'gemini-pro'               => 'models/gemini-pro', // Legacy compatibility
+		'gemini-1.5-flash'         => 'models/gemini-1.5-flash',
+		'gemini-1.5-flash-8b'      => 'models/gemini-1.5-flash-8b',
+		'gemini-1.5-pro'           => 'models/gemini-1.5-pro',
+		'gemini-2.0-flash'         => 'models/gemini-2.0-flash',
+		'gemini-2.0-flash-lite'    => 'models/gemini-2.0-flash-lite',
+		'gemini-2.0-pro-exp-02-05' => 'gemini-2.0-pro-exp-02-05',
 	);
 
-	$response = $chat->sendMessage( new TextPart( $prompt ) );
+	// Calculate available tokens for response
+	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
 
-	if ( is_wp_error( $response ) ) {
-		handle_api_request_error( $response, 'Gemini' );
+	// Initialize Gemini client
+	$gemini = new \GeminiAPI\Client( $api_key );
+
+	// Use the model mapping to get the correct model name
+	$model_id = isset( $model_mapping[ $model ] ) ? $model_mapping[ $model ] : $model;
+
+	// Create a text part from the prompt
+	$text_part = new \GeminiAPI\Resources\Parts\TextPart( $prompt );
+
+	try {
+		// For newer models (2.0), you might need beta version access
+		if ( strpos( $model, '2.0' ) !== false ) {
+			$gemini = $gemini->withV1BetaVersion();
+		}
+
+		// Generate content using the specified model
+		$response = $gemini->generativeModel( $model_id )
+			->generateContent( $text_part );
+
+		// Return the response text split by newlines
+		$text_array = explode( PHP_EOL, $response->text() );
+		return $text_array;
+	} catch ( \Exception $e ) {
+		error_log( 'Gemini API Error: ' . $e->getMessage() );
+		handle_api_request_error( $e->getMessage(), 'Gemini' );
 		return false;
 	}
-
-	$text_array = explode( PHP_EOL, $response->text() );
-	return $text_array;
 }
 
 /**
@@ -145,12 +176,6 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
  */
 function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792x1024' ) {
 	$client = new ABCC_OpenAI_Client( $api_key );
-
-	// Set custom endpoint if configured
-	$custom_endpoint = get_option( 'openai_custom_endpoint', '' );
-	if ( ! empty( $custom_endpoint ) ) {
-		$client->set_base_url( $custom_endpoint );
-	}
 
 	$options = array(
 		'n'    => absint( $n ),
@@ -265,82 +290,4 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 
 	error_log( 'Stability AI: No valid image data in response' );
 	return false;
-}
-
-/**
- * Validates custom API endpoints
- *
- * @param string $endpoint The endpoint URL to validate.
- * @return bool|WP_Error True if valid, WP_Error if not.
- */
-function abcc_validate_custom_endpoint( $endpoint ) {
-	if ( empty( $endpoint ) ) {
-		return true; // Empty endpoint is valid (uses default)
-	}
-
-	$parsed_url = wp_parse_url( $endpoint );
-
-	// Check for required URL components
-	if ( ! $parsed_url || ! isset( $parsed_url['scheme'] ) || ! isset( $parsed_url['host'] ) ) {
-		return new WP_Error(
-			'invalid_endpoint',
-			__( 'Invalid endpoint URL format. Must be a complete URL with http:// or https://', 'automated-blog-content-creator' )
-		);
-	}
-
-	// Ensure HTTPS is used
-	if ( $parsed_url['scheme'] !== 'https' ) {
-		return new WP_Error(
-			'insecure_endpoint',
-			__( 'Endpoint URL must use HTTPS for security', 'automated-blog-content-creator' )
-		);
-	}
-
-	// Optional: Add additional validation for specific endpoint patterns
-	$valid_patterns = array(
-		'/v1/$',
-		'/v1/images$',
-		'/api/v1/$',
-		'/api/v1/images$',
-	);
-
-	$path          = isset( $parsed_url['path'] ) ? trailingslashit( $parsed_url['path'] ) : '/';
-	$valid_pattern = false;
-
-	foreach ( $valid_patterns as $pattern ) {
-		if ( preg_match( $pattern, $path ) ) {
-			$valid_pattern = true;
-			break;
-		}
-	}
-
-	if ( ! $valid_pattern ) {
-		return new WP_Error(
-			'invalid_endpoint_pattern',
-			__( 'Endpoint URL pattern not recognized. Please check the documentation for valid endpoint formats.', 'automated-blog-content-creator' )
-		);
-	}
-
-	return true;
-}
-
-/**
- * Sanitizes and validates custom endpoint before saving
- * Add this to your existing save_settings functionality
- */
-function abcc_sanitize_custom_endpoints( $endpoint ) {
-	$endpoint = esc_url_raw( trim( $endpoint ) );
-
-	$validation = abcc_validate_custom_endpoint( $endpoint );
-	if ( is_wp_error( $validation ) ) {
-		add_settings_error(
-			'openai-settings',
-			'invalid-endpoint',
-			$validation->get_error_message(),
-			'error'
-		);
-		return ''; // Return empty if invalid
-	}
-
-	return $endpoint;
 }

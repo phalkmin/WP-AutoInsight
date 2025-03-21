@@ -46,7 +46,7 @@ final class NoPrivateNetworkHttpClient implements HttpClientInterface, LoggerAwa
     public function __construct(HttpClientInterface $client, string|array|null $subnets = null)
     {
         if (!class_exists(IpUtils::class)) {
-            throw new \LogicException(sprintf('You cannot use "%s" if the HttpFoundation component is not installed. Try running "composer require symfony/http-foundation".', __CLASS__));
+            throw new \LogicException(\sprintf('You cannot use "%s" if the HttpFoundation component is not installed. Try running "composer require symfony/http-foundation".', __CLASS__));
         }
 
         if (null === $subnets) {
@@ -159,8 +159,13 @@ final class NoPrivateNetworkHttpClient implements HttpClientInterface, LoggerAwa
         });
     }
 
+    /**
+     * @deprecated since Symfony 7.1, configure the logger on the wrapped HTTP client directly instead
+     */
     public function setLogger(LoggerInterface $logger): void
     {
+        trigger_deprecation('symfony/http-client', '7.1', 'Configure the logger on the wrapped HTTP client directly instead.');
+
         if ($this->client instanceof LoggerAwareInterface) {
             $this->client->setLogger($logger);
         }

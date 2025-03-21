@@ -42,76 +42,109 @@ function abcc_add_subpages_to_menu() {
 add_action( 'admin_menu', 'abcc_add_subpages_to_menu' );
 
 /**
- * The function abcc_get_ai_model_options() returns an array of AI model options categorized by
- * different groups such as OpenAI, Claude, and Google, each with specific models and their attributes
- * like name, description, and cost tier.
+ * The function abcc_get_ai_model_options() returns an array of AI model options filtered by
+ * available API keys and limited to three models per service (cheap, medium, premium).
  *
- * @return array of AI model options grouped by different providers such as OpenAI, Claude, and
- * Google. Each provider has a set of models with names, descriptions, and cost tiers specified.
+ * @return array of AI model options grouped by available providers
  */
 function abcc_get_ai_model_options() {
-	return array(
-		'openai' => array(
+	$options = array();
+
+	// Check for OpenAI API key
+	$openai_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
+	if ( ! empty( $openai_key ) ) {
+		$options['openai'] = array(
 			'group'   => 'OpenAI Models',
 			'options' => array(
-				'gpt-3.5-turbo'       => array(
+				// Cheap option
+				'gpt-3.5-turbo'   => array(
 					'name'        => 'GPT-3.5 Turbo',
 					'description' => 'Fast and cost-effective',
 					'cost_tier'   => '1',
 				),
-				'gpt-4-turbo-preview' => array(
-					'name'        => 'GPT-4 Turbo',
-					'description' => 'Latest model, best quality/cost ratio',
+				// Medium option
+				'gpt-4o'          => array(
+					'name'        => 'GPT-4o',
+					'description' => 'Fast, intelligent, flexible GPT model',
 					'cost_tier'   => '2',
 				),
-				'gpt-4'               => array(
-					'name'        => 'GPT-4',
-					'description' => 'Most reliable model',
+				// Premium option
+				'gpt-4.5-preview' => array(
+					'name'        => 'GPT-4.5 Preview',
+					'description' => 'Largest and most capable GPT model',
 					'cost_tier'   => '3',
 				),
 			),
-		),
-		'claude' => array(
+		);
+	}
+
+	// Check for Claude API key
+	$claude_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
+	if ( ! empty( $claude_key ) ) {
+		$options['claude'] = array(
 			'group'   => 'Claude Models',
 			'options' => array(
-				'claude-3-haiku'  => array(
+				// Cheap option
+				'claude-3-haiku-20240307'    => array(
 					'name'        => 'Claude 3 Haiku',
 					'description' => 'Fast and cost-effective',
 					'cost_tier'   => '1',
 				),
-				'claude-3-sonnet' => array(
-					'name'        => 'Claude 3 Sonnet',
-					'description' => 'Balanced performance and cost',
+				// Medium option
+				'claude-3.5-sonnet-20241022' => array(
+					'name'        => 'Claude 3.5 Sonnet',
+					'description' => 'Improved balanced performance',
 					'cost_tier'   => '2',
 				),
-				'claude-3-opus'   => array(
-					'name'        => 'Claude 3 Opus',
-					'description' => 'Highest quality, best for complex content',
+				// Premium option
+				'claude-3.7-sonnet-20250219' => array(
+					'name'        => 'Claude 3.7 Sonnet',
+					'description' => 'Latest premium model with advanced capabilities',
 					'cost_tier'   => '3',
 				),
 			),
-		),
-		'gemini' => array(
-			'group'   => 'Google Models',
+		);
+	}
+
+	// Check for Gemini API key
+	$gemini_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
+	if ( ! empty( $gemini_key ) ) {
+		$options['gemini'] = array(
+			'group'   => 'Google Gemini Models',
 			'options' => array(
-				'gemini-pro' => array(
-					'name'        => 'Gemini Pro',
-					'description' => 'Google\'s latest model',
+				// Cheap option
+				'gemini-1.5-flash'         => array(
+					'name'        => 'Gemini 1.5 Flash',
+					'description' => 'Fast and versatile performance across diverse tasks',
 					'cost_tier'   => '1',
 				),
+				// Medium option
+				'gemini-1.5-pro'           => array(
+					'name'        => 'Gemini 1.5 Pro',
+					'description' => 'Complex reasoning with 2M token context window',
+					'cost_tier'   => '2',
+				),
+				// Premium option
+				'gemini-2.0-pro-exp-02-05' => array(
+					'name'        => 'Gemini 2.0 Pro',
+					'description' => 'Most powerful Gemini model with advanced reasoning',
+					'cost_tier'   => '3',
+				),
 			),
-		),
-	);
+		);
+	}
+
+	return $options;
 }
 
 
 /**
- * The function `wpai_category_dropdown` is used to display a dropdown of categories in the WordPress admin
+ * The function `abcc_category_dropdown` is used to display a dropdown of categories in the WordPress admin
  * for the OpenAI blog post generator plugin.
  *
  * @param array $selected_categories An array of category IDs that should be selected by default.
  */
-function wpai_category_dropdown( $selected_categories = array() ) {
+function abcc_category_dropdown( $selected_categories = array() ) {
 	$categories = get_categories( array( 'hide_empty' => 0 ) );
 	echo '<select id="openai_selected_categories" class="wpai-category-select" name="openai_selected_categories[]" multiple style="width:100%;">';
 	foreach ( $categories as $category ) {
@@ -218,7 +251,7 @@ function abcc_openai_text_settings_page() {
 													<?php echo esc_html__( 'Select Categories:', 'automated-blog-content-creator' ); ?>
 												</label></th>
 											<td>
-												<?php wpai_category_dropdown( $selected_categories ); ?>
+												<?php abcc_category_dropdown( $selected_categories ); ?>
 											</td>
 										</tr>
 										<tr>
@@ -261,6 +294,45 @@ function abcc_openai_text_settings_page() {
 }
 
 /**
+ * Ensure the selected AI model is valid based on available API keys.
+ * If the current model is no longer available, select a default from available options.
+ */
+function abcc_validate_selected_model() {
+	$current_model    = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$available_models = abcc_get_ai_model_options();
+
+	$model_available = false;
+	foreach ( $available_models as $provider => $group ) {
+		if ( isset( $group['options'][ $current_model ] ) ) {
+			$model_available = true;
+			break;
+		}
+	}
+
+	if ( ! $model_available && ! empty( $available_models ) ) {
+		$first_provider = reset( $available_models );
+		$first_model    = key( $first_provider['options'] );
+		update_option( 'prompt_select', $first_model );
+
+		// Add an admin notice to inform the user
+		add_action( 'admin_notices', 'abcc_model_changed_notice' );
+	}
+}
+
+/**
+ * Display admin notice when the model has been automatically changed.
+ */
+function abcc_model_changed_notice() {
+	?>
+	<div class="notice notice-warning is-dismissible">
+		<p><?php _e( 'The previously selected AI model is no longer available. A default model has been selected based on your available API keys.', 'automated-blog-content-creator' ); ?></p>
+	</div>
+	<?php
+}
+add_action( 'admin_init', 'abcc_validate_selected_model' );
+
+
+/**
  * The function abcc_openai_blog_post_options_page() is used to display and handle options for an
  * OpenAI blog post generator plugin in WordPress.
  */
@@ -289,6 +361,9 @@ function abcc_openai_blog_post_options_page() {
 		update_option( 'openai_char_limit', $char_limit );
 		update_option( 'openai_email_notifications', $openai_email_notifications );
 		update_option( 'preferred_image_service', $preferred_image_service );
+
+		abcc_validate_selected_model();
+
 	}
 
 	$api_key                    = get_option( 'openai_api_key', '' );
@@ -595,10 +670,11 @@ jQuery(document).ready(function($) {
 }
 
 
-function abcc_update_token_limit_description( $char_limit ) {
+function abcc_update_token_limit_description() {
 	$model       = get_option( 'prompt_select', 'gpt-3.5-turbo' );
 	$max_context = abcc_get_model_context_window( $model );
 
+	// translators: %1$s is the model name, %2$d is the maximum number of tokens
 	return sprintf(
 		__( 'Maximum tokens for content generation (1 token ≈ 4 characters). Current model (%1$s) maximum: %2$d tokens. Note: The actual content length will be less as some tokens are used by the prompt.', 'automated-blog-content-creator' ),
 		$model,
@@ -624,6 +700,7 @@ add_action(
 		wp_send_json_success(
 			array(
 				'message' => sprintf(
+					// translators: %d is the number of available tokens
 					__( 'Estimated available tokens: %d (after prompt tokens)', 'automated-blog-content-creator' ),
 					$available_tokens
 				),
