@@ -8,12 +8,12 @@
  * @package WP-AutoInsight
  */
 
-// If uninstall is not called from WordPress, exit
+// If uninstall is not called from WordPress, exit.
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-// List of all options created by the plugin
+// List of all options created by the plugin.
 $options = array(
 	'openai_api_key',
 	'gemini_api_key',
@@ -31,15 +31,18 @@ $options = array(
 	'openai_tone',
 	'custom_tone',
 	'openai_generate_seo',
+	'abcc_enable_audio_transcription',
+	'abcc_supported_audio_formats',
+	'abcc_transcription_language',
 );
 
-// Delete all options
+// Delete all options.
 foreach ( $options as $option ) {
 	delete_option( $option );
 }
 
-// Clear any scheduled events
+// Clear any scheduled events.
 wp_clear_scheduled_hook( 'abcc_openai_generate_post_hook' );
 
-// Delete any transients
+// Delete any transients.
 delete_transient( 'abcc_available_models' );

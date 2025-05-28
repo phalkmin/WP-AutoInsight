@@ -1,6 +1,6 @@
 <?php
 /**
- * Block creation and formatting functions
+ * Block creation and formatting functions.
  *
  * @package WP-AutoInsight
  */
@@ -67,7 +67,7 @@ function abcc_create_blocks( $text_array ) {
 			continue;
 		}
 
-		// Handle headings
+		// Handle headings.
 		if ( preg_match( '/<h2>(.*?)<\/h2>/', $item, $matches ) ) {
 			$blocks[] = array(
 				'name'       => 'heading',
@@ -92,7 +92,7 @@ function abcc_create_blocks( $text_array ) {
 			continue;
 		}
 
-		// Handle regular paragraphs
+		// Handle regular paragraphs.
 		$blocks[] = array(
 			'name'       => 'paragraph',
 			'attributes' => array(),

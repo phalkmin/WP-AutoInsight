@@ -18,14 +18,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param string  $tone          The tone to use for the article
  * @param boolean $auto_create   Whether this is an automated creation
  * @param int     $char_limit    Maximum token limit
+ * @param string  $post_type     The post type
  * @return int|WP_Error Post ID on success, WP_Error on failure
  */
-function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone = 'default', $auto_create = false, $char_limit = 200 ) {
+function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone = 'default', $auto_create = false, $char_limit = 200, $post_type = 'post' ) {
 	try {
 		$generate_seo = get_option( 'openai_generate_seo', true ) && 'none' !== abcc_get_active_seo_plugin();
 
-		if ( $generate_seo ) {
-			// Generate title and SEO data
+		if ( true === $generate_seo ) {
+			// Generate title and SEO data.
 			$title_and_seo = abcc_generate_title_and_seo(
 				$api_key,
 				$keywords,
@@ -38,12 +39,12 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$title         = $title_and_seo['title'];
 			$seo_data      = $title_and_seo['seo_data'];
 		} else {
-			// Just generate a title
+			// Just generate a title.
 			$title    = abcc_generate_title( $api_key, $keywords, $prompt_select );
 			$seo_data = array();
 		}
 
-		// Then, generate the content
+		// Then, generate the content.
 		$content_array = abcc_generate_post_content(
 			$api_key,
 			$keywords,
@@ -81,12 +82,12 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			'post_content'  => wp_kses_post( $post_content ),
 			'post_status'   => 'draft',
 			'post_author'   => get_current_user_id(),
-			'post_type'     => 'post',
+			'post_type'     => $post_type,
 			'post_category' => get_option( 'openai_selected_categories', array() ),
 		);
 
-		// Add SEO data if Yoast is active
-		if ( $generate_seo && ! empty( $seo_data ) ) {
+		// Add SEO data if Yoast is active.
+		if ( true === $generate_seo && ! empty( $seo_data ) ) {
 			$post_data['meta_input'] = abcc_get_seo_meta_fields( $seo_data );
 		}
 
@@ -97,6 +98,8 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		}
 
 		if ( get_option( 'openai_generate_images', true ) ) {
+			error_log( 'WP-AutoInsight: Starting featured image generation...' );
+
 			try {
 				$category_ids   = get_option( 'openai_selected_categories', array() );
 				$category_names = array();
@@ -110,16 +113,31 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 					}
 				}
 
+				error_log( 'WP-AutoInsight: Image generation - Keywords: ' . print_r( $keywords, true ) );
+				error_log( 'WP-AutoInsight: Image generation - Categories: ' . print_r( $category_names, true ) );
+				error_log( 'WP-AutoInsight: Image generation - Model: ' . $prompt_select );
+
 				$image_url = abcc_generate_featured_image( $prompt_select, $keywords, $category_names );
+
 				if ( $image_url ) {
-					abcc_set_featured_image( $post_id, $image_url );
+					error_log( 'WP-AutoInsight: Featured image generated successfully: ' . $image_url );
+					$attachment_id = abcc_set_featured_image( $post_id, $image_url );
+					if ( $attachment_id ) {
+						error_log( 'WP-AutoInsight: Featured image set successfully with attachment ID: ' . $attachment_id );
+					} else {
+						error_log( 'WP-AutoInsight: Failed to set featured image for post' );
+					}
+				} else {
+					error_log( 'WP-AutoInsight: Featured image generation returned false/empty' );
 				}
 			} catch ( Exception $e ) {
-				error_log( 'Featured image generation failed but post was created: ' . $e->getMessage() );
+				error_log( 'WP-AutoInsight: Featured image generation failed but post was created: ' . $e->getMessage() );
 			}
+		} else {
+			error_log( 'WP-AutoInsight: Featured image generation is disabled in settings' );
 		}
 
-		if ( get_option( 'openai_email_notifications', false ) ) {
+		if ( true === get_option( 'openai_email_notifications', false ) ) {
 			abcc_send_post_notification( $post_id );
 		}
 
@@ -144,17 +162,17 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 	$site_name        = get_bloginfo( 'name' );
 	$site_description = get_bloginfo( 'description' );
 
-	// Build a more structured prompt
+	// Build a more structured prompt.
 	$prompt_parts = array();
 
-	// Core instructions
+	// Core instructions.
 	$prompt_parts[] = sprintf(
 		'You are an expert content writer for %s, a website focused on %s',
 		$site_name,
 		$site_description
 	);
 
-	// Tone setting
+	// Tone setting.
 	$tone_instructions = array(
 		'funny'    => 'Write in a humorous and entertaining style, using clever wordplay and pop culture references where appropriate. Keep the tone light and engaging while still being informative.',
 		'business' => 'Maintain a professional and authoritative tone, focusing on clear, actionable information and industry insights.',
@@ -166,7 +184,7 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 
 	$prompt_parts[] = isset( $tone_instructions[ $tone ] ) ? $tone_instructions[ $tone ] : $tone_instructions['default'];
 
-	// Content structure
+	// Content structure.
 	$prompt_parts[] = 'Create a comprehensive article that includes:
         - An engaging <h1> title that includes key terms naturally
         - A compelling introduction that hooks the reader
@@ -177,7 +195,7 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
         - Relevant examples and references
         - A strong conclusion that summarizes key points';
 
-	// Keywords and categories focus
+	// Keywords and categories focus.
 	if ( ! empty( $keywords ) ) {
 		$prompt_parts[] = sprintf(
 			'Focus on these main topics and keywords: %s. Integrate them naturally throughout the content.',
@@ -208,7 +226,7 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 		);
 	}
 
-	// SEO and formatting guidelines
+	// SEO and formatting guidelines.
 	$prompt_parts[] = sprintf(
 		'Format requirements:
 		- Use HTML formatting
@@ -235,12 +253,12 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 	$result = false;
 
-	// OpenAI models
+	// OpenAI models.
 	if ( 0 === strpos( $service, 'gpt-' ) ) {
 		$result = abcc_openai_generate_text( $api_key, $prompt, $char_limit, $service );
 	} elseif ( 0 === strpos( $service, 'claude' ) ) {
 		$result = abcc_claude_generate_text( $api_key, $prompt, $char_limit, $service );
-	} elseif ( 'gemini-pro' === $service ) {
+	} elseif ( 0 === strpos( $service, 'gemini' ) ) {
 		$result = abcc_gemini_generate_text( $api_key, $prompt, $char_limit );
 	}
 
@@ -271,14 +289,14 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
 	// Use a small token limit for this call - 50 tokens should be plenty for a title
 	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 50 );
 
-	if ( ! $result || empty( $result ) ) {
+	if ( false === $result || empty( $result ) ) {
 		throw new Exception( 'Failed to generate title' );
 	}
 
-	// Take the first line as the title
+	// Take the first line as the title.
 	$title = trim( $result[0] );
 
-	// Remove any quotes that might be around the title
+	// Remove any quotes that might be around the title.
 	$title = trim( $title, '"\'`' );
 
 	return $title;

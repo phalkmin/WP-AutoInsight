@@ -1,6 +1,6 @@
 <?php
 /**
- * Scheduling and automation functions
+ * Scheduling and automation functions.
  *
  * @package WP-AutoInsight
  */
@@ -38,7 +38,7 @@ function get_openai_event_schedule() {
  */
 function abcc_openai_generate_post_scheduled() {
 	try {
-		// Get required parameters
+		// Get required parameters.
 		$api_key       = abcc_check_api_key();
 		$keywords      = explode( "\n", get_option( 'openai_keywords', '' ) );
 		$tone          = get_option( 'openai_tone', 'default' );
@@ -46,7 +46,7 @@ function abcc_openai_generate_post_scheduled() {
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
 
-		// Log scheduled attempt
+		// Log scheduled attempt.
 		// translators: %1$s: Auto create setting, %2$s: Model name, %3$d: Keywords count
 		error_log(
 			sprintf(
@@ -57,7 +57,7 @@ function abcc_openai_generate_post_scheduled() {
 			)
 		);
 
-		// Validate conditions
+		// Validate conditions.
 		if ( empty( $api_key ) ) {
 			throw new Exception( 'API key not configured for scheduled post generation' );
 		}
@@ -70,7 +70,7 @@ function abcc_openai_generate_post_scheduled() {
 			throw new Exception( 'Auto-create is disabled' );
 		}
 
-		// Generate the post
+		// Generate the post.
 		$post_id = abcc_openai_generate_post(
 			$api_key,
 			$keywords,
@@ -89,13 +89,13 @@ function abcc_openai_generate_post_scheduled() {
 	} catch ( Exception $e ) {
 		error_log( 'Scheduled Post Generation Error: ' . $e->getMessage() );
 
-		// Send admin notification about the failure if enabled
-		if ( get_option( 'openai_email_notifications', false ) ) {
+		// Send admin notification about the failure if enabled.
+		if ( true === get_option( 'openai_email_notifications', false ) ) {
 			wp_mail(
 				get_option( 'admin_email' ),
 				__( 'Scheduled Post Generation Failed', 'automated-blog-content-creator' ),
 				sprintf(
-					// translators: %s: Error message
+					/* translators: %s: Error message */
 					__( 'The scheduled post generation failed with error: %s', 'automated-blog-content-creator' ),
 					$e->getMessage()
 				)
@@ -136,13 +136,13 @@ function abcc_send_post_notification( $post_id ) {
 		return false;
 	}
 
-	// translators: %s: Post title
+	/* translators: %s: Post title */
 	$subject = sprintf(
 		__( 'New AI Generated Post: %s', 'automated-blog-content-creator' ),
 		$post->post_title
 	);
 
-	// translators: %1$s: Post title, %2$s: Edit post URL
+	/* translators: %1$s: Post title, %2$s: Edit post URL */
 	$message = sprintf(
 		__( 'A new post "%1$s" has been created automatically.\n\nYou can edit it here: %2$s', 'automated-blog-content-creator' ),
 		$post->post_title,

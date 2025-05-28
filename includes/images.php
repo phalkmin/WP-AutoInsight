@@ -1,6 +1,6 @@
 <?php
 /**
- * Image generation functions
+ * Image generation functions.
  *
  * @package WP-AutoInsight
  */
@@ -12,22 +12,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Generates a featured image using AI services.
  *
- * @param string $text_model The text model being used
- * @param array  $keywords Keywords for image generation
- * @param array  $category_names Category names for context
- * @return string|false Image URL on success, false on failure
+ * @param string $text_model The text model being used.
+ * @param array  $keywords Keywords for image generation.
+ * @param array  $category_names Category names for context.
+ * @return string|false Image URL on success, false on failure.
  */
 function abcc_generate_featured_image( $text_model, $keywords, $category_names = array() ) {
 	try {
-		// Check if image generation is enabled
+		// Check if image generation is enabled.
 		if ( ! get_option( 'openai_generate_images', true ) ) {
 			return false;
 		}
 
-		// Build image prompt
+		// Build image prompt.
 		$prompt = abcc_build_image_prompt( $keywords, $category_names );
 
-		// Determine which service to use
+		// Determine which service to use.
 		$image_service = abcc_determine_image_service( $text_model );
 
 		if ( empty( $image_service['service'] ) ) {
@@ -43,7 +43,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 			)
 		);
 
-		// Generate image using determined service
+		// Generate image using determined service.
 		switch ( $image_service['service'] ) {
 			case 'openai':
 				$images = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1 );
@@ -54,7 +54,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 
 			case 'stability':
 				$result = abcc_stability_generate_images( $prompt, 1, $image_service['api_key'] );
-				if ( $result ) {
+				if ( false !== $result ) {
 					return $result;
 				}
 				break;
@@ -72,9 +72,9 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 /**
  * Sets the featured image for a post.
  *
- * @param int    $post_id Post ID
- * @param string $image_url Image URL
- * @return int|false Attachment ID on success, false on failure
+ * @param int    $post_id Post ID.
+ * @param string $image_url Image URL.
+ * @return int|false Attachment ID on success, false on failure.
  */
 function abcc_set_featured_image( $post_id, $image_url ) {
 	try {
@@ -84,14 +84,14 @@ function abcc_set_featured_image( $post_id, $image_url ) {
 			require_once ABSPATH . 'wp-admin/includes/image.php';
 		}
 
-		// Download and attach the image
+		// Download and attach the image.
 		$attachment_id = media_sideload_image( $image_url, $post_id, null, 'id' );
 
 		if ( is_wp_error( $attachment_id ) ) {
 			throw new Exception( $attachment_id->get_error_message() );
 		}
 
-		// Set as featured image
+		// Set as featured image.
 		set_post_thumbnail( $post_id, $attachment_id );
 		return $attachment_id;
 
@@ -104,24 +104,24 @@ function abcc_set_featured_image( $post_id, $image_url ) {
 /**
  * Builds the image generation prompt.
  *
- * @param array $keywords Keywords for the image
- * @param array $category_names Category names for context
- * @return string
+ * @param array $keywords Keywords for the image.
+ * @param array $category_names Category names for context.
+ * @return string The generated prompt.
  */
 function abcc_build_image_prompt( $keywords, $category_names ) {
 	$prompt_parts = array();
 
-	// Add keywords
+	// Add keywords.
 	if ( ! empty( $keywords ) ) {
 		$prompt_parts[] = implode( ', ', array_map( 'sanitize_text_field', $keywords ) );
 	}
 
-	// Add categories for context
+	// Add categories for context.
 	if ( ! empty( $category_names ) ) {
 		$prompt_parts[] = 'Related to: ' . implode( ', ', $category_names );
 	}
 
-	// Add style guidance
+	// Add style guidance.
 	$prompt_parts[] = 'Create a high-quality, professional image suitable for a blog post';
 
 	return implode( '. ', $prompt_parts );

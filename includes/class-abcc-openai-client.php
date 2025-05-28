@@ -2,15 +2,21 @@
 /**
  * Class ABCC_OpenAI_Client
  *
- * Handles all OpenAI API interactions for the plugin
+ * Handles all OpenAI API interactions for the plugin.
+ *
+ * @package WP-AutoInsight
  */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
 class ABCC_OpenAI_Client {
 	private $api_key;
 	private $base_url           = 'https://api.openai.com/v1';
 	private $is_custom_endpoint = false;
 
 	/**
-	 * Constructor
+	 * Constructor.
 	 *
 	 * @param string $api_key The OpenAI API key.
 	 */
@@ -19,7 +25,7 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Set a custom base URL for API requests
+	 * Set a custom base URL for API requests.
 	 *
 	 * @param string $url The custom base URL.
 	 */
@@ -28,7 +34,7 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Get available models from the API
+	 * Get available models from the API.
 	 *
 	 * @return array|WP_Error Array of models or WP_Error on failure
 	 */
@@ -54,7 +60,7 @@ class ABCC_OpenAI_Client {
 			);
 		}
 
-		// Extract model IDs and details
+		// Extract model IDs and details.
 		$models = array();
 		foreach ( $body['data'] as $model ) {
 			$models[] = array(
@@ -69,7 +75,9 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Get headers based on endpoint type
+	 * Get headers based on endpoint type.
+	 *
+	 * @return array Headers for API requests.
 	 */
 	private function get_headers() {
 		$headers = array(
@@ -87,17 +95,20 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Verify if a specific model is available
+	 * Verify if a specific model is available.
+	 *
+	 * @param string $model_name The model name to verify.
+	 * @return bool Whether the model is available.
 	 */
 	private function verify_model( $model_name ) {
-		if ( $this->is_custom_endpoint ) {
+		if ( true === $this->is_custom_endpoint ) {
 			error_log( 'Verifying model availability: ' . $model_name );
 			$models = $this->get_available_models();
 			if ( is_wp_error( $models ) ) {
 				error_log( 'Error fetching models: ' . $models->get_error_message() );
 				return false;
 			}
-			$available = in_array( $model_name, array_column( $models, 'id' ) );
+			$available = in_array( $model_name, array_column( $models, 'id' ), true );
 			error_log(
 				sprintf(
 					'Model %s %s available',
@@ -111,7 +122,7 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Make a request to the OpenAI API
+	 * Make a request to the OpenAI API.
 	 *
 	 * @param string $endpoint The API endpoint.
 	 * @param array  $data The request data.
@@ -140,7 +151,7 @@ class ABCC_OpenAI_Client {
 		$body = wp_remote_retrieve_body( $response );
 		$code = wp_remote_retrieve_response_code( $response );
 
-		if ( $code !== 200 ) {
+		if ( 200 !== $code ) {
 			$error_data = json_decode( $body, true );
 			return new WP_Error(
 				'openai_api_error',
@@ -153,7 +164,7 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Generate chat completions
+	 * Generate chat completions.
 	 *
 	 * @param array $messages The messages array.
 	 * @param array $options Additional options.
@@ -171,7 +182,7 @@ class ABCC_OpenAI_Client {
 
 		$options = array_merge( $default_options, $options );
 
-		if ( ! $this->verify_model( $options['model'] ) ) {
+		if ( false === $this->verify_model( $options['model'] ) ) {
 			return new WP_Error(
 				'model_not_available',
 				sprintf( 'Model "%s" is not available on this endpoint', $options['model'] )
@@ -183,7 +194,7 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Generate images using DALL-E
+	 * Generate images using DALL-E.
 	 *
 	 * @param string $prompt The image prompt.
 	 * @param array  $options Additional options.
@@ -193,25 +204,12 @@ class ABCC_OpenAI_Client {
 		$default_options = array(
 			'model'           => 'dall-e-3',
 			'n'               => 1,
-			'size'            => '1024x1024',
+			'size'            => '1792x1024',
 			'quality'         => 'standard',
 			'response_format' => 'url',
 		);
 
 		$data = array_merge( $default_options, $options, array( 'prompt' => $prompt ) );
 		return $this->make_request( 'images/generations', $data );
-	}
-
-	/**
-	 * List available models
-	 *
-	 * @return array|WP_Error The API response or WP_Error on failure.
-	 */
-	public function list_models() {
-		return $this->make_request( 'models', array(), 'GET' );
-	}
-
-	public function clear_model_cache() {
-		delete_transient( 'abcc_available_models' );
 	}
 }

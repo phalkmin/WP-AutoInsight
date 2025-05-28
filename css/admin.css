@@ -1,0 +1,215 @@
+/* Enhanced Model Selector Styles */
+.model-selector {
+    max-width: 1200px;
+    margin: 20px 0;
+}
+
+.model-provider-section {
+    margin-bottom: 30px;
+}
+
+.model-provider-section h3 {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    font-size: 1.1em;
+    color: #1d2327;
+}
+
+.model-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.model-card {
+    position: relative;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 20px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+/* Hover state */
+.model-card:hover {
+    border-color: #c0c0c0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+/* Selected state - much more prominent */
+.model-card.selected {
+    border-color: #2271b1;
+    background: linear-gradient(135deg, #f0f6ff 0%, #e6f2ff 100%);
+    box-shadow: 0 6px 20px rgba(34, 113, 177, 0.15);
+    transform: translateY(-2px);
+}
+
+.model-card.selected::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2271b1, #3582c4);
+}
+
+.model-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 24px;
+    height: 24px;
+    background: #2271b1;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* Hide the radio button completely */
+.model-card input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.model-card label {
+    display: block;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+}
+
+.model-card h4 {
+    margin: 0 0 8px 0;
+    color: #1d2327;
+    font-size: 1.2em;
+    font-weight: 600;
+    padding-right: 35px;
+    /* Space for checkmark */
+}
+
+.model-card.selected h4 {
+    color: #2271b1;
+}
+
+.model-card p {
+    margin: 0 0 15px 0;
+    color: #646970;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.model-card.selected p {
+    color: #4a5568;
+}
+
+/* Enhanced cost indicators */
+.cost-indicator {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Cost tier colors with better contrast */
+.cost-tier-1 .cost-indicator {
+    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.cost-tier-2 .cost-indicator {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.cost-tier-3 .cost-indicator {
+    background: linear-gradient(135deg, #e2e3ff, #d6d8ff);
+    color: #4c51bf;
+    border: 1px solid #d6d8ff;
+}
+
+/* Selected state cost indicators */
+.model-card.selected .cost-tier-1 .cost-indicator {
+    background: linear-gradient(135deg, #c3e6cb, #b8dcc4);
+    box-shadow: 0 2px 4px rgba(21, 87, 36, 0.1);
+}
+
+.model-card.selected .cost-tier-2 .cost-indicator {
+    background: linear-gradient(135deg, #ffeaa7, #fdd835);
+    box-shadow: 0 2px 4px rgba(133, 100, 4, 0.1);
+}
+
+.model-card.selected .cost-tier-3 .cost-indicator {
+    background: linear-gradient(135deg, #d6d8ff, #c7cbff);
+    box-shadow: 0 2px 4px rgba(76, 81, 191, 0.1);
+}
+
+/* Focus states for accessibility */
+.model-card:focus-within {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+/* Disabled state */
+.model-card.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #f9f9f9;
+}
+
+.model-card.disabled:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: #e0e0e0;
+}
+
+/* Mobile responsiveness */
+@media screen and (max-width: 782px) {
+    .model-cards {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .model-card {
+        padding: 16px;
+    }
+
+    .model-card h4 {
+        font-size: 1.1em;
+    }
+}
+
+/* Animation for selection */
+@keyframes selectCard {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.02);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.model-card.just-selected {
+    animation: selectCard 0.3s ease;
+}

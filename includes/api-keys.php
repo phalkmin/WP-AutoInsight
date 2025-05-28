@@ -98,34 +98,3 @@ function abcc_determine_image_service( $text_model ) {
 		'api_key' => null,
 	);
 }
-
-/**
- * The function `abcc_get_available_models` retrieves available models either from cache or by making
- * an API call and caches the result for 1 hour.
- *
- * @return array function `abcc_get_available_models` is returning an array of available models from the
- * cache if available, otherwise it checks for an API key, retrieves available models using the API
- * client, caches the models for 1 hour, and returns the models. If there is an error during the
- * process, it returns an empty array.
- */
-function abcc_get_available_models() {
-	$cached_models = get_transient( 'abcc_available_models' );
-	if ( false !== $cached_models ) {
-		return $cached_models;
-	}
-
-	$api_key = abcc_check_api_key();
-	if ( empty( $api_key ) ) {
-		return array();
-	}
-
-	$client = new ABCC_OpenAI_Client( $api_key );
-	$models = $client->get_available_models();
-
-	if ( ! is_wp_error( $models ) ) {
-		set_transient( 'abcc_available_models', $models, HOUR_IN_SECONDS );
-		return $models;
-	}
-
-	return array();
-}

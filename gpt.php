@@ -1,13 +1,25 @@
 <?php
 
+/**
+ * File: gpt.php
+ *
+ * This file contains functions for interacting with various AI APIs (Claude, Gemini, OpenAI)
+ * for text and image generation.
+ *
+ * @package WP-AutoInsight
+ */
+
 use GeminiAPI\Client;
 use GeminiAPI\Resources\Parts\TextPart;
 
 /**
  * Generates text using Claude API.
  *
- * @param string $api_key API key for Claude.
- * @param string $prompt Text prompt for generating content.
+ * @since 1.0.0
+ * @param string $api_key          API key for Claude.
+ * @param string $prompt           Text prompt for generating content.
+ * @param int    $requested_tokens Number of tokens requested.
+ * @param string $model            Model to use for generation.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
 function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
@@ -19,9 +31,11 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
 		'claude-3.5-haiku-20241022'  => 'claude-3.5-haiku-20241022',
 		'claude-3.5-sonnet-20241022' => 'claude-3.5-sonnet-20241022',
 		'claude-3.7-sonnet-20250219' => 'claude-3.7-sonnet-20250219',
+		'claude-3-5-haiku-20241022'  => 'claude-3-5-haiku-20241022',
+		'claude-sonnet-4-20250514'   => 'claude-sonnet-4-20250514',
 	);
 
-		// For backward compatibility
+		// For backward compatibility.
 	if ( isset( $model_mapping[ $model ] ) ) {
 		$model = $model_mapping[ $model ];
 	}
@@ -74,38 +88,42 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
 /**
  * Generates text using Gemini API.
  *
- * @param string $api_key API key for Gemini API.
- * @param string $prompt Text prompt for generating content.
- * @param string $length Length of the generated content.
+ * @since 1.0.0
+ * @param string $api_key          API key for Gemini API.
+ * @param string $prompt           Text prompt for generating content.
+ * @param int    $requested_tokens Number of tokens requested.
+ * @param string $model            Model to use for generation.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-pro' ) {
-	// Map plugin model names to Gemini library model names
+function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-1.5-flash' ) {
+	// Map plugin model names to current Gemini API model names.
 	$model_mapping = array(
-		'gemini-pro'               => 'models/gemini-pro', // Legacy compatibility
-		'gemini-1.5-flash'         => 'models/gemini-1.5-flash',
-		'gemini-1.5-flash-8b'      => 'models/gemini-1.5-flash-8b',
-		'gemini-1.5-pro'           => 'models/gemini-1.5-pro',
-		'gemini-2.0-flash'         => 'models/gemini-2.0-flash',
-		'gemini-2.0-flash-lite'    => 'models/gemini-2.0-flash-lite',
-		'gemini-2.0-pro-exp-02-05' => 'gemini-2.0-pro-exp-02-05',
+		'gemini-pro'               => 'gemini-1.5-flash', // Legacy fallback to working model
+		'gemini-1.5-flash'         => 'gemini-1.5-flash',
+		'gemini-1.5-flash-8b'      => 'gemini-1.5-flash-8b',
+		'gemini-1.5-pro'           => 'gemini-1.5-pro',
+		'gemini-2.0-flash'         => 'gemini-2.0-flash-exp',
+		'gemini-2.0-flash-lite'    => 'gemini-2.0-flash-exp',
+		'gemini-2.0-pro-exp-02-05' => 'gemini-2.0-flash-exp',
+		'gemini-1.5-pro-latest'    => 'gemini-1.5-pro',
+		'gemini-2.5-pro-preview'   => 'gemini-2.0-flash-exp',
 	);
 
-	// Calculate available tokens for response
+	// Calculate available tokens for response.
 	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
 
-	// Initialize Gemini client
+	// Initialize Gemini client.
 	$gemini = new \GeminiAPI\Client( $api_key );
 
-	// Use the model mapping to get the correct model name
+	// Use the model mapping to get the correct model name.
 	$model_id = isset( $model_mapping[ $model ] ) ? $model_mapping[ $model ] : $model;
 
-	// Create a text part from the prompt
+	// Create a text part from the prompt.
 	$text_part = new \GeminiAPI\Resources\Parts\TextPart( $prompt );
 
 	try {
-		// For newer models (2.0), you might need beta version access
-		if ( strpos( $model, '2.0' ) !== false ) {
+		// For newer models (2.0), use beta version
+		if ( strpos( $model_id, '2.0' ) !== false || strpos( $model_id, 'exp' ) !== false ) {
 			$gemini = $gemini->withV1BetaVersion();
 		}
 
@@ -113,7 +131,7 @@ function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model
 		$response = $gemini->generativeModel( $model_id )
 			->generateContent( $text_part );
 
-		// Return the response text split by newlines
+		// Return the response text split by newlines.
 		$text_array = explode( PHP_EOL, $response->text() );
 		return $text_array;
 	} catch ( \Exception $e ) {
@@ -126,10 +144,11 @@ function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model
 /**
  * Generates text using OpenAI's API or a custom OpenAI-compatible endpoint.
  *
- * @param string $api_key API key for OpenAI.
- * @param string $prompt Text prompt.
- * @param int    $length Maximum number of tokens.
- * @param string $prompt_select Model to use.
+ * @since 1.0.0
+ * @param string $api_key          API key for OpenAI.
+ * @param string $prompt           Text prompt.
+ * @param int    $requested_tokens Maximum number of tokens.
+ * @param string $model            Model to use.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
 function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
@@ -168,10 +187,11 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 /**
  * Generates images using OpenAI's DALL-E or falls back to Stability AI if OpenAI fails.
  *
- * @param string $api_key API key for OpenAI.
- * @param string $prompt Text prompt.
- * @param string $n Number of images to generate.
- * @param string $image_size Size of the generated images.
+ * @since 1.0.0
+ * @param string $api_key     API key for OpenAI.
+ * @param string $prompt      Text prompt.
+ * @param string $n           Number of images to generate.
+ * @param string $image_size  Size of the generated images.
  * @return array|false Array of image URLs or false on failure.
  */
 function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792x1024' ) {
@@ -186,12 +206,18 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792
 
 	if ( is_wp_error( $response ) ) {
 		error_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
-		return abcc_stability_generate_images( $prompt, $n );
+
+		// Get Stability AI key for fallback.
+		$stability_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
+		return abcc_stability_generate_images( $prompt, $n, $stability_key );
 	}
 
 	if ( empty( $response['data'] ) ) {
 		error_log( 'OpenAI Image API: Missing expected data in response' );
-		return abcc_stability_generate_images( $prompt, $n );
+
+		// Get Stability AI key for fallback.
+		$stability_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
+		return abcc_stability_generate_images( $prompt, $n, $stability_key );
 	}
 
 	$urls = array_map(
@@ -209,6 +235,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792
  *
  * @param string $prompt Text prompt.
  * @param int    $n Number of images to generate.
+ * @param string $stability_key Stability AI API key.
  * @return array|false Array of image URLs or false on failure.
  */
 function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
@@ -266,7 +293,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 		return false;
 	}
 
-	// Process only the first image
+	// Process only the first image.
 	if ( ! empty( $body['artifacts'][0]['base64'] ) ) {
 		// Create uploads directory if it doesn't exist
 		$upload_dir = wp_upload_dir();
@@ -274,11 +301,11 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 			wp_mkdir_p( $upload_dir['path'] );
 		}
 
-		// Generate unique filename
+		// Generate unique filename.
 		$filename = 'stability-' . uniqid() . '.png';
 		$filepath = $upload_dir['path'] . '/' . $filename;
 
-		// Decode and save the image
+		// Decode and save the image.
 		$image_data = base64_decode( $body['artifacts'][0]['base64'] );
 		if ( file_put_contents( $filepath, $image_data ) ) {
 			return $upload_dir['url'] . '/' . $filename;

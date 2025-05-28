@@ -1,6 +1,6 @@
 <?php
 /**
- * SEO integration functions
+ * SEO integration functions.
  *
  * @package WP-AutoInsight
  */
@@ -12,14 +12,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Checks which SEO plugin is active and returns its identifier.
  *
- * @return string Identifier of the active SEO plugin or 'none'
+ * @return string Identifier of the active SEO plugin or 'none'.
  */
 function abcc_get_active_seo_plugin() {
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
 
-	if ( is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
+	if ( true === is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
 		return 'yoast';
 	}
 	return 'none';
@@ -28,8 +28,8 @@ function abcc_get_active_seo_plugin() {
 /**
  * Gets the appropriate meta fields based on the active SEO plugin.
  *
- * @param array $seo_data Array containing SEO metadata
- * @return array Meta input array for wp_insert_post
+ * @param array $seo_data Array containing SEO metadata.
+ * @return array Meta input array for wp_insert_post.
  */
 function abcc_get_seo_meta_fields( $seo_data ) {
 	$active_seo_plugin = abcc_get_active_seo_plugin();
@@ -51,11 +51,11 @@ function abcc_get_seo_meta_fields( $seo_data ) {
 /**
  * Generates a title and SEO metadata for a post.
  *
- * @param string $api_key API key for the selected service
- * @param array  $keywords Keywords to focus the article on
- * @param string $prompt_select Which AI service to use
- * @param array  $site_info Site information
- * @return array Title and SEO data
+ * @param string $api_key API key for the selected service.
+ * @param array  $keywords Keywords to focus the article on.
+ * @param string $prompt_select Which AI service to use.
+ * @param array  $site_info Site information.
+ * @return array Title and SEO data.
  */
 function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info ) {
 	$prompt  = 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
@@ -69,20 +69,24 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
     Social Excerpt: (max 200 chars)
     [END]';
 
-	// Use a small token limit for this call - 200 tokens should be plenty
+	// Use a small token limit for this call - 200 tokens should be plenty.
 	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 200 );
-
-	if ( ! $result ) {
+	if ( false === $result ) {
 		throw new Exception( 'Failed to generate title and SEO data' );
 	}
 
-	// Parse the structured response
+	// Parse the structured response.
 	$title    = '';
 	$seo_data = array();
 	$in_title = false;
 	$in_seo   = false;
 
 	foreach ( $result as $line ) {
+		$line = trim( $line );
+		if ( empty( $line ) ) {
+			continue;
+		}
+
 		if ( false !== strpos( $line, '[TITLE]' ) ) {
 			$in_title = true;
 			continue;
@@ -96,8 +100,8 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 			break;
 		}
 
-		if ( $in_title ) {
-			$title    = trim( $line );
+		if ( $in_title && empty( $title ) ) {
+			$title    = $line;
 			$in_title = false;
 		} elseif ( $in_seo ) {
 			if ( false !== strpos( $line, 'Meta Description:' ) ) {
@@ -112,8 +116,44 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 		}
 	}
 
+	// Fallback: If structured parsing failed, try to extract title from first non-empty line
+	if ( empty( $title ) ) {
+		foreach ( $result as $line ) {
+			$line = trim( $line );
+			if ( ! empty( $line ) && ! strpos( $line, '[' ) && ! strpos( $line, 'Meta Description:' ) ) {
+				$title = $line;
+				break;
+			}
+		}
+	}
+
+	// If we still don't have a title, generate one separately
+	if ( empty( $title ) ) {
+		error_log( 'WP-AutoInsight: Structured SEO parsing failed, generating title separately. Response was: ' . print_r( $result, true ) );
+		$title = abcc_generate_title( $api_key, $keywords, $prompt_select );
+	}
+
+	// Generate default SEO data if parsing failed
+	if ( empty( $seo_data['meta_description'] ) ) {
+		$seo_data['meta_description'] = wp_trim_words( 'Learn about ' . implode( ', ', $keywords ), 20 );
+	}
+	if ( empty( $seo_data['primary_keyword'] ) ) {
+		$seo_data['primary_keyword'] = $keywords[0] ?? 'blog post';
+	}
+	if ( empty( $seo_data['secondary_keywords'] ) ) {
+		$seo_data['secondary_keywords'] = array_slice( $keywords, 1, 3 );
+	}
+	if ( empty( $seo_data['social_excerpt'] ) ) {
+		$seo_data['social_excerpt'] = wp_trim_words( $title . ' - ' . implode( ', ', $keywords ), 25 );
+	}
+
 	return array(
-		'title'    => $title,
-		'seo_data' => $seo_data,
+		'title'    => sanitize_text_field( $title ),
+		'seo_data' => array(
+			'meta_description'   => sanitize_text_field( $seo_data['meta_description'] ),
+			'primary_keyword'    => sanitize_text_field( $seo_data['primary_keyword'] ),
+			'secondary_keywords' => array_map( 'sanitize_text_field', (array) $seo_data['secondary_keywords'] ),
+			'social_excerpt'     => sanitize_text_field( $seo_data['social_excerpt'] ),
+		),
 	);
 }
