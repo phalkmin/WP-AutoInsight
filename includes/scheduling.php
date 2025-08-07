@@ -136,14 +136,14 @@ function abcc_send_post_notification( $post_id ) {
 		return false;
 	}
 
-	/* translators: %s: Post title */
 	$subject = sprintf(
+		/* translators: %s: Post title */
 		__( 'New AI Generated Post: %s', 'automated-blog-content-creator' ),
 		$post->post_title
 	);
 
-	/* translators: %1$s: Post title, %2$s: Edit post URL */
 	$message = sprintf(
+		/* translators: %1$s: Post title, %2$s: Edit post URL */
 		__( 'A new post "%1$s" has been created automatically.\n\nYou can edit it here: %2$s', 'automated-blog-content-creator' ),
 		$post->post_title,
 		get_edit_post_link( $post_id, '' )

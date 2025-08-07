@@ -91,10 +91,12 @@ function abcc_calculate_available_tokens( $prompt, $requested_tokens, $model ) {
 	// Estimate prompt tokens
 	$prompt_tokens = abcc_estimate_tokens( $prompt );
 
-	// Calculate available tokens
-	$max_tokens       = min( $requested_tokens, $model_max );
-	$available_tokens = $max_tokens - $prompt_tokens;
+	// Calculate maximum possible output tokens within context window
+	$max_possible_output = $model_max - $prompt_tokens;
 
-	// Ensure minimum response size
-	return max( 100, $available_tokens );
+	// Use the smaller of: user's request OR what the model can actually handle
+	$available_tokens = min( $requested_tokens, $max_possible_output );
+
+	// Ensure minimum response size (but don't exceed what user requested)
+	return (int) max( 100, $available_tokens );
 }

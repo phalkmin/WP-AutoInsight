@@ -1,5 +1,4 @@
 <?php
-
 /**
  * File: gpt.php
  *
@@ -25,14 +24,12 @@ use GeminiAPI\Resources\Parts\TextPart;
 function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
 
 	$model_mapping = array(
-		'claude-3-haiku'             => 'claude-3-haiku-20240307',
-		'claude-3-sonnet'            => 'claude-3-sonnet-20240229',
-		'claude-3-opus'              => 'claude-3-opus-20240229',
-		'claude-3.5-haiku-20241022'  => 'claude-3.5-haiku-20241022',
-		'claude-3.5-sonnet-20241022' => 'claude-3.5-sonnet-20241022',
-		'claude-3.7-sonnet-20250219' => 'claude-3.7-sonnet-20250219',
-		'claude-3-5-haiku-20241022'  => 'claude-3-5-haiku-20241022',
-		'claude-sonnet-4-20250514'   => 'claude-sonnet-4-20250514',
+		'claude-3-haiku'    => 'claude-3-haiku-20240307',
+		'claude-3-sonnet'   => 'claude-3-sonnet-20240229',
+		'claude-3-opus'     => 'claude-3-opus-20240229',
+		'claude-3.5-haiku'  => 'claude-3-5-haiku-20241022',
+		'claude-3.5-sonnet' => 'claude-3-7-sonnet-20250219',
+		'claude-sonnet-4'   => 'claude-sonnet-4-20250514',
 	);
 
 		// For backward compatibility.
@@ -98,7 +95,7 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
 function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-1.5-flash' ) {
 	// Map plugin model names to current Gemini API model names.
 	$model_mapping = array(
-		'gemini-pro'               => 'gemini-1.5-flash', // Legacy fallback to working model
+		'gemini-pro'               => 'gemini-1.5-flash', // Legacy fallback to working model.
 		'gemini-1.5-flash'         => 'gemini-1.5-flash',
 		'gemini-1.5-flash-8b'      => 'gemini-1.5-flash-8b',
 		'gemini-1.5-pro'           => 'gemini-1.5-pro',
@@ -122,12 +119,12 @@ function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model
 	$text_part = new \GeminiAPI\Resources\Parts\TextPart( $prompt );
 
 	try {
-		// For newer models (2.0), use beta version
+		// For newer models (2.0), use beta version.
 		if ( strpos( $model_id, '2.0' ) !== false || strpos( $model_id, 'exp' ) !== false ) {
 			$gemini = $gemini->withV1BetaVersion();
 		}
 
-		// Generate content using the specified model
+		// Generate content using the specified model.
 		$response = $gemini->generativeModel( $model_id )
 			->generateContent( $text_part );
 
@@ -295,7 +292,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 
 	// Process only the first image.
 	if ( ! empty( $body['artifacts'][0]['base64'] ) ) {
-		// Create uploads directory if it doesn't exist
+		// Create uploads directory if it doesn't exist.
 		$upload_dir = wp_upload_dir();
 		if ( ! file_exists( $upload_dir['path'] ) ) {
 			wp_mkdir_p( $upload_dir['path'] );

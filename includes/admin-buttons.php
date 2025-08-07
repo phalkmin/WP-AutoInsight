@@ -37,11 +37,11 @@ function abcc_rewrite_meta_box_callback( $post ) {
 	?>
 	<div style="padding: 10px 0;">
 		<button type="button" id="abcc-rewrite-post" class="button button-secondary" style="width: 100%; margin-bottom: 10px;">
-			<?php _e( 'Rewrite with AI', 'automated-blog-content-creator' ); ?>
+			<?php esc_html_e( 'Rewrite with AI', 'automated-blog-content-creator' ); ?>
 		</button>
 		<div id="abcc-rewrite-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;">
 			<span class="dashicons dashicons-update"></span>
-			<span id="abcc-status-text"><?php _e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
+			<span id="abcc-status-text"><?php esc_html_e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
 		</div>
 	</div>
 
@@ -143,7 +143,7 @@ function abcc_add_create_post_button() {
 				type: 'POST',
 				data: {
 					action: 'abcc_create_post',
-					nonce: '<?php echo wp_create_nonce( 'abcc_admin_buttons' ); ?>',
+					nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_admin_buttons' ) ); ?>',
 					post_type: postType
 				},
 				success: function(response) {
@@ -151,7 +151,7 @@ function abcc_add_create_post_button() {
 						alert(response.data.message);
 						// Redirect to edit the new post.
 						if (response.data.post_id) {
-							window.location.href = '<?php echo admin_url( 'post.php?action=edit&post=' ); ?>' + response.data.post_id;
+							window.location.href = '<?php echo esc_url( admin_url( 'post.php?action=edit&post=' ) ); ?>' + response.data.post_id;
 						}
 					} else {
 						alert(response.data.message || '<?php echo esc_js( __( 'An error occurred', 'automated-blog-content-creator' ) ); ?>');

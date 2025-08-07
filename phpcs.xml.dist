@@ -3,9 +3,11 @@
     <file>admin.php</file>
     <file>auto-post.php</file>
     <file>gpt.php</file>
-    <rule ref="WordPress">
+    <file>includes/</file>
+    <rule ref="WordPress-Extra">
         <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase" />
         <exclude name="WordPress.Files.FileName.InvalidClassFileName" />
+        <exclude name="WordPress.PHP.YodaConditions.NotYoda" />
         <exclude name="Squiz.Commenting.FunctionComment.ParamCommentFullStop" />
         <exclude name="Squiz.Commenting.FunctionComment.Missing" />
         <exclude name="Squiz.Commenting.FunctionComment.MissingParamTag" />

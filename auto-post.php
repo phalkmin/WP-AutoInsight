@@ -1,14 +1,15 @@
 <?php
 /**
- * Plugin Name: WP-AutoInsight
- * Description: Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version: 3.0.0
- * Author: Paulo H. Alkmin
- * Author URI: https://phalkmin.me/
- * Text Domain: automated-wordpress-content-creator
- * Domain Path: /languages
+ * Plugin Name:       WP-AutoInsight
+ * Plugin URI:        https://phalkmin.me/
+ * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
+ * Version:           3.1.0
+ * Author:            Paulo H. Alkmin
+ * Author URI:        https://phalkmin.me/
+ * Text Domain:       automated-blog-content-creator
+ * Domain Path:       /languages
  * Requires at least: 5.6
- * Requires PHP: 7.4
+ * Requires PHP:      8.1
  *
  * @package WP-AutoInsight
  */
@@ -18,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', filemtime( __FILE__ ) );
+define( 'ABCC_VERSION', '3.1.0' );
 
 // Include required files.
 require_once __DIR__ . '/vendor/autoload.php';
@@ -35,6 +36,7 @@ require_once __DIR__ . '/includes/ajax-handlers.php';
 require_once __DIR__ . '/includes/admin-buttons.php';
 require_once __DIR__ . '/includes/audio.php';
 require_once __DIR__ . '/includes/infographic.php';
+require_once __DIR__ . '/includes/onboarding.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/gpt.php';
 
@@ -42,6 +44,7 @@ require_once __DIR__ . '/gpt.php';
  * Handle API request errors.
  *
  * @since 1.0.0
+ *
  * @param mixed  $response The API response.
  * @param string $api      The API name.
  * @return void
@@ -72,6 +75,7 @@ function handle_api_request_error( $response, $api ) {
  * Initialize the plugin.
  *
  * @since 1.0.0
+ *
  * @return ABCC_Plugin Plugin instance.
  */
 function abcc_init() {

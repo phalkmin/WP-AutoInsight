@@ -60,6 +60,10 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			}
 		);
 
+		if ( false === $content_array || ! is_array( $content_array ) ) {
+			throw new Exception( 'Content generation failed - no content returned from AI service' );
+		}
+
 		if ( empty( $content_array ) ) {
 			throw new Exception( 'Content generation failed' );
 		}

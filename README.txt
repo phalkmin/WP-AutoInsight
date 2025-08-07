@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, generator, ai-content
 Requires at least: 5.8
 Tested up to: 6.7
-Stable tag: 3.0.0
+Stable tag: 3.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Automatically create blog posts, rewrite content, and generate infographics using OpenAI, Anthropic Claude, and Google AI APIs.
@@ -248,6 +248,27 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 3.1.0 =
+* Added:
+  - **Complete Onboarding Experience**: New user onboarding with 3-step setup process
+    - Goal-based configuration (Personal Blog, Business, News, Creative content types)
+    - Visual AI model selection with cost indicators
+    - Interactive API key testing with detailed error messages
+    - Automated first post generation to verify setup
+    - Step-by-step documentation for obtaining API keys from all providers
+    - Better error handling with specific failure reasons
+  - **Smart Configuration**: 
+    - Automatic plugin configuration based on user goals
+    - Default model selection per provider (GPT-3.5, Claude Haiku, Gemini Flash)
+    - Backwards compatibility ensuring existing users never see onboarding
+
+* Fixed:
+  - On rewriting, the token count was wrong, causing the returned post to be smaller than the current post
+
+* Technical Improvements:
+  - **WordPress Standards**: Enhanced adherence to WordPress coding standards
+
 
 = 3.0.0 =
 * Added:

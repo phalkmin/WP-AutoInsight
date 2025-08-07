@@ -34,7 +34,7 @@ add_action( 'add_meta_boxes', 'abcc_add_infographic_meta_box' );
 function abcc_infographic_meta_box_callback( $post ) {
 	// Only show for posts with content
 	if ( empty( trim( $post->post_content ) ) ) {
-		echo '<p>' . __( 'Save the post with content first to generate an infographic.', 'automated-blog-content-creator' ) . '</p>';
+		echo '<p>' . esc_html_e( 'Save the post with content first to generate an infographic.', 'automated-blog-content-creator' ) . '</p>';
 		return;
 	}
 
@@ -43,11 +43,11 @@ function abcc_infographic_meta_box_callback( $post ) {
 	?>
 	<div style="padding: 10px 0;">
 		<button type="button" id="abcc-create-infographic" class="button button-secondary" style="width: 100%; margin-bottom: 10px;">
-			<?php _e( 'Create Infographic', 'automated-blog-content-creator' ); ?>
+			<?php esc_html_e( 'Create Infographic', 'automated-blog-content-creator' ); ?>
 		</button>
 		<div id="abcc-infographic-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;">
 			<span class="dashicons dashicons-update"></span>
-			<span id="abcc-infographic-status-text"><?php _e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
+			<span id="abcc-infographic-status-text"><?php esc_html_e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
 		</div>
 	</div>
 

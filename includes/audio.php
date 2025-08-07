@@ -107,6 +107,11 @@ function abcc_handle_audio_transcription() {
 			);
 		}
 
+		$file_size = filesize( $file_path );
+		if ( $file_size > 25 * 1024 * 1024 ) {
+			throw new Exception( esc_html__( 'File too large. Maximum size is 25MB.', 'automated-blog-content-creator' ) );
+		}
+
 		// Transcribe the audio.
 		$transcript = abcc_transcribe_audio( $api_key, $file_path );
 
@@ -187,7 +192,7 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 	// Check file size (Whisper has a 25MB limit).
 	$file_size = filesize( $file_path );
 	if ( $file_size > 25 * 1024 * 1024 ) {
-		throw new Exception( __( 'File too large. Maximum size is 25MB.', 'automated-blog-content-creator' ) );
+		throw new Exception( esc_html__( 'File too large. Maximum size is 25MB.', 'automated-blog-content-creator' ) );
 	}
 
 	// Use cURL for file upload to Whisper API.
@@ -220,8 +225,8 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 		throw new Exception(
 			sprintf(
 				/* translators: %s: cURL error message */
-				__( 'Network error: %s', 'automated-blog-content-creator' ),
-				$error
+				esc_html__( 'Network error: %s', 'automated-blog-content-creator' ),
+				esc_html( $error )
 			)
 		);
 	}
@@ -233,9 +238,9 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 		throw new Exception(
 			sprintf(
 				/* translators: %1$d: HTTP status code, %2$s: Error message */
-				__( 'Transcription failed. Status code: %1$d. Error: %2$s', 'automated-blog-content-creator' ),
-				$http_code,
-				$error_msg
+				esc_html__( 'Transcription failed. Status code: %1$d. Error: %2$s', 'automated-blog-content-creator' ),
+				esc_html( $http_code ),
+				esc_html( $error_msg )
 			)
 		);
 	}
@@ -330,7 +335,7 @@ Format requirements:
 	$post_id = wp_insert_post( $post_data, true );
 
 	if ( is_wp_error( $post_id ) ) {
-		throw new Exception( $post_id->get_error_message() );
+		throw new Exception( esc_html( $post_id->get_error_message() ) );
 	}
 
 	// Store transcript metadata.
@@ -377,7 +382,7 @@ function abcc_enqueue_audio_scripts( $hook ) {
 
 	wp_enqueue_script(
 		'abcc-audio-transcription',
-		plugins_url( '/js/audio-transcription.js', __DIR__ ),
+		plugins_url( '/js/audio-transcriptions.js', __DIR__ ),
 		array( 'jquery' ),
 		ABCC_VERSION,
 		true

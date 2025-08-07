@@ -46,7 +46,7 @@ class ABCC_Plugin {
 	 * Constructor
 	 */
 	public function __construct() {
-		$this->version = filemtime( plugin_dir_path( __DIR__ ) . '/auto-post.php' );
+		$this->version = '3.1.0';
 		$this->init_hooks();
 	}
 
@@ -65,6 +65,9 @@ class ABCC_Plugin {
 
 		// Admin notices
 		add_action( 'admin_notices', array( $this, 'display_settings_errors' ) );
+
+		// Onboarding
+		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
 	}
 
 	/**
@@ -78,7 +81,7 @@ class ABCC_Plugin {
 			wp_die(
 				sprintf(
 					/* translators: %s: PHP version */
-					esc_html__( 'WP-AutoInsight requires PHP version 7.4 or higher. Your current PHP version is %s. Please upgrade your PHP version or contact your host for assistance.', 'automated-wordpress-content-creator' ),
+					esc_html__( 'WP-AutoInsight requires PHP version 7.4 or higher. Your current PHP version is %s. Please upgrade your PHP version or contact your host for assistance.', 'automated-blog-content-creator' ),
 					esc_html( PHP_VERSION )
 				),
 				'Plugin Activation Error',
@@ -91,7 +94,7 @@ class ABCC_Plugin {
 			wp_die(
 				sprintf(
 					/* translators: %s: WordPress version */
-					esc_html__( 'WP-AutoInsight requires WordPress version 5.6 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-wordpress-content-creator' ),
+					esc_html__( 'WP-AutoInsight requires WordPress version 5.6 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-blog-content-creator' ),
 					esc_html( $wp_version )
 				),
 				'Plugin Activation Error',
