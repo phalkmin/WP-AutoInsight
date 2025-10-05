@@ -34,7 +34,7 @@ add_action( 'add_meta_boxes', 'abcc_add_infographic_meta_box' );
 function abcc_infographic_meta_box_callback( $post ) {
 	// Only show for posts with content
 	if ( empty( trim( $post->post_content ) ) ) {
-		echo '<p>' . esc_html_e( 'Save the post with content first to generate an infographic.', 'automated-blog-content-creator' ) . '</p>';
+		echo '<p>' . esc_html__( 'Save the post with content first to generate an infographic.', 'automated-blog-content-creator' ) . '</p>';
 		return;
 	}
 
