@@ -58,6 +58,15 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 					return $result;
 				}
 				break;
+
+			case 'gemini':
+				$gemini_image_model = get_option( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
+				$gemini_image_size  = get_option( 'abcc_gemini_image_size', '2K' );
+				$result             = abcc_gemini_generate_images( $image_service['api_key'], $prompt, $gemini_image_model, $gemini_image_size );
+				if ( false !== $result ) {
+					return $result;
+				}
+				break;
 		}
 
 		error_log( 'Image generation failed for selected service' );

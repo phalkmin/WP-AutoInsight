@@ -257,13 +257,13 @@ function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_lim
 function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 	$result = false;
 
-	// OpenAI models.
-	if ( 0 === strpos( $service, 'gpt-' ) ) {
+	// OpenAI models (gpt-* and o-series reasoning models like o3, o4-mini).
+	if ( 0 === strpos( $service, 'gpt-' ) || preg_match( '/^o[0-9]/', $service ) ) {
 		$result = abcc_openai_generate_text( $api_key, $prompt, $char_limit, $service );
 	} elseif ( 0 === strpos( $service, 'claude' ) ) {
 		$result = abcc_claude_generate_text( $api_key, $prompt, $char_limit, $service );
 	} elseif ( 0 === strpos( $service, 'gemini' ) ) {
-		$result = abcc_gemini_generate_text( $api_key, $prompt, $char_limit );
+		$result = abcc_gemini_generate_text( $api_key, $prompt, $char_limit, $service );
 	}
 
 	if ( false === $result ) {

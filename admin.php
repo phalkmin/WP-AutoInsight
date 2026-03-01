@@ -55,22 +55,22 @@ function abcc_get_ai_model_options() {
 		$options['openai'] = array(
 			'group'   => 'OpenAI Models',
 			'options' => array(
-				// Cheap option.
-				'gpt-3.5-turbo'       => array(
-					'name'        => 'GPT-3.5 Turbo',
-					'description' => 'Fast and cost-effective',
+				// Economy option.
+				'gpt-4.1-mini-2025-04-14' => array(
+					'name'        => 'GPT-4.1 Mini',
+					'description' => 'Fast and affordable with 1M context window',
 					'cost_tier'   => '1',
 				),
-				// Medium option.
-				'gpt-4o'              => array(
-					'name'        => 'GPT-4o',
-					'description' => 'Fast, intelligent, flexible GPT model',
+				// Standard option.
+				'gpt-4.1-2025-04-14'      => array(
+					'name'        => 'GPT-4.1',
+					'description' => 'Excellent coding and instruction following',
 					'cost_tier'   => '2',
 				),
 				// Premium option.
-				'gpt-4-turbo-preview' => array(
-					'name'        => 'GPT-4 Turbo Preview',
-					'description' => 'Largest and most capable GPT model',
+				'o4-mini-2025-04-16'      => array(
+					'name'        => 'o4-mini',
+					'description' => 'Advanced reasoning model for complex tasks',
 					'cost_tier'   => '3',
 				),
 			),
@@ -81,22 +81,22 @@ function abcc_get_ai_model_options() {
 		$options['claude'] = array(
 			'group'   => 'Claude Models',
 			'options' => array(
-				// Cheap option.
-				'claude-3-5-haiku-20241022'  => array(
-					'name'        => 'Claude 3.5 Haiku',
-					'description' => 'Fast and cost-effective',
+				// Economy option.
+				'claude-haiku-4-5-20251001'  => array(
+					'name'        => 'Claude Haiku 4.5',
+					'description' => 'Fastest model with near-frontier intelligence',
 					'cost_tier'   => '1',
 				),
-				// Medium option.
-				'claude-3-7-sonnet-20250219' => array(
-					'name'        => 'Claude 3.5 Sonnet',
-					'description' => 'Improved balanced performance',
+				// Standard option.
+				'claude-sonnet-4-5-20250929' => array(
+					'name'        => 'Claude Sonnet 4.5',
+					'description' => 'Best for complex agents and coding tasks',
 					'cost_tier'   => '2',
 				),
 				// Premium option.
-				'claude-sonnet-4-20250514'   => array(
-					'name'        => 'Claude Sonnet 4',
-					'description' => 'Latest premium model with advanced capabilities',
+				'claude-opus-4-5-20251101'   => array(
+					'name'        => 'Claude Opus 4.5',
+					'description' => 'Maximum intelligence with practical performance',
 					'cost_tier'   => '3',
 				),
 			),
@@ -107,22 +107,22 @@ function abcc_get_ai_model_options() {
 		$options['gemini'] = array(
 			'group'   => 'Google Gemini Models',
 			'options' => array(
-				// Cheap option.
-				'gemini-2.0-flash'       => array(
-					'name'        => 'Gemini 2.0 Flash',
-					'description' => 'Fast and versatile performance across diverse tasks',
+				// Economy option.
+				'gemini-2.5-flash-lite'  => array(
+					'name'        => 'Gemini 2.5 Flash-Lite',
+					'description' => 'Fastest and most budget-friendly model',
 					'cost_tier'   => '1',
 				),
-				// Medium option.
-				'gemini-1.5-pro-latest'  => array(
-					'name'        => 'Gemini 1.5 Pro',
-					'description' => 'Complex reasoning with 2M token context window',
+				// Standard option.
+				'gemini-2.5-flash'       => array(
+					'name'        => 'Gemini 2.5 Flash',
+					'description' => 'Best price-performance with thinking capabilities',
 					'cost_tier'   => '2',
 				),
 				// Premium option.
-				'gemini-2.5-pro-preview' => array(
+				'gemini-2.5-pro'         => array(
 					'name'        => 'Gemini 2.5 Pro',
-					'description' => 'Most powerful Gemini model with advanced reasoning',
+					'description' => 'Most advanced reasoning model for complex problems',
 					'cost_tier'   => '3',
 				),
 			),
@@ -208,6 +208,8 @@ function abcc_openai_text_settings_page() {
 				$openai_email_notifications = isset( $_POST['openai_email_notifications'] );
 				$openai_generate_images     = isset( $_POST['openai_generate_images'] );
 				$preferred_image_service    = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
+				$gemini_image_model         = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
+				$gemini_image_size          = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
 
 				update_option( 'openai_api_key', $api_key );
 				update_option( 'gemini_api_key', $gemini_api_key );
@@ -218,6 +220,8 @@ function abcc_openai_text_settings_page() {
 				update_option( 'openai_email_notifications', $openai_email_notifications );
 				update_option( 'openai_generate_images', $openai_generate_images );
 				update_option( 'preferred_image_service', $preferred_image_service );
+				update_option( 'abcc_gemini_image_model', $gemini_image_model );
+				update_option( 'abcc_gemini_image_size', $gemini_image_size );
 
 				abcc_schedule_openai_event();
 
@@ -355,7 +359,7 @@ function abcc_openai_text_settings_page() {
 						<div class="model-selector">
 								<?php
 								$model_options          = abcc_get_ai_model_options();
-								$current_selected_model = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+								$current_selected_model = get_option( 'prompt_select', 'gpt-4.1-mini' );
 								foreach ( $model_options as $provider => $provider_data ) :
 									?>
 								<div class="model-provider-section">
@@ -501,13 +505,70 @@ function abcc_openai_text_settings_page() {
 							<option value="stability" <?php selected( get_option( 'preferred_image_service' ), 'stability' ); ?>>
 								<?php esc_html_e( 'Always use Stability AI', 'automated-blog-content-creator' ); ?>
 							</option>
+							<option value="gemini" <?php selected( get_option( 'preferred_image_service' ), 'gemini' ); ?>>
+								<?php esc_html_e( 'Always use Gemini Nano Banana', 'automated-blog-content-creator' ); ?>
+							</option>
 						</select>
 						<p class="description">
 							<?php esc_html_e( 'Choose how to handle image generation for different text models', 'automated-blog-content-creator' ); ?>
 						</p>
 					</td>
 				</tr>
+				<tr id="gemini-image-settings" style="<?php echo 'gemini' === get_option( 'preferred_image_service' ) ? '' : 'display:none;'; ?>">
+					<th scope="row">
+						<label for="abcc_gemini_image_model">
+							<?php echo esc_html__( 'Gemini Image Model:', 'automated-blog-content-creator' ); ?>
+						</label>
+					</th>
+					<td>
+						<select id="abcc_gemini_image_model" name="abcc_gemini_image_model">
+							<option value="gemini-2.5-flash-image" <?php selected( get_option( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' ), 'gemini-2.5-flash-image' ); ?>>
+								<?php esc_html_e( 'Nano Banana (Gemini 2.5 Flash) - Fast & Efficient', 'automated-blog-content-creator' ); ?>
+							</option>
+							<option value="gemini-3-pro-image-preview" <?php selected( get_option( 'abcc_gemini_image_model' ), 'gemini-3-pro-image-preview' ); ?>>
+								<?php esc_html_e( 'Nano Banana Pro (Gemini 3 Pro) - Premium Quality', 'automated-blog-content-creator' ); ?>
+							</option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Nano Banana Pro offers higher quality and text rendering capabilities', 'automated-blog-content-creator' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr id="gemini-image-size-settings" style="<?php echo 'gemini' === get_option( 'preferred_image_service' ) ? '' : 'display:none;'; ?>">
+					<th scope="row">
+						<label for="abcc_gemini_image_size">
+							<?php echo esc_html__( 'Gemini Image Size:', 'automated-blog-content-creator' ); ?>
+						</label>
+					</th>
+					<td>
+						<select id="abcc_gemini_image_size" name="abcc_gemini_image_size">
+							<option value="1K" <?php selected( get_option( 'abcc_gemini_image_size', '2K' ), '1K' ); ?>>
+								<?php esc_html_e( '1K - Standard Quality', 'automated-blog-content-creator' ); ?>
+							</option>
+							<option value="2K" <?php selected( get_option( 'abcc_gemini_image_size', '2K' ), '2K' ); ?>>
+								<?php esc_html_e( '2K - High Quality (Recommended)', 'automated-blog-content-creator' ); ?>
+							</option>
+							<option value="4K" <?php selected( get_option( 'abcc_gemini_image_size' ), '4K' ); ?>>
+								<?php esc_html_e( '4K - Ultra High Quality', 'automated-blog-content-creator' ); ?>
+							</option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Higher resolution images take longer to generate and use more API quota', 'automated-blog-content-creator' ); ?>
+						</p>
+					</td>
+				</tr>
 			</table>
+			<script>
+			jQuery(document).ready(function($) {
+				$('#preferred_image_service').on('change', function() {
+					if ($(this).val() === 'gemini') {
+						$('#gemini-image-settings, #gemini-image-size-settings').show();
+					} else {
+						$('#gemini-image-settings, #gemini-image-size-settings').hide();
+					}
+				});
+			});
+			</script>
 
 			<h2><?php esc_html_e( 'Automation & Scheduling', 'automated-blog-content-creator' ); ?></h2>
 			<table class="form-table">
@@ -600,7 +661,7 @@ function abcc_openai_text_settings_page() {
 							</li>
 							<li style="margin-bottom: 10px;">
 								<span class="dashicons dashicons-superhero-alt" style="color: #fd7e14; margin-right: 8px;"></span>
-								<?php esc_html_e( 'Latest AI Models (GPT-4, Claude Sonnet 4, Gemini 2.5)', 'automated-blog-content-creator' ); ?>
+								<?php esc_html_e( 'Latest AI Models (GPT-4.1, Claude 4.5, Gemini 2.5)', 'automated-blog-content-creator' ); ?>
 							</li>
 						</ul>
 					</div>
@@ -615,9 +676,9 @@ function abcc_openai_text_settings_page() {
 							<div>
 								<h4 style="color: #495057; margin-bottom: 10px;"><?php esc_html_e( 'AI Integration', 'automated-blog-content-creator' ); ?></h4>
 								<ul style="margin: 0; padding-left: 20px; color: #6c757d;">
-									<li><?php esc_html_e( 'OpenAI (GPT-3.5, GPT-4, GPT-4o)', 'automated-blog-content-creator' ); ?></li>
-									<li><?php esc_html_e( 'Claude (Haiku, Sonnet, Opus)', 'automated-blog-content-creator' ); ?></li>
-									<li><?php esc_html_e( 'Google Gemini (Flash, Pro)', 'automated-blog-content-creator' ); ?></li>
+									<li><?php esc_html_e( 'OpenAI (GPT-4.1, o4-mini)', 'automated-blog-content-creator' ); ?></li>
+									<li><?php esc_html_e( 'Claude (Haiku 4.5, Sonnet 4.5, Opus 4.5)', 'automated-blog-content-creator' ); ?></li>
+									<li><?php esc_html_e( 'Google Gemini (2.5 Flash, 2.5 Pro)', 'automated-blog-content-creator' ); ?></li>
 								</ul>
 							</div>
 							<div>
@@ -870,7 +931,7 @@ function abcc_openai_text_settings_page() {
  * If the current model is no longer available, select a default from available options.
  */
 function abcc_validate_selected_model() {
-	$current_model    = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$current_model    = get_option( 'prompt_select', 'gpt-4.1-mini' );
 	$available_models = abcc_get_ai_model_options();
 
 	$model_available = false;

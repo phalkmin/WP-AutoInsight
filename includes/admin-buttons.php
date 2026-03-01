@@ -199,7 +199,7 @@ function abcc_handle_rewrite_post() {
 
 		// Get settings.
 		$api_key       = abcc_check_api_key();
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 		$tone          = get_option( 'openai_tone', 'default' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 

@@ -266,7 +266,7 @@ function abcc_create_post_from_audio_transcript( $transcript, $attachment_id ) {
 
 	// Use existing content generation to enhance the transcript.
 	$api_key       = abcc_check_api_key();
-	$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 	$char_limit    = get_option( 'openai_char_limit', 200 );
 
 	// Create enhanced content prompt.

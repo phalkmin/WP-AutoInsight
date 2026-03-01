@@ -44,7 +44,7 @@ function abcc_openai_generate_post_scheduled() {
 		$tone          = get_option( 'openai_tone', 'default' );
 		$auto_create   = get_option( 'openai_auto_create', 'none' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 
 		// Log scheduled attempt.
 		// translators: %1$s: Auto create setting, %2$s: Model name, %3$d: Keywords count

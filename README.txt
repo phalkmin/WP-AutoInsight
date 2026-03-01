@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, generator, ai-content
 Requires at least: 5.8
 Tested up to: 6.7
-Stable tag: 3.1.0
+Stable tag: 3.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Automatically create blog posts, rewrite content, and generate infographics using OpenAI, Anthropic Claude, and Google AI APIs.
@@ -27,16 +27,18 @@ WP-AutoInsight revolutionizes content creation by harnessing multiple AI platfor
 = Key Features =
 
 * **Multi-Platform AI Integration**
-  - OpenAI Models (GPT-3.5, GPT-4, GPT-4o, GPT-4.5 Preview)
-  - Claude 3, 3.5, and 3.7 Models (Haiku, Sonnet, Opus)
-  - Gemini 1.5 and 2.0 Models (Flash, Flash-Lite, Pro)
-  - Image generation capabilities with DALL-E 3 and Stability AI
+  - OpenAI Models (GPT-4.1, GPT-4.1 Mini, o4-mini reasoning model)
+  - Claude 4.5 Models (Haiku 4.5, Sonnet 4.5, Opus 4.5)
+  - Gemini 2.5 Models (Flash, Flash-Lite, Pro)
+  - Image generation capabilities with DALL-E 3, Stability AI, and Gemini Nano Banana
   - Cost-aware model selection with clear pricing tiers
 
 * **Advanced Image Generation**
-  - Primary: DALL-E 3 integration for high-quality featured images
-  - Fallback: Stability AI support for reliable image generation
+  - DALL-E 3 integration for high-quality featured images
+  - Stability AI support for reliable image generation
+  - NEW: Gemini Nano Banana image generation (2.5 Flash and 3 Pro models)
   - Smart service selection based on your chosen text model
+  - Configurable image quality (1K, 2K, 4K for Gemini)
   - Customizable image generation preferences
 
 * **Content Customization**
@@ -68,7 +70,7 @@ WP-AutoInsight revolutionizes content creation by harnessing multiple AI platfor
 = API Keys =
 You'll need at least one of the following API keys:
 * OpenAI API key (for GPT models and DALL-E)
-* Claude API key (for Claude 3 models)
+* Claude API key (for Claude 4.5 models)
 * Gemini API key (for Google's AI)
 * Stability AI key (optional, for alternative image generation)
 
@@ -93,7 +95,7 @@ define('STABILITY_API', 'your-key-here');
 
 = How do I get an OpenAI API key? =
 
-To use OpenAI models (GPT-3.5, GPT-4, GPT-4o), sign up at OpenAI and get your API key:
+To use OpenAI models (GPT-4.1, o4-mini), sign up at OpenAI and get your API key:
 1. Go to https://platform.openai.com/api-keys
 2. Sign up or log in to your account
 3. Click "Create new secret key"
@@ -248,6 +250,40 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 3.2.0 =
+* Added:
+  - **Gemini Nano Banana Image Generation**: Full support for Google's native image generation
+    - Nano Banana (Gemini 2.5 Flash Image) for fast, efficient image generation
+    - Nano Banana Pro (Gemini 3 Pro Image Preview) for premium quality with text rendering
+    - Configurable image sizes: 1K, 2K (default), and 4K resolution
+    - Smart fallback chain: matches text model provider or falls back to available services
+  - **OpenAI o-series Reasoning Models**: Support for advanced reasoning models
+    - o4-mini for complex reasoning tasks
+    - Proper routing for models that don't follow the "gpt-" naming convention
+
+* Updated:
+  - **AI Models Updated to Latest Versions**:
+    - OpenAI: GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, o4-mini (replaced GPT-4o/GPT-5)
+    - Claude: Claude Haiku 4.5, Claude Sonnet 4.5, Claude Opus 4.5 (replaced 3.x models)
+    - Gemini: Gemini 2.5 Flash, Gemini 2.5 Flash-Lite, Gemini 2.5 Pro (replaced 2.0 models)
+  - **Token Context Windows**: Added 1M token support for GPT-4.1 models
+  - **Model Mappings**: Updated backward compatibility mappings for all providers
+  - **Onboarding**: Updated to reference latest model names and capabilities
+  - **About Page**: Reflects current model offerings
+
+* Fixed:
+  - Image service detection now properly handles o-series model names
+  - Content generation routing now supports o-series reasoning models
+  - Gemini model was ignored during content generation — the selected model was never passed to the API call, causing it to always fall back to the deprecated `gemini-1.5-flash` default
+  - Gemini 2.5 models now correctly use the v1beta API endpoint (previously only 2.0 models were routed there, causing 404 errors for all 2.5 requests)
+  - Removed all deprecated model references (GPT-3.5/4/4.5, Claude 3.x, Gemini 1.5/2.0) from token limits, model mappings, and default fallbacks; default model is now GPT-4.1 Mini across the plugin
+
+* Technical Improvements:
+  - Enhanced model routing with regex pattern matching for OpenAI o-series
+  - Improved image service fallback logic with Gemini as additional option
+  - Better error handling and logging for Gemini image generation
+  - Added proper MIME type detection for Gemini-generated images
 
 = 3.1.0 =
 * Added:

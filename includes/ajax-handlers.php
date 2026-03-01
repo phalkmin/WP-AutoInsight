@@ -20,7 +20,7 @@ function abcc_handle_create_post() {
 		$keywords      = explode( "\n", get_option( 'openai_keywords', '' ) );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 		$tone          = get_option( 'openai_tone', 'default' );
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 
 		$result = abcc_openai_generate_post(
 			$api_key,
@@ -67,7 +67,7 @@ function abcc_openai_generate_post_ajax() {
 		$keywords      = explode( "\n", get_option( 'openai_keywords', '' ) );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 		$tone          = get_option( 'openai_tone', 'default' );
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 
 		$result = abcc_openai_generate_post(
 			$api_key,

@@ -115,7 +115,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'OpenAI', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'GPT-4, GPT-3.5 • Best for creative content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'GPT-4.1, o4-mini • Best for creative content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status openai-status"></div>
 					</div>
@@ -172,7 +172,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Claude', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Claude 3.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'Claude 4.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status claude-status"></div>
 					</div>
@@ -229,7 +229,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Google Gemini', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Gemini 2.0 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'Gemini 2.5 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status gemini-status"></div>
 					</div>
@@ -596,7 +596,7 @@ function abcc_handle_onboarding_first_post() {
 	try {
 		$api_key       = abcc_check_api_key();
 		$keywords      = array( 'welcome', 'hello world', 'getting started' );
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 		$tone          = get_option( 'openai_tone', 'friendly' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 
@@ -667,7 +667,7 @@ function abcc_test_openai_connection( $api_key ) {
 				),
 			),
 			array(
-				'model'      => 'gpt-3.5-turbo',
+				'model'      => 'gpt-4.1-mini',
 				'max_tokens' => 5,
 			)
 		);
@@ -716,7 +716,7 @@ function abcc_test_claude_connection( $api_key ) {
 		);
 
 		$body = array(
-			'model'      => 'claude-3-5-haiku-20241022',
+			'model'      => 'claude-haiku-4-5-20251001',
 			'max_tokens' => 5,
 			'messages'   => array(
 				array(
@@ -798,9 +798,9 @@ function abcc_test_gemini_connection( $api_key ) {
 	try {
 		$gemini = new \GeminiAPI\Client( $api_key );
 
-		// Try with the beta version for 2.0 models
-		$response = $gemini->withV1BetaVersion()
-			->generativeModel( 'gemini-2.0-flash-exp' )
+		// Use stable 2.5 model for testing.
+		$response = $gemini
+			->generativeModel( 'gemini-2.5-flash' )
 			->generateContent( new \GeminiAPI\Resources\Parts\TextPart( 'Hello' ) );
 
 		if ( empty( $response->text() ) ) {

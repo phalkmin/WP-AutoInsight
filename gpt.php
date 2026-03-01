@@ -24,12 +24,10 @@ use GeminiAPI\Resources\Parts\TextPart;
 function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
 
 	$model_mapping = array(
-		'claude-3-haiku'    => 'claude-3-haiku-20240307',
-		'claude-3-sonnet'   => 'claude-3-sonnet-20240229',
-		'claude-3-opus'     => 'claude-3-opus-20240229',
-		'claude-3.5-haiku'  => 'claude-3-5-haiku-20241022',
-		'claude-3.5-sonnet' => 'claude-3-7-sonnet-20250219',
-		'claude-sonnet-4'   => 'claude-sonnet-4-20250514',
+		// Claude 4.5 models — map alias to dated version.
+		'claude-haiku-4-5'  => 'claude-haiku-4-5-20251001',
+		'claude-sonnet-4-5' => 'claude-sonnet-4-5-20250929',
+		'claude-opus-4-5'   => 'claude-opus-4-5-20251101',
 	);
 
 		// For backward compatibility.
@@ -92,18 +90,13 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
  * @param string $model            Model to use for generation.
  * @return array|false An array containing lines of generated text, or false on failure.
  */
-function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-1.5-flash' ) {
+function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-2.5-flash' ) {
 	// Map plugin model names to current Gemini API model names.
 	$model_mapping = array(
-		'gemini-pro'               => 'gemini-1.5-flash', // Legacy fallback to working model.
-		'gemini-1.5-flash'         => 'gemini-1.5-flash',
-		'gemini-1.5-flash-8b'      => 'gemini-1.5-flash-8b',
-		'gemini-1.5-pro'           => 'gemini-1.5-pro',
-		'gemini-2.0-flash'         => 'gemini-2.0-flash-exp',
-		'gemini-2.0-flash-lite'    => 'gemini-2.0-flash-exp',
-		'gemini-2.0-pro-exp-02-05' => 'gemini-2.0-flash-exp',
-		'gemini-1.5-pro-latest'    => 'gemini-1.5-pro',
-		'gemini-2.5-pro-preview'   => 'gemini-2.0-flash-exp',
+		// Gemini 2.5 models (current).
+		'gemini-2.5-flash-lite' => 'gemini-2.5-flash-lite',
+		'gemini-2.5-flash'      => 'gemini-2.5-flash',
+		'gemini-2.5-pro'        => 'gemini-2.5-pro',
 	);
 
 	// Calculate available tokens for response.
@@ -119,8 +112,8 @@ function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model
 	$text_part = new \GeminiAPI\Resources\Parts\TextPart( $prompt );
 
 	try {
-		// For newer models (2.0), use beta version.
-		if ( strpos( $model_id, '2.0' ) !== false || strpos( $model_id, 'exp' ) !== false ) {
+		// Gemini 2.0+ and 2.5+ models require the v1beta API.
+		if ( strpos( $model_id, '2.0' ) !== false || strpos( $model_id, '2.5' ) !== false || strpos( $model_id, 'exp' ) !== false ) {
 			$gemini = $gemini->withV1BetaVersion();
 		}
 
@@ -158,7 +151,6 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 			'content' => wp_kses_post( $prompt ),
 		),
 	);
-
 	$options = array(
 		'model'       => $model,
 		'max_tokens'  => $available_tokens,
@@ -313,5 +305,124 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 	}
 
 	error_log( 'Stability AI: No valid image data in response' );
+	return false;
+}
+
+/**
+ * Generates images using Google Gemini's Nano Banana API.
+ *
+ * @since 3.2.0
+ * @param string $api_key    Gemini API key.
+ * @param string $prompt     Text prompt for image generation.
+ * @param string $model      Model to use ('gemini-2.5-flash-image' or 'gemini-3-pro-image-preview').
+ * @param string $image_size Image size ('1K', '2K', or '4K').
+ * @return string|false Image URL on success, false on failure.
+ */
+function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-flash-image', $image_size = '2K' ) {
+	if ( empty( $api_key ) ) {
+		error_log( 'Gemini API key not provided for image generation' );
+		return false;
+	}
+
+	// Validate model.
+	$valid_models = array( 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview' );
+	if ( ! in_array( $model, $valid_models, true ) ) {
+		$model = 'gemini-2.5-flash-image';
+	}
+
+	// Validate image size.
+	$valid_sizes = array( '1K', '2K', '4K' );
+	if ( ! in_array( $image_size, $valid_sizes, true ) ) {
+		$image_size = '2K';
+	}
+
+	$endpoint = sprintf(
+		'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+		$model,
+		$api_key
+	);
+
+	$body = array(
+		'contents'         => array(
+			array(
+				'parts' => array(
+					array(
+						'text' => sanitize_text_field( $prompt ),
+					),
+				),
+			),
+		),
+		'generationConfig' => array(
+			'responseModalities' => array( 'IMAGE' ),
+			'imageConfig'        => array(
+				'imageSize' => $image_size,
+			),
+		),
+	);
+
+	$response = wp_remote_post(
+		$endpoint,
+		array(
+			'headers' => array(
+				'Content-Type' => 'application/json',
+			),
+			'body'    => wp_json_encode( $body ),
+			'timeout' => 90,
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		error_log( 'Gemini Image API Error: ' . $response->get_error_message() );
+		return false;
+	}
+
+	$response_code = wp_remote_retrieve_response_code( $response );
+	if ( 200 !== $response_code ) {
+		error_log( 'Gemini Image API Error: Response code ' . $response_code );
+		error_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
+		return false;
+	}
+
+	$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+	// Look for image data in response.
+	if ( empty( $body['candidates'][0]['content']['parts'] ) ) {
+		error_log( 'Gemini Image: Unexpected response format: ' . print_r( $body, true ) );
+		return false;
+	}
+
+	// Find the image part in the response.
+	foreach ( $body['candidates'][0]['content']['parts'] as $part ) {
+		if ( isset( $part['inlineData']['data'] ) && isset( $part['inlineData']['mimeType'] ) ) {
+			// Create uploads directory if it doesn't exist.
+			$upload_dir = wp_upload_dir();
+			if ( ! file_exists( $upload_dir['path'] ) ) {
+				wp_mkdir_p( $upload_dir['path'] );
+			}
+
+			// Determine file extension from mime type.
+			$extension = 'png';
+			if ( 'image/jpeg' === $part['inlineData']['mimeType'] ) {
+				$extension = 'jpg';
+			} elseif ( 'image/webp' === $part['inlineData']['mimeType'] ) {
+				$extension = 'webp';
+			}
+
+			// Generate unique filename.
+			$filename = 'gemini-' . uniqid() . '.' . $extension;
+			$filepath = $upload_dir['path'] . '/' . $filename;
+
+			// Decode and save the image.
+			$image_data = base64_decode( $part['inlineData']['data'] );
+			if ( file_put_contents( $filepath, $image_data ) ) {
+				return $upload_dir['url'] . '/' . $filename;
+			} else {
+				error_log( 'Failed to save Gemini image to filesystem' );
+				return false;
+			}
+		}
+	}
+
+	error_log( 'Gemini Image: No valid image data in response' );
 	return false;
 }

@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string The API key if found, empty string otherwise.
  */
 function abcc_check_api_key() {
-	$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 	$api_key       = '';
 
 	$model_options = abcc_get_ai_model_options();
@@ -48,15 +48,17 @@ function abcc_check_api_key() {
 /**
  * Determines which image generation service to use based on settings and availability.
  *
- * @param string $text_model The selected text generation model
- * @return array Array containing 'service' and 'api_key'
+ * @param string $text_model The selected text generation model.
+ * @return array Array containing 'service' and 'api_key'.
  */
 function abcc_determine_image_service( $text_model ) {
 	$openai_key    = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
 	$stability_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
+	$gemini_key    = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
 
 	$preferred_image_service = get_option( 'preferred_image_service', 'auto' );
 
+	// If user has explicitly selected a service, use it if available.
 	if ( 'auto' !== $preferred_image_service ) {
 		if ( 'stability' === $preferred_image_service && ! empty( $stability_key ) ) {
 			return array(
@@ -70,10 +72,17 @@ function abcc_determine_image_service( $text_model ) {
 				'api_key' => $openai_key,
 			);
 		}
+		if ( 'gemini' === $preferred_image_service && ! empty( $gemini_key ) ) {
+			return array(
+				'service' => 'gemini',
+				'api_key' => $gemini_key,
+			);
+		}
 	}
 
+	// Determine provider based on text model.
 	$model_provider = '';
-	if ( false !== strpos( $text_model, 'gpt' ) || 'openai' === $text_model ) {
+	if ( false !== strpos( $text_model, 'gpt' ) || 'openai' === $text_model || preg_match( '/^o[0-9]/', $text_model ) ) {
 		$model_provider = 'openai';
 	} elseif ( false !== strpos( $text_model, 'claude' ) ) {
 		$model_provider = 'claude';
@@ -81,15 +90,34 @@ function abcc_determine_image_service( $text_model ) {
 		$model_provider = 'gemini';
 	}
 
+	// Auto-select based on text model provider.
 	if ( 'openai' === $model_provider && ! empty( $openai_key ) ) {
 		return array(
 			'service' => 'openai',
 			'api_key' => $openai_key,
 		);
+	} elseif ( 'gemini' === $model_provider && ! empty( $gemini_key ) ) {
+		return array(
+			'service' => 'gemini',
+			'api_key' => $gemini_key,
+		);
 	} elseif ( ! empty( $stability_key ) ) {
+		// Fallback to Stability for Claude or if no matching provider.
 		return array(
 			'service' => 'stability',
 			'api_key' => $stability_key,
+		);
+	} elseif ( ! empty( $openai_key ) ) {
+		// Fallback to OpenAI DALL-E.
+		return array(
+			'service' => 'openai',
+			'api_key' => $openai_key,
+		);
+	} elseif ( ! empty( $gemini_key ) ) {
+		// Fallback to Gemini Nano Banana.
+		return array(
+			'service' => 'gemini',
+			'api_key' => $gemini_key,
 		);
 	}
 
