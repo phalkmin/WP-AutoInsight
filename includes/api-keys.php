@@ -40,6 +40,10 @@ function abcc_check_api_key() {
 		case 'gemini':
 			$api_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
 			break;
+
+		case 'perplexity':
+			$api_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
+			break;
 	}
 
 	return $api_key;
@@ -88,6 +92,8 @@ function abcc_determine_image_service( $text_model ) {
 		$model_provider = 'claude';
 	} elseif ( false !== strpos( $text_model, 'gemini' ) ) {
 		$model_provider = 'gemini';
+	} elseif ( false !== strpos( $text_model, 'sonar' ) ) {
+		$model_provider = 'perplexity';
 	}
 
 	// Auto-select based on text model provider.

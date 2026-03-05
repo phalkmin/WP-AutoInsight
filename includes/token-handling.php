@@ -39,6 +39,10 @@ function abcc_get_model_context_window( $model ) {
 		'gemini-2.5-flash-lite' => 1048576, // 1M tokens.
 		'gemini-2.5-flash'      => 1048576, // 1M tokens.
 		'gemini-2.5-pro'        => 1048576, // 1M tokens.
+		// Perplexity Sonar models.
+		'sonar'                => 128000,
+		'sonar-pro'            => 200000,
+		'sonar-reasoning-pro'  => 128000,
 	);
 
 	return $model_limits[ $model ] ?? 4096;

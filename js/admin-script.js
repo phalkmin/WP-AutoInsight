@@ -14,7 +14,10 @@ jQuery(document).ready(function ($) {
   // Event listener for generate post button
   $("#generate-post").on("click", function () {
     var $btn = $(this);
+    var $status = $("#abcc-manual-generation-status");
+
     $btn.prop("disabled", true);
+    abcc.showStatus($status, "Generating post... this may take a moment.");
 
     $.ajax({
       url: ajaxurl,
@@ -24,12 +27,17 @@ jQuery(document).ready(function ($) {
         _ajax_nonce: $("#abcc_openai_nonce").val(),
       },
       success: function (response) {
-        console.log("Full response:", response);
-        alert(response.data.message + " Post ID: " + response.data.post_id);
+        if (response.success) {
+          abcc.showStatus($status, response.data.message + " Post ID: " + response.data.post_id, "success");
+          alert(response.data.message + " Post ID: " + response.data.post_id);
+        } else {
+          abcc.setError($status, response.data.message);
+          alert("Error generating post: " + response.data.message);
+        }
       },
       error: function (xhr) {
-        console.error("Error details:", response.data.details);
-        alert("Error generating post: " + xhr.responseText);
+        abcc.setError($status, "Error generating post: " + xhr.statusText);
+        alert("Error generating post: " + xhr.statusText);
       },
       complete: function () {
         $btn.prop("disabled", false);

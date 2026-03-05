@@ -101,7 +101,9 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 		}
 
 		if ( $in_title && empty( $title ) ) {
-			$title    = $line;
+			// Strip markdown bold/italic and heading markers (Perplexity returns Markdown).
+			$title    = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $line );
+			$title    = ltrim( $title, '# ' );
 			$in_title = false;
 		} elseif ( $in_seo ) {
 			if ( false !== strpos( $line, 'Meta Description:' ) ) {
@@ -121,7 +123,8 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 		foreach ( $result as $line ) {
 			$line = trim( $line );
 			if ( ! empty( $line ) && ! strpos( $line, '[' ) && ! strpos( $line, 'Meta Description:' ) ) {
-				$title = $line;
+				$title = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $line );
+				$title = ltrim( $title, '# ' );
 				break;
 			}
 		}

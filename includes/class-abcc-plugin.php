@@ -68,6 +68,26 @@ class ABCC_Plugin {
 
 		// Onboarding
 		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
+
+		// Migrations
+		add_action( 'admin_init', array( $this, 'run_migrations' ) );
+	}
+
+	/**
+	 * Run plugin migrations.
+	 */
+	public function run_migrations() {
+		$installed_version = get_option( 'abcc_version', '1.0.0' );
+
+		if ( version_compare( $installed_version, '3.3.0', '<' ) ) {
+			if ( get_option( 'openai_keywords' ) !== false ) {
+				if ( get_option( 'abcc_draft_first' ) === false ) {
+					update_option( 'abcc_draft_first', 0 ); // Unchecked
+				}
+			}
+
+			update_option( 'abcc_version', '3.3.0' );
+		}
 	}
 
 	/**
@@ -117,7 +137,8 @@ class ABCC_Plugin {
 		wp_enqueue_style( 'select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', array(), '4.1.0-rc.0' );
 		wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', 'jquery', '4.1.0-rc.0', true );
 		wp_enqueue_style( 'abcc-admin-style', plugins_url( '/css/admin-style.css', __DIR__ ), array(), $this->version, true );
-		wp_enqueue_script( 'abcc-admin-script', plugins_url( '/js/admin-script.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+		wp_enqueue_script( 'abcc-ui-script', plugins_url( '/js/abcc-ui.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+		wp_enqueue_script( 'abcc-admin-script', plugins_url( '/js/admin-script.js', __DIR__ ), array( 'jquery', 'abcc-ui-script' ), $this->version, true );
 	}
 
 	/**

@@ -78,13 +78,24 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			}
 		);
 
+		// Process Perplexity citations if applicable.
+		if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
+			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
+			$citations     = get_transient( $generation_id );
+			if ( ! empty( $citations ) ) {
+				$citation_style = get_option( 'abcc_perplexity_citation_style', 'inline' );
+				$content_array  = abcc_process_perplexity_citations( $content_array, $citations, $citation_style );
+				delete_transient( $generation_id );
+			}
+		}
+
 		$format_content = abcc_create_blocks( $content_array );
 		$post_content   = abcc_gutenberg_blocks( $format_content );
 
 		$post_data = array(
 			'post_title'    => $title,
 			'post_content'  => wp_kses_post( $post_content ),
-			'post_status'   => 'draft',
+			'post_status'   => get_option( 'abcc_draft_first', true ) ? 'draft' : 'publish',
 			'post_author'   => get_current_user_id(),
 			'post_type'     => $post_type,
 			'post_category' => get_option( 'openai_selected_categories', array() ),
@@ -94,6 +105,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		if ( true === $generate_seo && ! empty( $seo_data ) ) {
 			$post_data['meta_input'] = abcc_get_seo_meta_fields( $seo_data );
 		}
+
+		// Ensure our tracking meta is present.
+		if ( ! isset( $post_data['meta_input'] ) ) {
+			$post_data['meta_input'] = array();
+		}
+		$post_data['meta_input']['_abcc_generated'] = '1';
+		$post_data['meta_input']['_abcc_model']     = $prompt_select;
 
 		$post_id = wp_insert_post( $post_data, true );
 
@@ -264,6 +282,14 @@ function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 		$result = abcc_claude_generate_text( $api_key, $prompt, $char_limit, $service );
 	} elseif ( 0 === strpos( $service, 'gemini' ) ) {
 		$result = abcc_gemini_generate_text( $api_key, $prompt, $char_limit, $service );
+	} elseif ( 0 === strpos( $service, 'sonar' ) ) {
+		$perplexity_result = abcc_perplexity_generate_text( $api_key, $prompt, $char_limit, $service );
+		if ( false !== $perplexity_result && isset( $perplexity_result['text'] ) ) {
+			// Store citations in a transient for downstream use.
+			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
+			set_transient( $generation_id, $perplexity_result['citations'], 300 );
+			$result = $perplexity_result['text'];
+		}
 	}
 
 	if ( false === $result ) {
@@ -303,6 +329,10 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
 	// Remove any quotes that might be around the title.
 	$title = trim( $title, '"\'`' );
 
+	// Strip markdown bold/italic and heading markers (Perplexity returns Markdown).
+	$title = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $title );
+	$title = ltrim( $title, '# ' );
+
 	return $title;
 }
 
@@ -326,7 +356,76 @@ function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title
     - Do not include the title in the content
     - Put each section on a new line
     - Do not include empty lines or paragraphs
-    - Ensure clean HTML without extra spaces or newlines';
+    - Ensure clean HTML without extra spaces or newlines
+    - Always close every HTML tag before ending your response';
+
+	// Perplexity needs a minimum token floor to complete a structured HTML post without truncation.
+	if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
+		$char_limit = max( $char_limit, 800 );
+	}
 
 	return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+}
+
+/**
+ * Processes Perplexity citations and integrates them into the content array.
+ *
+ * @since 3.3.0
+ * @param array  $content_array Array of content lines.
+ * @param array  $citations     Array of citation URLs from Perplexity.
+ * @param string $style         Citation style: 'inline', 'references', or 'both'.
+ * @return array Modified content array with citations applied.
+ */
+function abcc_process_perplexity_citations( $content_array, $citations, $style ) {
+	if ( empty( $citations ) ) {
+		return $content_array;
+	}
+
+	$has_inline     = in_array( $style, array( 'inline', 'both' ), true );
+	$has_references = in_array( $style, array( 'references', 'both' ), true );
+
+	// Process inline citations: replace [1], [2] etc. with superscript links.
+	if ( $has_inline ) {
+		$content_array = array_map(
+			function ( $line ) use ( $citations ) {
+				return preg_replace_callback(
+					'/\[(\d+)\]/',
+					function ( $matches ) use ( $citations ) {
+						$num   = (int) $matches[1];
+						$index = $num - 1;
+						if ( isset( $citations[ $index ] ) ) {
+							return sprintf(
+								'<sup><a href="%s" target="_blank" rel="noopener noreferrer">[%d]</a></sup>',
+								esc_url( $citations[ $index ] ),
+								$num
+							);
+						}
+						return $matches[0];
+					},
+					$line
+				);
+			},
+			$content_array
+		);
+	} elseif ( 'references' === $style ) {
+		// Strip [N] markers when only showing references section.
+		$content_array = array_map(
+			function ( $line ) {
+				return preg_replace( '/\[\d+\]/', '', $line );
+			},
+			$content_array
+		);
+	}
+
+	// Add references section at the bottom.
+	if ( $has_references ) {
+		$content_array[] = '<h2>' . __( 'Sources', 'automated-blog-content-creator' ) . '</h2>';
+		foreach ( $citations as $index => $url ) {
+			$number          = $index + 1;
+			$display_domain  = wp_parse_url( $url, PHP_URL_HOST );
+			$content_array[] = '<p><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">[' . $number . '] ' . esc_html( $display_domain ) . '</a></p>';
+		}
+	}
+
+	return $content_array;
 }

@@ -84,6 +84,11 @@ function abcc_openai_generate_post_scheduled() {
 			throw new Exception( $post_id->get_error_message() );
 		}
 
+		// Send admin notification about the success if enabled.
+		if ( true === get_option( 'openai_email_notifications', false ) ) {
+			abcc_send_post_notification( $post_id );
+		}
+
 		return $post_id;
 
 	} catch ( Exception $e ) {

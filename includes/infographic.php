@@ -45,10 +45,7 @@ function abcc_infographic_meta_box_callback( $post ) {
 		<button type="button" id="abcc-create-infographic" class="button button-secondary" style="width: 100%; margin-bottom: 10px;">
 			<?php esc_html_e( 'Create Infographic', 'automated-blog-content-creator' ); ?>
 		</button>
-		<div id="abcc-infographic-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;">
-			<span class="dashicons dashicons-update"></span>
-			<span id="abcc-infographic-status-text"><?php esc_html_e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
-		</div>
+		<div id="abcc-infographic-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;"></div>
 	</div>
 
 	<script type="text/javascript">
@@ -60,7 +57,6 @@ function abcc_infographic_meta_box_callback( $post ) {
 			
 			const $button = $(this);
 			const $status = $('#abcc-infographic-status');
-			const $statusText = $('#abcc-infographic-status-text');
 			const postId = $('#post_ID').val();
 			
 			if (!confirm('<?php echo esc_js( __( 'Create an infographic for this post?', 'automated-blog-content-creator' ) ); ?>')) {
@@ -68,8 +64,7 @@ function abcc_infographic_meta_box_callback( $post ) {
 			}
 			
 			$button.prop('disabled', true).text('<?php echo esc_js( __( 'Creating...', 'automated-blog-content-creator' ) ); ?>');
-			$status.show();
-			$statusText.text('<?php echo esc_js( __( 'Generating infographic...', 'automated-blog-content-creator' ) ); ?>');
+			abcc.showStatus($status, '<?php echo esc_js( __( 'Generating infographic...', 'automated-blog-content-creator' ) ); ?>');
 			
 			$.ajax({
 				url: ajaxurl,
@@ -81,19 +76,19 @@ function abcc_infographic_meta_box_callback( $post ) {
 				},
 				success: function(response) {
 					if (response.success) {
-						$statusText.html('<?php echo esc_js( __( 'Success! ', 'automated-blog-content-creator' ) ); ?>' + 
+						abcc.showStatus($status, '<?php echo esc_js( __( 'Success! ', 'automated-blog-content-creator' ) ); ?>' + 
 							'<a href="' + response.data.attachment_url + '" target="_blank"><?php echo esc_js( __( 'View', 'automated-blog-content-creator' ) ); ?></a> | ' +
-							'<a href="' + ajaxurl.replace('admin-ajax.php', 'upload.php?item=' + response.data.attachment_id) + '"><?php echo esc_js( __( 'Edit', 'automated-blog-content-creator' ) ); ?></a>');
+							'<a href="' + ajaxurl.replace('admin-ajax.php', 'upload.php?item=' + response.data.attachment_id) + '"><?php echo esc_js( __( 'Edit', 'automated-blog-content-creator' ) ); ?></a>', 'success');
 						$status.css('background', '#d4edda');
 					} else {
-						$statusText.text('<?php echo esc_js( __( 'Error: ', 'automated-blog-content-creator' ) ); ?>' + (response.data.message || '<?php echo esc_js( __( 'Unknown error', 'automated-blog-content-creator' ) ); ?>'));
+						abcc.setError($status, '<?php echo esc_js( __( 'Error: ', 'automated-blog-content-creator' ) ); ?>' + (response.data.message || '<?php echo esc_js( __( 'Unknown error', 'automated-blog-content-creator' ) ); ?>'));
 						$status.css('background', '#f8d7da');
 						$button.prop('disabled', false).text('<?php echo esc_js( __( 'Create Infographic', 'automated-blog-content-creator' ) ); ?>');
 					}
 				},
 				error: function(xhr, status, error) {
 					console.error('AJAX Error:', xhr.responseText);
-					$statusText.text('<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+					abcc.setError($status, '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
 					$status.css('background', '#f8d7da');
 					$button.prop('disabled', false).text('<?php echo esc_js( __( 'Create Infographic', 'automated-blog-content-creator' ) ); ?>');
 				}

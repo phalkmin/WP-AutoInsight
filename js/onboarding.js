@@ -146,9 +146,7 @@ function testApiConnection() {
 
   // Update UI
   $button.prop("disabled", true).text(abccOnboarding.i18n.testing);
-  $status.removeClass("success error").html(
-    '<span class="abcc-spinner"></span> Testing...'
-  );
+  abcc.showStatus($status, "Testing...");
 
   $.ajax({
     url: abccOnboarding.ajaxurl,
@@ -396,6 +394,15 @@ function testApiConnection() {
   nextStep = function (step) {
     originalNextStep(step);
     smoothScrollToTop();
+    // Auto-test wp-config keys when entering step 2
+    if (step === 1) {
+      setTimeout(function () {
+        var $wpConfigButtons = $('.abcc-test-api[data-wp-config="true"]');
+        if ($wpConfigButtons.length) {
+          $wpConfigButtons.first().trigger('click');
+        }
+      }, 300);
+    }
   };
 
   prevStep = function (step) {
@@ -442,18 +449,19 @@ function testApiConnection() {
   };
 
   // Prevent accidental page reload during onboarding
-  window.addEventListener("beforeunload", function (e) {
+  var beforeUnloadHandler = function (e) {
     if (currentStep > 1 && currentStep <= 3) {
       e.preventDefault();
       e.returnValue =
         "Are you sure you want to leave? Your onboarding progress will be lost.";
       return e.returnValue;
     }
-  });
+  };
+  window.addEventListener("beforeunload", beforeUnloadHandler);
 
   // Remove the beforeunload listener when onboarding is complete
   function removeUnloadListener() {
-    window.removeEventListener("beforeunload", arguments.callee);
+    window.removeEventListener("beforeunload", beforeUnloadHandler);
   }
 
   // Call this when showing success step

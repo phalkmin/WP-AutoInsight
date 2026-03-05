@@ -36,3 +36,33 @@
 .abcc-settings-wrapper .submit {
   padding: 10px 20px;
 }
+
+/* Spinner and Status Styles */
+.abcc-spinner {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border: 2px solid #e9ecef;
+	border-top: 2px solid #2271b1;
+	border-radius: 50%;
+	animation: abcc-spin 1s linear infinite;
+	vertical-align: middle;
+	margin-right: 8px;
+}
+
+@keyframes abcc-spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+.abcc-status-error {
+	color: #d63638;
+}
+
+.abcc-status-success {
+	color: #00a32a;
+}
+
+.abcc-status-info {
+	color: #1d2327;
+}

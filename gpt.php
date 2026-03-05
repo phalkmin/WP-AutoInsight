@@ -174,6 +174,80 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 }
 
 /**
+ * Generates text using Perplexity API.
+ *
+ * @since 3.3.0
+ * @param string $api_key          API key for Perplexity.
+ * @param string $prompt           Text prompt for generating content.
+ * @param int    $requested_tokens Number of tokens requested.
+ * @param string $model            Model to use for generation.
+ * @return array|false Associative array with 'text' (array of lines) and 'citations' (array of URLs), or false on failure.
+ */
+function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
+	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
+
+	$headers = array(
+		'Content-Type'  => 'application/json',
+		'Authorization' => 'Bearer ' . $api_key,
+	);
+
+	$body = array(
+		'model'      => $model,
+		'max_tokens' => $available_tokens,
+		'messages'   => array(
+			array(
+				'role'    => 'user',
+				'content' => wp_kses_post( $prompt ),
+			),
+		),
+	);
+
+	// Add search recency filter if configured.
+	$recency = get_option( 'abcc_perplexity_recency_filter', '' );
+	if ( ! empty( $recency ) ) {
+		$body['search_recency_filter'] = $recency;
+	}
+
+	$response = wp_remote_post(
+		'https://api.perplexity.ai/chat/completions',
+		array(
+			'headers' => $headers,
+			'body'    => wp_json_encode( $body ),
+			'timeout' => 60,
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		error_log( 'Perplexity API Error: ' . $response->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		return false;
+	}
+
+	$response_code = wp_remote_retrieve_response_code( $response );
+	if ( 200 !== $response_code ) {
+		error_log( 'Perplexity API Error: Response code ' . $response_code ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( 'Response body: ' . wp_remote_retrieve_body( $response ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		return false;
+	}
+
+	$body = wp_remote_retrieve_body( $response );
+	$data = json_decode( $body, true );
+
+	if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
+		error_log( 'Unexpected Perplexity response structure: ' . print_r( $data, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log, WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		return false;
+	}
+
+	$text       = $data['choices'][0]['message']['content'];
+	$text_array = explode( PHP_EOL, $text );
+	$citations  = isset( $data['citations'] ) && is_array( $data['citations'] ) ? $data['citations'] : array();
+
+	return array(
+		'text'      => $text_array,
+		'citations' => $citations,
+	);
+}
+
+/**
  * Generates images using OpenAI's DALL-E or falls back to Stability AI if OpenAI fails.
  *
  * @since 1.0.0

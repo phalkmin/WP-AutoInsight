@@ -39,10 +39,7 @@ function abcc_rewrite_meta_box_callback( $post ) {
 		<button type="button" id="abcc-rewrite-post" class="button button-secondary" style="width: 100%; margin-bottom: 10px;">
 			<?php esc_html_e( 'Rewrite with AI', 'automated-blog-content-creator' ); ?>
 		</button>
-		<div id="abcc-rewrite-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;">
-			<span class="dashicons dashicons-update"></span>
-			<span id="abcc-status-text"><?php esc_html_e( 'Processing...', 'automated-blog-content-creator' ); ?></span>
-		</div>
+		<div id="abcc-rewrite-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;"></div>
 	</div>
 
 
@@ -55,7 +52,6 @@ function abcc_rewrite_meta_box_callback( $post ) {
 			
 			const $button = $(this);
 			const $status = $('#abcc-rewrite-status');
-			const $statusText = $('#abcc-status-text');
 			const postId = $('#post_ID').val();
 			
 			if (!confirm('<?php echo esc_js( __( 'Are you sure you want to rewrite this post? This will replace the current content.', 'automated-blog-content-creator' ) ); ?>')) {
@@ -63,8 +59,7 @@ function abcc_rewrite_meta_box_callback( $post ) {
 			}
 			
 			$button.prop('disabled', true).text('<?php echo esc_js( __( 'Rewriting...', 'automated-blog-content-creator' ) ); ?>');
-			$status.show();
-			$statusText.text('<?php echo esc_js( __( 'Analyzing content...', 'automated-blog-content-creator' ) ); ?>');
+			abcc.showStatus($status, '<?php echo esc_js( __( 'Analyzing content...', 'automated-blog-content-creator' ) ); ?>');
 			
 			$.ajax({
 				url: ajaxurl,
@@ -76,7 +71,7 @@ function abcc_rewrite_meta_box_callback( $post ) {
 				},
 				success: function(response) {
 					if (response.success) {
-						$statusText.text('<?php echo esc_js( __( 'Success! Reloading page...', 'automated-blog-content-creator' ) ); ?>');
+						abcc.showStatus($status, '<?php echo esc_js( __( 'Success! Reloading page...', 'automated-blog-content-creator' ) ); ?>', 'success');
 						$status.css('background', '#d4edda');
 						
 						// Reload after short delay.
@@ -84,14 +79,14 @@ function abcc_rewrite_meta_box_callback( $post ) {
 							window.location.reload();
 						}, 1500);
 					} else {
-						$statusText.text('<?php echo esc_js( __( 'Error: ', 'automated-blog-content-creator' ) ); ?>' + (response.data.message || '<?php echo esc_js( __( 'Unknown error', 'automated-blog-content-creator' ) ); ?>'));
+						abcc.setError($status, '<?php echo esc_js( __( 'Error: ', 'automated-blog-content-creator' ) ); ?>' + (response.data.message || '<?php echo esc_js( __( 'Unknown error', 'automated-blog-content-creator' ) ); ?>'));
 						$status.css('background', '#f8d7da');
 						$button.prop('disabled', false).text('<?php echo esc_js( __( 'Rewrite with AI', 'automated-blog-content-creator' ) ); ?>');
 					}
 				},
 				error: function(xhr, status, error) {
 					console.error('AJAX Error:', xhr.responseText);
-					$statusText.text('<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+					abcc.setError($status, '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
 					$status.css('background', '#f8d7da');
 					$button.prop('disabled', false).text('<?php echo esc_js( __( 'Rewrite with AI', 'automated-blog-content-creator' ) ); ?>');
 				}
