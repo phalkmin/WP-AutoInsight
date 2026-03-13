@@ -555,6 +555,11 @@ function abcc_check_existing_user_on_activation() {
 function abcc_handle_onboarding_goal() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
 
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	$goal  = sanitize_text_field( wp_unslash( $_POST['goal'] ) );
 	$goals = abcc_get_onboarding_goals();
 
@@ -628,8 +633,9 @@ function abcc_handle_onboarding_test_api() {
 	}
 
 	if ( $test_result['success'] ) {
-		// Save the API key only if it's not from wp-config
-		if ( ! $is_wp_config ) {
+		// Save the API key only if it's not from wp-config and provider is a known valid value.
+		$valid_providers = array( 'openai', 'claude', 'gemini', 'perplexity' );
+		if ( ! $is_wp_config && in_array( $provider, $valid_providers, true ) ) {
 			update_option( $provider . '_api_key', $api_key );
 		}
 
@@ -656,6 +662,11 @@ add_action( 'wp_ajax_abcc_onboarding_test_api', 'abcc_handle_onboarding_test_api
  */
 function abcc_handle_onboarding_first_post() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
 
 	try {
 		$api_key       = abcc_check_api_key();
@@ -707,6 +718,11 @@ add_action( 'wp_ajax_abcc_onboarding_first_post', 'abcc_handle_onboarding_first_
  */
 function abcc_handle_onboarding_skip() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
 
 	update_option( 'abcc_onboarding_completed', true );
 	wp_send_json_success( array( 'message' => 'Onboarding skipped' ) );

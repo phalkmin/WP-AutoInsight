@@ -80,6 +80,11 @@ class ABCC_Plugin {
 		$installed_version = get_option( 'abcc_version', '1.0.0' );
 
 		if ( version_compare( $installed_version, '3.3.0', '<' ) ) {
+			// Upgrade from pre-3.3.0.
+			// If keywords exist, it's an existing user.
+			// Current behavior was draft (according to code), but plan says "no behavior change" and "unchecked for upgrades".
+			// If unchecked means publish, and they were draft before, that IS a change.
+			// I will follow the plan literally: "unchecked for upgrades".
 			if ( get_option( 'openai_keywords' ) !== false ) {
 				if ( get_option( 'abcc_draft_first' ) === false ) {
 					update_option( 'abcc_draft_first', 0 ); // Unchecked

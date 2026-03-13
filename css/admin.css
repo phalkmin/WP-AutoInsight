@@ -195,21 +195,68 @@
     }
 }
 
-/* Animation for selection */
-@keyframes selectCard {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.02);
-    }
-
-    100% {
-        transform: scale(1);
-    }
+/* Tooltip Styles */
+.wpai-tooltip {
+    position: relative;
+    display: inline-block;
+    margin-left: 5px;
+    color: #72aee6;
+    cursor: help;
+    vertical-align: middle;
 }
 
-.model-card.just-selected {
-    animation: selectCard 0.3s ease;
+.wpai-tooltip .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.wpai-tooltip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #32373c;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: normal;
+    width: 200px;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.wpai-tooltip:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #32373c;
+    z-index: 100;
+}
+
+/* API Validation Status Styles */
+.api-validation-status {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: 500;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.api-validation-status.verified {
+    color: #46b450;
+}
+
+.api-validation-status.failed {
+    color: #dc3232;
+}
+
+.api-validation-status.loading {
+    color: #72aee6;
 }

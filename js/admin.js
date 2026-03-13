@@ -66,26 +66,24 @@ jQuery(document).ready(function ($) {
     // Remove any existing notification
     $(".model-selection-notice").remove();
 
-    // Create and show new notification
-    const $notice = $(`
-      <div class="model-selection-notice" style="
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #2271b1;
-        color: white;
-        padding: 12px 16px;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 10000;
-        font-size: 14px;
-        opacity: 0;
-        transform: translateX(100%);
-        transition: all 0.3s ease;
-      ">
-        <strong>Selected:</strong> ${modelName}
-      </div>
-    `);
+    // Create and show new notification (use DOM methods to avoid XSS via template literals).
+    const $notice = $("<div>").addClass("model-selection-notice").css({
+      position: "fixed",
+      top: "20px",
+      right: "20px",
+      background: "#2271b1",
+      color: "white",
+      padding: "12px 16px",
+      borderRadius: "6px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+      zIndex: 10000,
+      fontSize: "14px",
+      opacity: 0,
+      transform: "translateX(100%)",
+      transition: "all 0.3s ease",
+    });
+    $("<strong>").text("Selected: ").appendTo($notice);
+    $notice.append(document.createTextNode(modelName));
 
     $("body").append($notice);
 
@@ -153,4 +151,30 @@ jQuery(document).ready(function ($) {
       );
     }
   });
+
+  // API Key Validation
+  window.abccValidateAPIKeys = function() {
+    $('.api-validation-status').each(function() {
+      const $status = $(this);
+      const provider = $status.data('provider');
+      
+      $status.removeClass('verified failed').addClass('loading').html('<span class="spinner is-active" style="float:none; margin:0 5px;"></span> Validating...');
+      
+      $.post(ajaxurl, {
+        action: 'abcc_validate_api_key',
+        provider: provider,
+        nonce: $('#abcc_openai_nonce').val()
+      }, function(response) {
+        $status.removeClass('loading');
+        if (response.success) {
+          $status.addClass('verified').html('✓ ' + response.data.message);
+        } else {
+          $status.addClass('failed').html('✗ ' + response.data.message);
+        }
+      });
+    });
+  };
+
+  // If on Advanced Settings tab, maybe validate on load if keys exist?
+  // For now, it's triggered by the PHP add_action('admin_footer') after save.
 });

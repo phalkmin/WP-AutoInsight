@@ -40,6 +40,16 @@ function abcc_rewrite_meta_box_callback( $post ) {
 			<?php esc_html_e( 'Rewrite with AI', 'automated-blog-content-creator' ); ?>
 		</button>
 		<div id="abcc-rewrite-status" style="margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 3px; display: none;"></div>
+		
+		<?php
+		$social_excerpt = get_post_meta( $post->ID, '_abcc_social_excerpt', true );
+		if ( ! empty( $social_excerpt ) ) :
+			?>
+			<div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+				<label style="font-weight: 600; display: block; margin-bottom: 5px;"><?php esc_html_e( 'AI Social Excerpt:', 'automated-blog-content-creator' ); ?></label>
+				<textarea readonly style="width: 100%; background: #f9f9f9; font-size: 12px; color: #666;" rows="3"><?php echo esc_textarea( $social_excerpt ); ?></textarea>
+			</div>
+		<?php endif; ?>
 	</div>
 
 
@@ -180,16 +190,16 @@ function abcc_handle_rewrite_post() {
 		wp_send_json_error( array( 'message' => __( 'Invalid post ID', 'automated-blog-content-creator' ) ) );
 	}
 
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	try {
 		// Get the post.
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			throw new Exception( __( 'Post not found', 'automated-blog-content-creator' ) );
-		}
-
-		// Check permissions.
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			throw new Exception( __( 'Permission denied', 'automated-blog-content-creator' ) );
 		}
 
 		// Get settings.

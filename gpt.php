@@ -257,12 +257,13 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
  * @param string $image_size  Size of the generated images.
  * @return array|false Array of image URLs or false on failure.
  */
-function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792x1024' ) {
+function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024x1024', $image_quality = 'standard' ) {
 	$client = new ABCC_OpenAI_Client( $api_key );
 
 	$options = array(
-		'n'    => absint( $n ),
-		'size' => $image_size,
+		'n'       => absint( $n ),
+		'size'    => $image_size,
+		'quality' => $image_quality,
 	);
 
 	$response = $client->create_image( wp_kses_post( $prompt ), $options );
@@ -299,9 +300,10 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1792
  * @param string $prompt Text prompt.
  * @param int    $n Number of images to generate.
  * @param string $stability_key Stability AI API key.
+ * @param string $image_size Resolution in WxH format.
  * @return array|false Array of image URLs or false on failure.
  */
-function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
+function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_size = '1024x1024' ) {
 	if ( empty( $stability_key ) ) {
 		error_log( 'Stability AI API key not provided' );
 		return false;
@@ -313,6 +315,13 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 		'Accept'        => 'application/json',
 	);
 
+	// Parse size.
+	$width  = 1024;
+	$height = 1024;
+	if ( strpos( $image_size, 'x' ) !== false ) {
+		list( $width, $height ) = array_map( 'intval', explode( 'x', $image_size ) );
+	}
+
 	$body = array(
 		'text_prompts' => array(
 			array(
@@ -323,8 +332,8 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 		'cfg_scale'    => 7,
 		'steps'        => 30,
 		'samples'      => absint( $n ),
-		'height'       => 1024,
-		'width'        => 1024,
+		'height'       => $height,
+		'width'        => $width,
 		'style_preset' => 'photographic',
 	);
 
@@ -364,12 +373,23 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key ) {
 			wp_mkdir_p( $upload_dir['path'] );
 		}
 
+		// Decode and validate the image data before writing.
+		$image_data = base64_decode( $body['artifacts'][0]['base64'], true );
+		if ( false === $image_data ) {
+			error_log( 'Stability AI: Invalid base64 image data' );
+			return false;
+		}
+
+		// Verify PNG magic bytes (89 50 4E 47) to confirm the content is actually a PNG.
+		if ( substr( $image_data, 0, 4 ) !== "\x89PNG" ) {
+			error_log( 'Stability AI: Decoded data does not appear to be a valid PNG image' );
+			return false;
+		}
+
 		// Generate unique filename.
 		$filename = 'stability-' . uniqid() . '.png';
 		$filepath = $upload_dir['path'] . '/' . $filename;
 
-		// Decode and save the image.
-		$image_data = base64_decode( $body['artifacts'][0]['base64'] );
 		if ( file_put_contents( $filepath, $image_data ) ) {
 			return $upload_dir['url'] . '/' . $filename;
 		} else {
@@ -486,8 +506,29 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 			$filename = 'gemini-' . uniqid() . '.' . $extension;
 			$filepath = $upload_dir['path'] . '/' . $filename;
 
-			// Decode and save the image.
-			$image_data = base64_decode( $part['inlineData']['data'] );
+			// Decode and validate the image data before writing.
+			$image_data = base64_decode( $part['inlineData']['data'], true );
+			if ( false === $image_data ) {
+				error_log( 'Gemini Image: Invalid base64 image data' );
+				return false;
+			}
+
+			// Validate magic bytes against the declared MIME type.
+			$mime      = $part['inlineData']['mimeType'];
+			$is_valid  = false;
+			if ( 'image/png' === $mime && substr( $image_data, 0, 4 ) === "\x89PNG" ) {
+				$is_valid = true;
+			} elseif ( 'image/jpeg' === $mime && substr( $image_data, 0, 2 ) === "\xFF\xD8" ) {
+				$is_valid = true;
+			} elseif ( 'image/webp' === $mime && substr( $image_data, 8, 4 ) === 'WEBP' ) {
+				$is_valid = true;
+			}
+
+			if ( ! $is_valid ) {
+				error_log( 'Gemini Image: Decoded data does not match declared MIME type ' . $mime );
+				return false;
+			}
+
 			if ( file_put_contents( $filepath, $image_data ) ) {
 				return $upload_dir['url'] . '/' . $filename;
 			} else {

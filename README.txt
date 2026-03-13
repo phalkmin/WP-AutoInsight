@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 6.9
-Stable tag: 3.3.0
+Stable tag: 3.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -242,6 +242,20 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 3.4.0 =
+* Added:
+  - **Inline API Key Validation**: Real-time verification for all AI providers directly from Advanced Settings. Displays "Verified" or "Failed" status and stores last validation result.
+  - **Model Cost Transparency**: Each AI model now displays an estimated cost per post based on current token rates. Includes a new `abcc_model_cost_estimate` filter for advanced users.
+  - **Advanced Image Controls**: Expanded size and quality options for OpenAI (DALL-E 3) and resolution presets for Stability AI.
+  - **Automatic Image SEO**: Featured images now automatically receive SEO-optimized alt text in the format `{post title} - {primary keyword}`.
+* Updated:
+  - **Scheduling Clarity**: Raw timestamps replaced with human-friendly text (e.g., "Next post in 6 hours") and a direct link to scheduling settings.
+  - **Contextual Help**: Added Dashicon-based tooltips for Keywords, Tone, Models, and API keys to explain settings without cluttering the UI.
+  - **SEO Reliability**: Refactored the title and metadata generator to use structured JSON parsing and site-specific context (`site_info`).
+  - **RankMath Integration**: Enhanced support with initial field mapping for Social Excerpts and focus keywords.
+* Fixed:
+  - Fixed minor bugs and improved overall stability.
 
 = 3.3.0 =
 * Added:

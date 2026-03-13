@@ -19,8 +19,11 @@ function abcc_get_active_seo_plugin() {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
 
-	if ( true === is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
+	if ( is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
 		return 'yoast';
+	}
+	if ( is_plugin_active( 'seo-by-rank-math/rank-math.php' ) ) {
+		return 'rankmath';
 	}
 	return 'none';
 }
@@ -33,15 +36,30 @@ function abcc_get_active_seo_plugin() {
  */
 function abcc_get_seo_meta_fields( $seo_data ) {
 	$active_seo_plugin = abcc_get_active_seo_plugin();
-	$meta_input        = array();
+	$meta_input        = array(
+		'_abcc_social_excerpt' => $seo_data['social_excerpt'],
+	);
 
 	switch ( $active_seo_plugin ) {
 		case 'yoast':
-			$meta_input = array(
-				'_yoast_wpseo_metadesc'              => $seo_data['meta_description'],
-				'_yoast_wpseo_focuskw'               => $seo_data['primary_keyword'],
-				'_yoast_wpseo_metakeywords'          => implode( ',', $seo_data['secondary_keywords'] ),
-				'_yoast_wpseo_opengraph-description' => $seo_data['social_excerpt'],
+			$meta_input = array_merge(
+				$meta_input,
+				array(
+					'_yoast_wpseo_metadesc'              => $seo_data['meta_description'],
+					'_yoast_wpseo_focuskw'               => $seo_data['primary_keyword'],
+					'_yoast_wpseo_metakeywords'          => implode( ',', (array) $seo_data['secondary_keywords'] ),
+					'_yoast_wpseo_opengraph-description' => $seo_data['social_excerpt'],
+				)
+			);
+			break;
+		case 'rankmath':
+			$meta_input = array_merge(
+				$meta_input,
+				array(
+					'rank_math_description'    => $seo_data['meta_description'],
+					'rank_math_focus_keyword'  => $seo_data['primary_keyword'],
+					'rank_math_og_description' => $seo_data['social_excerpt'],
+				)
 			);
 			break;
 	}
@@ -58,85 +76,98 @@ function abcc_get_seo_meta_fields( $seo_data ) {
  * @return array Title and SEO data.
  */
 function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info ) {
-	$prompt  = 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
-	$prompt .= 'Format the response exactly as follows:
-    [TITLE]
-    Your H1 title here
-    [SEO]
-    Meta Description: (max 160 chars)
-    Primary Keyword: main keyword
-    Secondary Keywords: keyword1, keyword2, keyword3
-    Social Excerpt: (max 200 chars)
-    [END]';
+	$site_context = '';
+	if ( ! empty( $site_info['name'] ) ) {
+		$site_context = "This post is for a site called '{$site_info['name']}'";
+		if ( ! empty( $site_info['description'] ) ) {
+			$site_context .= " - {$site_info['description']}";
+		}
+		$site_context .= ". Ensure the title and meta reflect this context.\n\n";
+	}
 
-	// Use a small token limit for this call - 200 tokens should be plenty.
-	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 200 );
+	$prompt  = $site_context;
+	$prompt .= 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
+	$prompt .= 'Respond ONLY with a valid JSON object using this exact schema:
+    {
+        "title": "string",
+        "meta_description": "string (max 160 chars)",
+        "primary_keyword": "string",
+        "secondary_keywords": ["string", "string", "string"],
+        "social_excerpt": "string (max 200 chars)"
+    }';
+
+	// Use a small token limit for this call - 300 tokens should be plenty for JSON.
+	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 300 );
 	if ( false === $result ) {
 		throw new Exception( 'Failed to generate title and SEO data' );
 	}
 
-	// Parse the structured response.
+	// Join lines if result is an array.
+	$raw_response = is_array( $result ) ? implode( "\n", $result ) : $result;
+
+	// Attempt to find JSON in the response (sometimes models wrap it in markdown blocks).
+	if ( preg_match( '/\{.*\}/s', $raw_response, $matches ) ) {
+		$json_data = json_decode( $matches[0], true );
+	} else {
+		$json_data = json_decode( $raw_response, true );
+	}
+
 	$title    = '';
 	$seo_data = array();
-	$in_title = false;
-	$in_seo   = false;
 
-	foreach ( $result as $line ) {
-		$line = trim( $line );
-		if ( empty( $line ) ) {
-			continue;
-		}
+	if ( $json_data && is_array( $json_data ) ) {
+		$title                          = $json_data['title'] ?? '';
+		$seo_data['meta_description']   = $json_data['meta_description'] ?? '';
+		$seo_data['primary_keyword']    = $json_data['primary_keyword'] ?? '';
+		$seo_data['secondary_keywords'] = $json_data['secondary_keywords'] ?? array();
+		$seo_data['social_excerpt']     = $json_data['social_excerpt'] ?? '';
+	} else {
+		// Fallback to the old bracket-based parsing if JSON fails (for older models or unexpected output).
+		error_log( 'WP-AutoInsight: JSON SEO parsing failed, attempting legacy bracket parsing fallback.' );
 
-		if ( false !== strpos( $line, '[TITLE]' ) ) {
-			$in_title = true;
-			continue;
-		}
-		if ( false !== strpos( $line, '[SEO]' ) ) {
-			$in_seo   = true;
-			$in_title = false;
-			continue;
-		}
-		if ( false !== strpos( $line, '[END]' ) ) {
-			break;
-		}
+		$in_title = false;
+		$in_seo   = false;
+		$lines    = is_array( $result ) ? $result : explode( "\n", $result );
 
-		if ( $in_title && empty( $title ) ) {
-			// Strip markdown bold/italic and heading markers (Perplexity returns Markdown).
-			$title    = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $line );
-			$title    = ltrim( $title, '# ' );
-			$in_title = false;
-		} elseif ( $in_seo ) {
-			if ( false !== strpos( $line, 'Meta Description:' ) ) {
-				$seo_data['meta_description'] = trim( str_replace( 'Meta Description:', '', $line ) );
-			} elseif ( false !== strpos( $line, 'Primary Keyword:' ) ) {
-				$seo_data['primary_keyword'] = trim( str_replace( 'Primary Keyword:', '', $line ) );
-			} elseif ( false !== strpos( $line, 'Secondary Keywords:' ) ) {
-				$seo_data['secondary_keywords'] = array_map( 'trim', explode( ',', str_replace( 'Secondary Keywords:', '', $line ) ) );
-			} elseif ( false !== strpos( $line, 'Social Excerpt:' ) ) {
-				$seo_data['social_excerpt'] = trim( str_replace( 'Social Excerpt:', '', $line ) );
-			}
-		}
-	}
-
-	// Fallback: If structured parsing failed, try to extract title from first non-empty line
-	if ( empty( $title ) ) {
-		foreach ( $result as $line ) {
+		foreach ( $lines as $line ) {
 			$line = trim( $line );
-			if ( ! empty( $line ) && ! strpos( $line, '[' ) && ! strpos( $line, 'Meta Description:' ) ) {
-				$title = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $line );
-				$title = ltrim( $title, '# ' );
-				break;
+			if ( empty( $line ) ) {
+				continue;
+			}
+
+			if ( false !== strpos( $line, '[TITLE]' ) ) {
+				$in_title = true;
+				continue;
+			}
+			if ( false !== strpos( $line, '[SEO]' ) ) {
+				$in_seo   = true;
+				$in_title = false;
+				continue;
+			}
+
+			if ( $in_title && empty( $title ) ) {
+				$title    = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $line );
+				$title    = ltrim( $title, '# ' );
+				$in_title = false;
+			} elseif ( $in_seo ) {
+				if ( false !== strpos( $line, 'Meta Description:' ) ) {
+					$seo_data['meta_description'] = trim( str_replace( 'Meta Description:', '', $line ) );
+				} elseif ( false !== strpos( $line, 'Primary Keyword:' ) ) {
+					$seo_data['primary_keyword'] = trim( str_replace( 'Primary Keyword:', '', $line ) );
+				} elseif ( false !== strpos( $line, 'Secondary Keywords:' ) ) {
+					$seo_data['secondary_keywords'] = array_map( 'trim', explode( ',', str_replace( 'Secondary Keywords:', '', $line ) ) );
+				} elseif ( false !== strpos( $line, 'Social Excerpt:' ) ) {
+					$seo_data['social_excerpt'] = trim( str_replace( 'Social Excerpt:', '', $line ) );
+				}
 			}
 		}
 	}
 
-	// If we still don't have a title, generate one separately
+	// Final Fallbacks.
 	if ( empty( $title ) ) {
-		error_log( 'WP-AutoInsight: Structured SEO parsing failed, generating title separately. Response was: ' . print_r( $result, true ) );
 		$title = abcc_generate_title( $api_key, $keywords, $prompt_select );
 	}
 
-	// Generate default SEO data if parsing failed
 	if ( empty( $seo_data['meta_description'] ) ) {
 		$seo_data['meta_description'] = wp_trim_words( 'Learn about ' . implode( ', ', $keywords ), 20 );
 	}

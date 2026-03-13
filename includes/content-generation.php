@@ -143,7 +143,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 
 				if ( $image_url ) {
 					error_log( 'WP-AutoInsight: Featured image generated successfully: ' . $image_url );
-					$attachment_id = abcc_set_featured_image( $post_id, $image_url );
+
+					$alt_text = '';
+					if ( ! empty( $seo_data['title'] ) && ! empty( $seo_data['seo_data']['primary_keyword'] ) ) {
+						$alt_text = $seo_data['title'] . ' - ' . $seo_data['seo_data']['primary_keyword'];
+					}
+
+					$attachment_id = abcc_set_featured_image( $post_id, $image_url, $alt_text );
 					if ( $attachment_id ) {
 						error_log( 'WP-AutoInsight: Featured image set successfully with attachment ID: ' . $attachment_id );
 					} else {

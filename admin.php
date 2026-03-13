@@ -9,6 +9,24 @@
  */
 
 /**
+ * Triggers inline API key validation via JavaScript.
+ *
+ * @since 3.4.0
+ * @return void
+ */
+function abcc_trigger_inline_api_validation() {
+	?>
+	<script type="text/javascript">
+		jQuery(document).ready(function($) {
+			if (typeof abccValidateAPIKeys === 'function') {
+				abccValidateAPIKeys();
+			}
+		});
+	</script>
+	<?php
+}
+
+/**
  * Adds subpages for "Text Settings" and "Advanced Settings" under the main menu page.
  *
  * @since 1.0.0
@@ -50,21 +68,24 @@ function abcc_get_ai_model_options() {
 			'options' => array(
 				// Economy option.
 				'gpt-4.1-mini-2025-04-14' => array(
-					'name'        => 'GPT-4.1 Mini',
-					'description' => 'Fast and affordable with 1M context window',
-					'cost_tier'   => '1',
+					'name'          => 'GPT-4.1 Mini',
+					'description'   => 'Fast and affordable with 1M context window',
+					'cost_tier'     => '1',
+					'cost_per_post' => 0.0002,
 				),
 				// Standard option.
 				'gpt-4.1-2025-04-14'      => array(
-					'name'        => 'GPT-4.1',
-					'description' => 'Excellent coding and instruction following',
-					'cost_tier'   => '2',
+					'name'          => 'GPT-4.1',
+					'description'   => 'Excellent coding and instruction following',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.003,
 				),
 				// Premium option.
 				'o4-mini-2025-04-16'      => array(
-					'name'        => 'o4-mini',
-					'description' => 'Advanced reasoning model for complex tasks',
-					'cost_tier'   => '3',
+					'name'          => 'o4-mini',
+					'description'   => 'Advanced reasoning model for complex tasks',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.0004,
 				),
 			),
 		);
@@ -76,21 +97,24 @@ function abcc_get_ai_model_options() {
 			'options' => array(
 				// Economy option.
 				'claude-haiku-4-5-20251001'  => array(
-					'name'        => 'Claude Haiku 4.5',
-					'description' => 'Fastest model with near-frontier intelligence',
-					'cost_tier'   => '1',
+					'name'          => 'Claude Haiku 4.5',
+					'description'   => 'Fastest model with near-frontier intelligence',
+					'cost_tier'     => '1',
+					'cost_per_post' => 0.0003,
 				),
 				// Standard option.
 				'claude-sonnet-4-5-20250929' => array(
-					'name'        => 'Claude Sonnet 4.5',
-					'description' => 'Best for complex agents and coding tasks',
-					'cost_tier'   => '2',
+					'name'          => 'Claude Sonnet 4.5',
+					'description'   => 'Best for complex agents and coding tasks',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.004,
 				),
 				// Premium option.
 				'claude-opus-4-5-20251101'   => array(
-					'name'        => 'Claude Opus 4.5',
-					'description' => 'Maximum intelligence with practical performance',
-					'cost_tier'   => '3',
+					'name'          => 'Claude Opus 4.5',
+					'description'   => 'Maximum intelligence with practical performance',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.015,
 				),
 			),
 		);
@@ -102,21 +126,24 @@ function abcc_get_ai_model_options() {
 			'options' => array(
 				// Economy option.
 				'gemini-2.5-flash-lite' => array(
-					'name'        => 'Gemini 2.5 Flash-Lite',
-					'description' => 'Fastest and most budget-friendly model',
-					'cost_tier'   => '1',
+					'name'          => 'Gemini 2.5 Flash-Lite',
+					'description'   => 'Fastest and most budget-friendly model',
+					'cost_tier'     => '1',
+					'cost_per_post' => 0.0001,
 				),
 				// Standard option.
 				'gemini-2.5-flash'      => array(
-					'name'        => 'Gemini 2.5 Flash',
-					'description' => 'Best price-performance with thinking capabilities',
-					'cost_tier'   => '2',
+					'name'          => 'Gemini 2.5 Flash',
+					'description'   => 'Best price-performance with thinking capabilities',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.0002,
 				),
 				// Premium option.
 				'gemini-2.5-pro'        => array(
-					'name'        => 'Gemini 2.5 Pro',
-					'description' => 'Most advanced reasoning model for complex problems',
-					'cost_tier'   => '3',
+					'name'          => 'Gemini 2.5 Pro',
+					'description'   => 'Most advanced reasoning model for complex problems',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.002,
 				),
 			),
 		);
@@ -127,25 +154,51 @@ function abcc_get_ai_model_options() {
 			'group'   => 'Perplexity Models',
 			'options' => array(
 				'sonar'               => array(
-					'name'        => 'Sonar',
-					'description' => 'Fast web-grounded search with citations',
-					'cost_tier'   => '1',
+					'name'          => 'Sonar',
+					'description'   => 'Fast web-grounded search with citations',
+					'cost_tier'     => '1',
+					'cost_per_post' => 0.001,
 				),
 				'sonar-pro'           => array(
-					'name'        => 'Sonar Pro',
-					'description' => 'Deeper context with 2x more search results',
-					'cost_tier'   => '2',
+					'name'          => 'Sonar Pro',
+					'description'   => 'Deeper context with 2x more search results',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.005,
 				),
 				'sonar-reasoning-pro' => array(
-					'name'        => 'Sonar Reasoning Pro',
-					'description' => 'Advanced multi-step reasoning with citations',
-					'cost_tier'   => '3',
+					'name'          => 'Sonar Reasoning Pro',
+					'description'   => 'Advanced multi-step reasoning with citations',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.01,
 				),
 			),
 		);
 	}
 
-	return $options;
+	// Apply filter for advanced users to override estimates.
+	return apply_filters( 'abcc_model_cost_estimate', $options );
+}
+
+/**
+ * Returns HTML for a contextual help tooltip.
+ *
+ * @since 3.4.0
+ * @param string $text The tooltip text.
+ * @return string Tooltip HTML.
+ */
+function abcc_get_tooltip_html( $text ) {
+	return wp_kses(
+		sprintf(
+			'<span class="wpai-tooltip" data-tooltip="%1$s"><span class="dashicons dashicons-editor-help"></span></span>',
+			esc_attr( $text )
+		),
+		array(
+			'span' => array(
+				'class'        => array(),
+				'data-tooltip' => array(),
+			),
+		)
+	);
 }
 
 /**
@@ -231,6 +284,9 @@ function abcc_openai_text_settings_page() {
 				$preferred_image_service    = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
 				$gemini_image_model         = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
 				$gemini_image_size          = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
+				$openai_image_size          = isset( $_POST['abcc_openai_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_size'] ) ) : '1024x1024';
+				$openai_image_quality       = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'standard';
+				$stability_image_size       = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';
 
 				update_option( 'openai_api_key', $api_key );
 				update_option( 'gemini_api_key', $gemini_api_key );
@@ -246,8 +302,14 @@ function abcc_openai_text_settings_page() {
 				update_option( 'preferred_image_service', $preferred_image_service );
 				update_option( 'abcc_gemini_image_model', $gemini_image_model );
 				update_option( 'abcc_gemini_image_size', $gemini_image_size );
+				update_option( 'abcc_openai_image_size', $openai_image_size );
+				update_option( 'abcc_openai_image_quality', $openai_image_quality );
+				update_option( 'abcc_stability_image_size', $stability_image_size );
 
 				abcc_schedule_openai_event();
+
+				// Trigger inline validation on save.
+				add_action( 'admin_footer', 'abcc_trigger_inline_api_validation' );
 
 				break;
 
@@ -311,11 +373,13 @@ function abcc_openai_text_settings_page() {
 					<?php if ( $schedule_info ) : ?>
 						<div class="notice notice-info">
 							<?php
+							$time_diff = human_time_diff( time(), $schedule_info['timestamp'] );
 							printf(
-								// Translators: %1$s is the schedule, %2$s is the next run date.
-								'<p>' . esc_html__( 'Posts are scheduled to be automatically published %1$s and the next execution will be on %2$s.', 'automated-blog-content-creator' ) . '</p>',
-								'<strong>' . esc_html( $schedule_info['schedule'] ) . '</strong>',
-								'<strong>' . esc_html( $schedule_info['next_run'] ) . '</strong>'
+								// Translators: %1$s is the human-readable time difference, %2$s is the next run date.
+								'<p>' . esc_html__( 'Next post scheduled in %1$s — %2$s. %3$s', 'automated-blog-content-creator' ) . '</p>',
+								'<strong>' . esc_html( $time_diff ) . '</strong>',
+								'<strong>' . esc_html( $schedule_info['next_run'] ) . '</strong>',
+								'<a href="?page=automated-blog-content-creator-post&tab=advanced-settings#scheduling-settings">' . esc_html__( 'Change schedule →', 'automated-blog-content-creator' ) . '</a>'
 							);
 							?>
 						</div>
@@ -329,7 +393,7 @@ function abcc_openai_text_settings_page() {
 						<?php wp_nonce_field( 'abcc_openai_generate_post', 'abcc_openai_nonce' ); ?>
 						<table class="form-table">
 							<tr>
-								<th scope="row"><?php esc_html_e( 'Keywords', 'automated-blog-content-creator' ); ?></th>
+								<th scope="row"><?php esc_html_e( 'Keywords', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'One topic per line. Each line generates one blog post.', 'automated-blog-content-creator' ) ) ); ?></th>
 								<td>
 									<textarea name="openai_keywords" rows="5" class="large-text"><?php echo esc_textarea( $keywords ); ?></textarea>
 									<p class="description"><?php esc_html_e( 'Enter one keyword or topic per line. The AI will generate content based on these topics.', 'automated-blog-content-creator' ); ?></p>
@@ -359,7 +423,7 @@ function abcc_openai_text_settings_page() {
 								</td>
 							</tr>
 							<tr>
-								<th scope="row"><?php esc_html_e( 'Tone', 'automated-blog-content-creator' ); ?></th>
+								<th scope="row"><?php esc_html_e( 'Tone', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Controls the writing style of your generated content.', 'automated-blog-content-creator' ) ) ); ?></th>
 								<td>
 									<select name="openai_tone" id="openai_tone">
 										<option value="professional" <?php selected( $tone, 'professional' ); ?>><?php esc_html_e( 'Professional & formal', 'automated-blog-content-creator' ); ?></option>
@@ -474,6 +538,10 @@ function abcc_openai_text_settings_page() {
 															'3' => 'Premium',
 														);
 														echo esc_html( $cost_levels[ $model_data['cost_tier'] ] );
+
+														if ( ! empty( $model_data['cost_per_post'] ) ) {
+															printf( ' &bull; ~$%s per post', esc_html( number_format( $model_data['cost_per_post'], 4 ) ) );
+														}
 														?>
 													</div>
 												</label>
@@ -496,90 +564,135 @@ function abcc_openai_text_settings_page() {
 					<?php if ( ! defined( 'OPENAI_API' ) ) : ?>
 					<tr>
 						<th scope="row"><label for="openai_api_key">
-							<?php echo esc_html__( 'OpenAI API key:', 'automated-blog-content-creator' ); ?>
+							<?php echo esc_html__( 'OpenAI API key:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Get your key at platform.openai.com', 'automated-blog-content-creator' ) ) ); ?>
 						</label></th>
 						<td>
-							<input type="text" id="openai_api_key" name="openai_api_key"
+							<input type="password" id="openai_api_key" name="openai_api_key"
 								value="<?php echo esc_attr( get_option( 'openai_api_key', '' ) ); ?>"
 								class="regular-text">
+							<span class="api-validation-status" data-provider="openai">
+								<?php
+								$last_v = get_transient( 'abcc_last_validation_openai' );
+								if ( $last_v ) {
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
+								}
+								?>
+							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'OPENAI_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
 						</td>
 					</tr>
 				<?php else : ?>
 					<tr><th colspan="2">
 						<strong><?php esc_html_e( 'Your OpenAI API key is already set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+						<span class="api-validation-status" data-provider="openai"></span>
 					</th></tr>
 				<?php endif; ?>
 
 					<?php if ( ! defined( 'GEMINI_API' ) ) : ?>
 					<tr>
 						<th scope="row"><label for="gemini_api_key">
-							<?php echo esc_html__( 'Gemini API key:', 'automated-blog-content-creator' ); ?>
+							<?php echo esc_html__( 'Gemini API key:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Get your key at aistudio.google.com', 'automated-blog-content-creator' ) ) ); ?>
 						</label></th>
 						<td>
-							<input type="text" id="gemini_api_key" name="gemini_api_key"
+							<input type="password" id="gemini_api_key" name="gemini_api_key"
 								value="<?php echo esc_attr( get_option( 'gemini_api_key', '' ) ); ?>"
 								class="regular-text">
+							<span class="api-validation-status" data-provider="gemini">
+								<?php
+								$last_v = get_transient( 'abcc_last_validation_gemini' );
+								if ( $last_v ) {
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
+								}
+								?>
+							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'GEMINI_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
 						</td>
 					</tr>
 				<?php else : ?>
 					<tr><th colspan="2">
 						<strong><?php esc_html_e( 'Your Gemini API key is already set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+						<span class="api-validation-status" data-provider="gemini"></span>
 					</th></tr>
 				<?php endif; ?>
 
 					<?php if ( ! defined( 'CLAUDE_API' ) ) : ?>
 					<tr>
 						<th scope="row"><label for="claude_api_key">
-							<?php echo esc_html__( 'Claude API key:', 'automated-blog-content-creator' ); ?>
+							<?php echo esc_html__( 'Claude API key:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Get your key at console.anthropic.com', 'automated-blog-content-creator' ) ) ); ?>
 						</label></th>
 						<td>
-							<input type="text" id="claude_api_key" name="claude_api_key"
+							<input type="password" id="claude_api_key" name="claude_api_key"
 								value="<?php echo esc_attr( get_option( 'claude_api_key', '' ) ); ?>"
 								class="regular-text">
+							<span class="api-validation-status" data-provider="claude">
+								<?php
+								$last_v = get_transient( 'abcc_last_validation_claude' );
+								if ( $last_v ) {
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
+								}
+								?>
+							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'CLAUDE_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
 						</td>
 					</tr>
 				<?php else : ?>
 					<tr><th colspan="2">
 						<strong><?php esc_html_e( 'Your Claude API key is already set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+						<span class="api-validation-status" data-provider="claude"></span>
 					</th></tr>
 				<?php endif; ?>
 
 					<?php if ( ! defined( 'PERPLEXITY_API' ) ) : ?>
 					<tr>
 						<th scope="row"><label for="perplexity_api_key">
-							<?php echo esc_html__( 'Perplexity API key:', 'automated-blog-content-creator' ); ?>
+							<?php echo esc_html__( 'Perplexity API key:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Get your key at perplexity.ai/settings/api', 'automated-blog-content-creator' ) ) ); ?>
 						</label></th>
 						<td>
-							<input type="text" id="perplexity_api_key" name="perplexity_api_key"
+							<input type="password" id="perplexity_api_key" name="perplexity_api_key"
 								value="<?php echo esc_attr( get_option( 'perplexity_api_key', '' ) ); ?>"
 								class="regular-text">
+							<span class="api-validation-status" data-provider="perplexity">
+								<?php
+								$last_v = get_transient( 'abcc_last_validation_perplexity' );
+								if ( $last_v ) {
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
+								}
+								?>
+							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'PERPLEXITY_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
 						</td>
 					</tr>
 					<?php else : ?>
 					<tr><th colspan="2">
 						<strong><?php esc_html_e( 'Your Perplexity API key is already set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+						<span class="api-validation-status" data-provider="perplexity"></span>
 					</th></tr>
 					<?php endif; ?>
 
 					<?php if ( ! defined( 'STABILITY_API' ) ) : ?>
 					<tr>
 						<th scope="row"><label for="stability_api_key">
-							<?php echo esc_html__( 'Stability AI API key (for image generation):', 'automated-blog-content-creator' ); ?>
+							<?php echo esc_html__( 'Stability AI API key:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Get your key at platform.stability.ai', 'automated-blog-content-creator' ) ) ); ?>
 						</label></th>
 						<td>
-							<input type="text" id="stability_api_key" name="stability_api_key"
+							<input type="password" id="stability_api_key" name="stability_api_key"
 								value="<?php echo esc_attr( get_option( 'stability_api_key', '' ) ); ?>"
 								class="regular-text">
+							<span class="api-validation-status" data-provider="stability">
+								<?php
+								$last_v = get_transient( 'abcc_last_validation_stability' );
+								if ( $last_v ) {
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
+								}
+								?>
+							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'STABILITY_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
 						</td>
 					</tr>
 				<?php else : ?>
 					<tr><th colspan="2">
 						<strong><?php esc_html_e( 'Your Stability AI API key is already set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+						<span class="api-validation-status" data-provider="stability"></span>
 					</th></tr>
 				<?php endif; ?>
 			</table>
@@ -657,6 +770,51 @@ function abcc_openai_text_settings_page() {
 						<p class="description">
 							<?php esc_html_e( 'Automatically generate featured images for posts using AI', 'automated-blog-content-creator' ); ?>
 						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="abcc_openai_image_size">
+							<?php echo esc_html__( 'OpenAI Image Size:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'DALL-E 3 supported resolutions.', 'automated-blog-content-creator' ) ) ); ?>
+						</label>
+					</th>
+					<td>
+						<?php $openai_size = get_option( 'abcc_openai_image_size', '1024x1024' ); ?>
+						<select id="abcc_openai_image_size" name="abcc_openai_image_size">
+							<option value="1024x1024" <?php selected( $openai_size, '1024x1024' ); ?>>1024 x 1024 (Square)</option>
+							<option value="1792x1024" <?php selected( $openai_size, '1792x1024' ); ?>>1792 x 1024 (Wide)</option>
+							<option value="1024x1792" <?php selected( $openai_size, '1024x1792' ); ?>>1024 x 1792 (Tall)</option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="abcc_openai_image_quality">
+							<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'HD quality costs more but produces better detail.', 'automated-blog-content-creator' ) ) ); ?>
+							<?php echo esc_html__( 'OpenAI Image Quality:', 'automated-blog-content-creator' ); ?>
+						</label>
+					</th>
+					<td>
+						<?php $openai_quality = get_option( 'abcc_openai_image_quality', 'standard' ); ?>
+						<select id="abcc_openai_image_quality" name="abcc_openai_image_quality">
+							<option value="standard" <?php selected( $openai_quality, 'standard' ); ?>><?php esc_html_e( 'Standard', 'automated-blog-content-creator' ); ?></option>
+							<option value="hd" <?php selected( $openai_quality, 'hd' ); ?>><?php esc_html_e( 'HD', 'automated-blog-content-creator' ); ?></option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="abcc_stability_image_size">
+							<?php echo esc_html__( 'Stability AI Resolution:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'SDXL supported resolution presets.', 'automated-blog-content-creator' ) ) ); ?>
+						</label>
+					</th>
+					<td>
+						<?php $stability_size = get_option( 'abcc_stability_image_size', '1024x1024' ); ?>
+						<select id="abcc_stability_image_size" name="abcc_stability_image_size">
+							<option value="512x512" <?php selected( $stability_size, '512x512' ); ?>>512 x 512</option>
+							<option value="768x768" <?php selected( $stability_size, '768x768' ); ?>>768 x 768</option>
+							<option value="1024x1024" <?php selected( $stability_size, '1024x1024' ); ?>>1024 x 1024</option>
+						</select>
 					</td>
 				</tr>
 				<tr>
@@ -984,7 +1142,7 @@ function abcc_openai_text_settings_page() {
 
 							foreach ( $languages as $code => $name ) {
 								printf(
-									'<option value="%s" %s>%s</option>',
+									'<option value="%s"%s>%s</option>',
 									esc_attr( $code ),
 									selected( $current_lang, $code, false ),
 									esc_html( $name )

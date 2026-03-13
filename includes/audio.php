@@ -348,7 +348,8 @@ Format requirements:
 			$keywords  = explode( ' ', wp_trim_words( $transcript, 10 ) );
 			$image_url = abcc_generate_featured_image( $prompt_select, $keywords );
 			if ( $image_url ) {
-				abcc_set_featured_image( $post_id, $image_url );
+				$alt_text = get_the_title( $post_id );
+				abcc_set_featured_image( $post_id, $image_url, $alt_text );
 			}
 		} catch ( Exception $e ) {
 			error_log( 'Featured image generation failed for audio post: ' . $e->getMessage() );
