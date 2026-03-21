@@ -81,10 +81,11 @@ function abcc_handle_audio_transcription() {
 	}
 
 	try {
-		// Get the API key.
-		$api_key = abcc_check_api_key();
+		// Audio transcription always uses OpenAI Whisper — fetch the OpenAI key directly
+		// regardless of which text generation provider the user has selected.
+		$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
 		if ( empty( $api_key ) ) {
-			throw new Exception( __( 'OpenAI API key not configured', 'automated-blog-content-creator' ) );
+			throw new Exception( __( 'An OpenAI API key is required for audio transcription. Please add one in Advanced Settings.', 'automated-blog-content-creator' ) );
 		}
 
 		// Validate file.

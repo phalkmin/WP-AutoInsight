@@ -26,7 +26,7 @@ function get_openai_event_schedule() {
 	return array(
 		'scheduled' => true,
 		'schedule'  => $schedule,
-		'next_run'  => date_i18n( 'Y-m-d H:i:s', $timestamp ),
+		'next_run'  => date_i18n( 'l, F j \a\t g:i A', $timestamp ),
 		'timestamp' => $timestamp,
 	);
 }
@@ -40,35 +40,60 @@ function abcc_openai_generate_post_scheduled() {
 	try {
 		// Get required parameters.
 		$api_key       = abcc_check_api_key();
-		$keywords      = explode( "\n", get_option( 'openai_keywords', '' ) );
 		$tone          = get_option( 'openai_tone', 'default' );
 		$auto_create   = get_option( 'openai_auto_create', 'none' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 
-		// Log scheduled attempt.
-		// translators: %1$s: Auto create setting, %2$s: Model name, %3$d: Keywords count
-		error_log(
-			sprintf(
-				'Scheduled post generation attempt - Auto Create: %1$s, Model: %2$s, Keywords count: %3$d',
-				$auto_create,
-				$prompt_select,
-				count( $keywords )
-			)
-		);
-
-		// Validate conditions.
+		// Validate common conditions.
 		if ( empty( $api_key ) ) {
 			throw new Exception( 'API key not configured for scheduled post generation' );
-		}
-
-		if ( empty( $keywords ) ) {
-			throw new Exception( 'No keywords configured for scheduled post generation' );
 		}
 
 		if ( 'none' === $auto_create ) {
 			throw new Exception( 'Auto-create is disabled' );
 		}
+
+		$groups = get_option( 'abcc_keyword_groups', array() );
+		if ( empty( $groups ) ) {
+			throw new Exception( 'No keyword groups configured for scheduled post generation' );
+		}
+
+		// Rotate through groups.
+		$last_index = get_option( 'abcc_last_group_index', -1 );
+		$next_index = ( $last_index + 1 ) % count( $groups );
+		update_option( 'abcc_last_group_index', $next_index );
+
+		$selected_group = $groups[ $next_index ];
+
+		if ( empty( $selected_group['keywords'] ) ) {
+			// Find first group with keywords as fallback.
+			foreach ( $groups as $group ) {
+				if ( ! empty( $group['keywords'] ) ) {
+					$selected_group = $group;
+					break;
+				}
+			}
+		}
+
+		if ( empty( $selected_group['keywords'] ) ) {
+			throw new Exception( 'No keywords found in any configured group' );
+		}
+
+		$keywords = (array) $selected_group['keywords'];
+		$category = $selected_group['category'] ?? 0;
+		$template = $selected_group['template'] ?? 'default';
+
+		// Log scheduled attempt.
+		// translators: %1$s: Group name, %2$s: Model name, %3$d: Keywords count.
+		error_log(
+			sprintf(
+				'Scheduled post generation attempt - Group: %1$s, Model: %2$s, Keywords count: %3$d',
+				$selected_group['name'],
+				$prompt_select,
+				count( $keywords )
+			)
+		);
 
 		// Generate the post.
 		$post_id = abcc_openai_generate_post(
@@ -76,18 +101,20 @@ function abcc_openai_generate_post_scheduled() {
 			$keywords,
 			$prompt_select,
 			$tone,
-			$auto_create,
-			$char_limit
+			true,
+			$char_limit,
+			'post',
+			array(
+				'template' => $template,
+				'category' => $category,
+			)
 		);
 
 		if ( is_wp_error( $post_id ) ) {
 			throw new Exception( $post_id->get_error_message() );
 		}
 
-		// Send admin notification about the success if enabled.
-		if ( true === get_option( 'openai_email_notifications', false ) ) {
-			abcc_send_post_notification( $post_id );
-		}
+		// Note: success notification is sent inside abcc_openai_generate_post().
 
 		return $post_id;
 

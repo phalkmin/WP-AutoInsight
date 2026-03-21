@@ -260,3 +260,98 @@
 .api-validation-status.loading {
     color: #72aee6;
 }
+
+/* Keyword Groups and Templates Styles */
+.abcc-groups-container, .abcc-templates-container {
+    margin: 20px 0;
+    max-width: 1000px;
+}
+
+.abcc-group-item, .abcc-template-item {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    position: relative;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.abcc-group-header, .abcc-template-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.abcc-group-name-input, .abcc-template-name-input {
+    font-weight: 600;
+    font-size: 1.1em;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    width: 70%;
+}
+
+.abcc-remove-item {
+    color: #a00;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.abcc-remove-item:hover {
+    color: #f00;
+}
+
+.abcc-group-body, .abcc-template-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.abcc-group-keywords {
+    grid-column: span 2;
+}
+
+.abcc-add-item-button {
+    margin-top: 10px;
+}
+
+.abcc-placeholder-list {
+    font-size: 0.9em;
+    color: #646970;
+    margin-top: 5px;
+}
+
+.abcc-template-item--locked {
+    background: #f6f7f7;
+    border-color: #dcdcde;
+}
+
+.abcc-template-badge {
+    font-size: 0.8em;
+    color: #646970;
+    background: #e0e0e0;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-weight: 400;
+}
+
+.abcc-placeholder-tag {
+    display: inline-block;
+    background: #f0f0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    margin-right: 5px;
+    margin-bottom: 5px;
+}
+
+.abcc-field-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+}

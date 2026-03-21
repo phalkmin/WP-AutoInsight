@@ -219,6 +219,24 @@ function abcc_category_dropdown( $selected_categories = array() ) {
 }
 
 /**
+ * Displays a single-select category dropdown.
+ *
+ * @param int    $selected_category The selected category ID.
+ * @param string $name              The name attribute for the select field.
+ * @return void
+ */
+function abcc_category_dropdown_single( $selected_category = 0, $name = 'abcc_category' ) {
+	$categories = get_categories( array( 'hide_empty' => 0 ) );
+	echo '<select name="' . esc_attr( $name ) . '" class="abcc-category-select">';
+	echo '<option value="0">' . esc_html__( 'Default', 'automated-blog-content-creator' ) . '</option>';
+	foreach ( $categories as $category ) {
+		$selected = selected( $selected_category, $category->term_id, false );
+		echo '<option value="' . esc_attr( $category->term_id ) . '"' . wp_kses_post( $selected ) . '>' . esc_html( $category->name ) . '</option>';
+	}
+	echo '</select>';
+}
+
+/**
  * Displays and handles settings for the blog post generator.
  *
  * @since 1.0.0
@@ -237,8 +255,46 @@ function abcc_openai_text_settings_page() {
 
 		switch ( $current_tab ) {
 			case 'text-settings':
-				$keywords            = isset( $_POST['openai_keywords'] ) ? sanitize_textarea_field( wp_unslash( $_POST['openai_keywords'] ) ) : '';
-				$selected_categories = isset( $_POST['openai_selected_categories'] ) ? array_map( 'intval', $_POST['openai_selected_categories'] ) : array();
+				// Handle Keyword Groups.
+				$keyword_groups = array();
+				if ( isset( $_POST['abcc_group_name'] ) && is_array( $_POST['abcc_group_name'] ) ) {
+					foreach ( $_POST['abcc_group_name'] as $index => $name ) {
+						$keywords_raw     = isset( $_POST['abcc_group_keywords'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_group_keywords'][ $index ] ) ) : '';
+						$keywords_array   = array_filter( array_map( 'trim', explode( "\n", $keywords_raw ) ) );
+						$keyword_groups[] = array(
+							'name'     => sanitize_text_field( wp_unslash( $name ) ),
+							'keywords' => $keywords_array,
+							'category' => isset( $_POST['abcc_group_category'][ $index ] ) ? absint( $_POST['abcc_group_category'][ $index ] ) : 0,
+							'template' => isset( $_POST['abcc_group_template'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_group_template'][ $index ] ) ) : 'default',
+						);
+					}
+				}
+				update_option( 'abcc_keyword_groups', $keyword_groups );
+
+				// Handle Content Templates.
+				$content_templates = array();
+				if ( isset( $_POST['abcc_template_slug'] ) && is_array( $_POST['abcc_template_slug'] ) ) {
+					foreach ( $_POST['abcc_template_slug'] as $index => $slug ) {
+						$template_slug = sanitize_key( wp_unslash( $slug ) );
+						// Default template is read-only — never overwrite it from POST data.
+						if ( empty( $template_slug ) || 'default' === $template_slug ) {
+							continue;
+						}
+						$content_templates[ $template_slug ] = array(
+							'name'   => isset( $_POST['abcc_template_name'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_template_name'][ $index ] ) ) : '',
+							'prompt' => isset( $_POST['abcc_template_prompt'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_template_prompt'][ $index ] ) ) : '',
+						);
+					}
+				}
+				// Ensure default template always exists.
+				if ( ! isset( $content_templates['default'] ) ) {
+					$content_templates['default'] = array(
+						'name'   => 'Default Template',
+						'prompt' => "Write a {tone} blog post with the following title: {title}\n\nUsing these keywords: {keywords}",
+					);
+				}
+				update_option( 'abcc_content_templates', $content_templates );
+
 				$selected_post_types = isset( $_POST['abcc_selected_post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_selected_post_types'] ) ) : array( 'post' );
 
 				if ( isset( $_POST['openai_tone'] ) ) {
@@ -256,8 +312,6 @@ function abcc_openai_text_settings_page() {
 				$abcc_draft_first    = isset( $_POST['abcc_draft_first'] );
 				update_option( 'openai_generate_seo', $openai_generate_seo );
 				update_option( 'abcc_draft_first', $abcc_draft_first );
-				update_option( 'openai_keywords', $keywords );
-				update_option( 'openai_selected_categories', $selected_categories );
 				update_option( 'abcc_selected_post_types', $selected_post_types );
 				break;
 
@@ -333,12 +387,12 @@ function abcc_openai_text_settings_page() {
 		);
 	}
 
-	$selected_categories = get_option( 'openai_selected_categories', array() );
-	$keywords            = get_option( 'openai_keywords', '' );
-	$schedule_info       = get_openai_event_schedule();
-	$tone                = get_option( 'openai_tone', '' );
-	$custom_tone_value   = get_option( 'custom_tone', '' );
-	$current_tab         = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
+	$schedule_info     = get_openai_event_schedule();
+	$tone              = get_option( 'openai_tone', '' );
+	$custom_tone_value = get_option( 'custom_tone', '' );
+	$keyword_groups    = get_option( 'abcc_keyword_groups', array() );
+	$content_templates = get_option( 'abcc_content_templates', array() );
+	$current_tab       = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
 
 	// Add admin styles.
 	wp_enqueue_style( 'wpai-admin-styles', plugins_url( 'css/admin.css', __FILE__ ), array(), '3.3.0' );
@@ -391,21 +445,97 @@ function abcc_openai_text_settings_page() {
 
 					<form method="post" action="">
 						<?php wp_nonce_field( 'abcc_openai_generate_post', 'abcc_openai_nonce' ); ?>
+						
+						<h2><?php esc_html_e( 'Keyword Groups', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Organize your keywords into groups with specific categories and templates.', 'automated-blog-content-creator' ) ) ); ?></h2>
+						<p class="description"><?php esc_html_e( 'Each keyword group can have its own category and content template. Scheduled generation will rotate through these groups.', 'automated-blog-content-creator' ); ?></p>
+						
+						<div id="abcc-keyword-groups-container" class="abcc-groups-container">
+							<?php if ( ! empty( $keyword_groups ) ) : ?>
+								<?php foreach ( $keyword_groups as $index => $group ) : ?>
+									<div class="abcc-group-item" data-index="<?php echo esc_attr( $index ); ?>">
+										<div class="abcc-group-header">
+											<input type="text" name="abcc_group_name[<?php echo esc_attr( $index ); ?>]" value="<?php echo esc_attr( $group['name'] ); ?>" class="abcc-group-name-input" placeholder="<?php esc_attr_e( 'Group Name', 'automated-blog-content-creator' ); ?>">
+											<span class="abcc-remove-item abcc-remove-group" title="<?php esc_attr_e( 'Remove Group', 'automated-blog-content-creator' ); ?>">&times; <?php esc_html_e( 'Remove', 'automated-blog-content-creator' ); ?></span>
+										</div>
+										<div class="abcc-group-body">
+											<div class="abcc-group-keywords">
+												<label class="abcc-field-label"><?php esc_html_e( 'Keywords (one per line)', 'automated-blog-content-creator' ); ?></label>
+												<textarea name="abcc_group_keywords[<?php echo esc_attr( $index ); ?>]" rows="4" class="large-text"><?php echo esc_textarea( implode( "\n", (array) $group['keywords'] ) ); ?></textarea>
+											</div>
+											<div class="abcc-group-category">
+												<label class="abcc-field-label"><?php esc_html_e( 'Target Category', 'automated-blog-content-creator' ); ?></label>
+												<?php abcc_category_dropdown_single( $group['category'] ?? 0, "abcc_group_category[$index]" ); ?>
+											</div>
+											<div class="abcc-group-template">
+												<label class="abcc-field-label"><?php esc_html_e( 'Content Template', 'automated-blog-content-creator' ); ?></label>
+												<select name="abcc_group_template[<?php echo esc_attr( $index ); ?>]">
+													<?php foreach ( $content_templates as $slug => $template ) : ?>
+														<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $group['template'] ?? 'default', $slug ); ?>><?php echo esc_html( $template['name'] ); ?></option>
+													<?php endforeach; ?>
+												</select>
+											</div>
+										</div>
+									</div>
+								<?php endforeach; ?>
+							<?php endif; ?>
+						</div>
+						<button type="button" id="abcc-add-group" class="button button-secondary abcc-add-item-button">
+							<span class="dashicons dashicons-plus-alt" style="margin-top: 4px;"></span> <?php esc_html_e( 'Add Keyword Group', 'automated-blog-content-creator' ); ?>
+						</button>
+
+						<hr style="margin: 30px 0;">
+
+						<h2><?php esc_html_e( 'Content Templates', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Define the structure and instructions for your AI-generated content.', 'automated-blog-content-creator' ) ) ); ?></h2>
+						<p class="description"><?php esc_html_e( 'Use placeholders to inject dynamic data into your prompts: {keywords}, {title}, {tone}, {site_name}, {category}.', 'automated-blog-content-creator' ); ?></p>
+						
+						<div id="abcc-content-templates-container" class="abcc-templates-container">
+							<?php foreach ( $content_templates as $slug => $template ) : ?>
+								<?php if ( 'default' === $slug ) : ?>
+								<div class="abcc-template-item abcc-template-item--locked" data-slug="default">
+									<div class="abcc-template-header">
+										<strong class="abcc-template-name-input"><?php echo esc_html( $template['name'] ); ?></strong>
+										<span class="abcc-template-badge"><?php esc_html_e( 'System default — read only', 'automated-blog-content-creator' ); ?></span>
+									</div>
+									<div class="abcc-template-body" style="grid-template-columns: 1fr;">
+										<div class="abcc-template-prompt">
+											<label class="abcc-field-label"><?php esc_html_e( 'Prompt Pattern', 'automated-blog-content-creator' ); ?></label>
+											<textarea rows="3" class="large-text" readonly style="background:#f6f7f7; color:#50575e; cursor:default; resize:none;"><?php echo esc_textarea( $template['prompt'] ); ?></textarea>
+											<p class="description"><?php esc_html_e( 'HTML structure rules (headings, paragraphs, tag closing) are enforced automatically on top of any template — including this one.', 'automated-blog-content-creator' ); ?></p>
+										</div>
+									</div>
+								</div>
+								<?php else : ?>
+								<div class="abcc-template-item" data-slug="<?php echo esc_attr( $slug ); ?>">
+									<div class="abcc-template-header">
+										<input type="text" name="abcc_template_name[]" value="<?php echo esc_attr( $template['name'] ); ?>" class="abcc-template-name-input" placeholder="<?php esc_attr_e( 'Template Name', 'automated-blog-content-creator' ); ?>">
+										<input type="hidden" name="abcc_template_slug[]" value="<?php echo esc_attr( $slug ); ?>">
+										<span class="abcc-remove-item abcc-remove-template" title="<?php esc_attr_e( 'Remove Template', 'automated-blog-content-creator' ); ?>">&times; <?php esc_html_e( 'Remove', 'automated-blog-content-creator' ); ?></span>
+									</div>
+									<div class="abcc-template-body" style="grid-template-columns: 1fr;">
+										<div class="abcc-template-prompt">
+											<label class="abcc-field-label"><?php esc_html_e( 'Prompt Pattern', 'automated-blog-content-creator' ); ?></label>
+											<textarea name="abcc_template_prompt[]" rows="6" class="large-text"><?php echo esc_textarea( $template['prompt'] ); ?></textarea>
+											<div class="abcc-placeholder-list">
+												<?php esc_html_e( 'Available Placeholders:', 'automated-blog-content-creator' ); ?>
+												<span class="abcc-placeholder-tag">{keywords}</span>
+												<span class="abcc-placeholder-tag">{title}</span>
+												<span class="abcc-placeholder-tag">{tone}</span>
+												<span class="abcc-placeholder-tag">{site_name}</span>
+												<span class="abcc-placeholder-tag">{category}</span>
+											</div>
+										</div>
+									</div>
+								</div>
+								<?php endif; ?>
+							<?php endforeach; ?>
+						</div>
+						<button type="button" id="abcc-add-template" class="button button-secondary abcc-add-item-button">
+							<span class="dashicons dashicons-plus-alt" style="margin-top: 4px;"></span> <?php esc_html_e( 'Add Content Template', 'automated-blog-content-creator' ); ?>
+						</button>
+
+						<hr style="margin: 30px 0;">
+
 						<table class="form-table">
-							<tr>
-								<th scope="row"><?php esc_html_e( 'Keywords', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'One topic per line. Each line generates one blog post.', 'automated-blog-content-creator' ) ) ); ?></th>
-								<td>
-									<textarea name="openai_keywords" rows="5" class="large-text"><?php echo esc_textarea( $keywords ); ?></textarea>
-									<p class="description"><?php esc_html_e( 'Enter one keyword or topic per line. The AI will generate content based on these topics.', 'automated-blog-content-creator' ); ?></p>
-								</td>
-							</tr>
-							<tr>
-								<th scope="row"><?php esc_html_e( 'Categories', 'automated-blog-content-creator' ); ?></th>
-								<td>
-									<?php abcc_category_dropdown( $selected_categories ); ?>
-									<p class="description"><?php esc_html_e( 'Select categories for the generated posts', 'automated-blog-content-creator' ); ?></p>
-								</td>
-							</tr>
 							<tr>
 								<th scope="row"><?php esc_html_e( 'Target Post Types', 'automated-blog-content-creator' ); ?></th>
 								<td>
@@ -449,9 +579,23 @@ function abcc_openai_text_settings_page() {
 						</table>
 						<?php submit_button(); ?>
 						<div id="abcc-manual-generation-status" style="margin: 10px 0;"></div>
-						<button type="button" name="generate-post" id="generate-post" class="button button-secondary">
-							<?php echo esc_attr__( 'Create post manually', 'automated-blog-content-creator' ); ?>
-						</button>
+						<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+							<?php if ( count( $keyword_groups ) > 1 ) : ?>
+								<select id="abcc-group-select" style="max-width: 260px;">
+									<?php foreach ( $keyword_groups as $i => $group ) : ?>
+										<option value="<?php echo esc_attr( $i ); ?>">
+											<?php
+											// translators: %d: Group number.
+											echo esc_html( $group['name'] ?? sprintf( __( 'Group %d', 'automated-blog-content-creator' ), $i + 1 ) );
+											?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							<?php endif; ?>
+							<button type="button" name="generate-post" id="generate-post" class="button button-secondary">
+								<?php esc_html_e( 'Create post manually', 'automated-blog-content-creator' ); ?>
+							</button>
+						</div>
 					</form>
 
 					<hr style="margin: 40px 0 20px;">
@@ -460,8 +604,9 @@ function abcc_openai_text_settings_page() {
 						<thead>
 							<tr>
 								<th><?php esc_html_e( 'Post Title', 'automated-blog-content-creator' ); ?></th>
-								<th><?php esc_html_e( 'Date Generated', 'automated-blog-content-creator' ); ?></th>
-								<th><?php esc_html_e( 'Model Used', 'automated-blog-content-creator' ); ?></th>
+								<th><?php esc_html_e( 'Keywords Used', 'automated-blog-content-creator' ); ?></th>
+								<th><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></th>
+								<th><?php esc_html_e( 'Date', 'automated-blog-content-creator' ); ?></th>
 								<th><?php esc_html_e( 'Status', 'automated-blog-content-creator' ); ?></th>
 							</tr>
 						</thead>
@@ -480,14 +625,24 @@ function abcc_openai_text_settings_page() {
 												);
 												if ( $history_posts ) :
 													foreach ( $history_posts as $h_post ) :
-														$h_model = get_post_meta( $h_post->ID, '_abcc_model', true );
+														$h_model    = get_post_meta( $h_post->ID, '_abcc_model', true );
+														$h_params   = json_decode( get_post_meta( $h_post->ID, '_abcc_generation_params', true ), true );
+														$h_kw       = isset( $h_params['keywords'] ) ? implode( ', ', (array) $h_params['keywords'] ) : 'n/a';
+														$h_tpl      = isset( $h_params['template'] ) ? $h_params['template'] : 'default';
+														$h_tpl_name = $content_templates[ $h_tpl ]['name'] ?? ucfirst( $h_tpl );
 														?>
 															<tr>
 																<td>
 																	<strong><a href="<?php echo esc_url( get_edit_post_link( $h_post->ID ) ); ?>"><?php echo esc_html( $h_post->post_title ); ?></a></strong>
+																	<div class="row-actions">
+																		<span class="edit"><a href="<?php echo esc_url( get_edit_post_link( $h_post->ID ) ); ?>"><?php esc_html_e( 'Edit', 'automated-blog-content-creator' ); ?></a> | </span>
+																		<span class="view"><a href="<?php echo esc_url( get_permalink( $h_post->ID ) ); ?>"><?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?></a> | </span>
+																		<span class="abcc-regenerate-row"><a href="#" class="abcc-regenerate-post" data-post-id="<?php echo esc_attr( $h_post->ID ); ?>"><?php esc_html_e( 'Regenerate', 'automated-blog-content-creator' ); ?></a></span>
+																	</div>
 																</td>
+																<td><small><?php echo esc_html( wp_trim_words( $h_kw, 10 ) ); ?></small></td>
+																<td><small><?php echo esc_html( $h_tpl_name ); ?></small></td>
 																<td><?php echo esc_html( get_the_date( '', $h_post ) ); ?></td>
-																<td><code><?php echo esc_html( $h_model ? $h_model : 'n/a' ); ?></code></td>
 																<td>
 																				<?php
 																				$status_obj = get_post_status_object( get_post_status( $h_post ) );
@@ -500,7 +655,7 @@ function abcc_openai_text_settings_page() {
 													else :
 														?>
 								<tr>
-									<td colspan="4"><?php esc_html_e( 'No content history found.', 'automated-blog-content-creator' ); ?></td>
+									<td colspan="5"><?php esc_html_e( 'No content history found.', 'automated-blog-content-creator' ); ?></td>
 								</tr>
 							<?php endif; ?>
 						</tbody>
@@ -515,6 +670,7 @@ function abcc_openai_text_settings_page() {
 				<div class="tab-pane active">
 					<form method="post" action="">
 								<?php wp_nonce_field( 'abcc_openai_generate_post', 'abcc_openai_nonce' ); ?>
+						<p class="description"><?php esc_html_e( 'Select the AI model for content generation.', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Higher-tier models produce richer, more accurate content but cost more per API call. Economy models are great for drafts; Premium for final-quality output.', 'automated-blog-content-creator' ) ) ); ?></p>
 						<div class="model-selector">
 								<?php
 								$model_options          = abcc_get_ai_model_options();
@@ -570,12 +726,11 @@ function abcc_openai_text_settings_page() {
 							<input type="password" id="openai_api_key" name="openai_api_key"
 								value="<?php echo esc_attr( get_option( 'openai_api_key', '' ) ); ?>"
 								class="regular-text">
-							<span class="api-validation-status" data-provider="openai">
+							<?php $last_v = get_transient( 'abcc_last_validation_openai' ); ?>
+							<span class="api-validation-status<?php echo $last_v ? ' ' . esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ) : ''; ?>" data-provider="openai">
 								<?php
-								$last_v = get_transient( 'abcc_last_validation_openai' );
 								if ( $last_v ) {
-									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
-								}
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); }
 								?>
 							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'OPENAI_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
@@ -597,12 +752,11 @@ function abcc_openai_text_settings_page() {
 							<input type="password" id="gemini_api_key" name="gemini_api_key"
 								value="<?php echo esc_attr( get_option( 'gemini_api_key', '' ) ); ?>"
 								class="regular-text">
-							<span class="api-validation-status" data-provider="gemini">
+							<?php $last_v = get_transient( 'abcc_last_validation_gemini' ); ?>
+							<span class="api-validation-status<?php echo $last_v ? ' ' . esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ) : ''; ?>" data-provider="gemini">
 								<?php
-								$last_v = get_transient( 'abcc_last_validation_gemini' );
 								if ( $last_v ) {
-									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
-								}
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); }
 								?>
 							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'GEMINI_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
@@ -624,12 +778,11 @@ function abcc_openai_text_settings_page() {
 							<input type="password" id="claude_api_key" name="claude_api_key"
 								value="<?php echo esc_attr( get_option( 'claude_api_key', '' ) ); ?>"
 								class="regular-text">
-							<span class="api-validation-status" data-provider="claude">
+							<?php $last_v = get_transient( 'abcc_last_validation_claude' ); ?>
+							<span class="api-validation-status<?php echo $last_v ? ' ' . esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ) : ''; ?>" data-provider="claude">
 								<?php
-								$last_v = get_transient( 'abcc_last_validation_claude' );
 								if ( $last_v ) {
-									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
-								}
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); }
 								?>
 							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'CLAUDE_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
@@ -651,12 +804,11 @@ function abcc_openai_text_settings_page() {
 							<input type="password" id="perplexity_api_key" name="perplexity_api_key"
 								value="<?php echo esc_attr( get_option( 'perplexity_api_key', '' ) ); ?>"
 								class="regular-text">
-							<span class="api-validation-status" data-provider="perplexity">
+							<?php $last_v = get_transient( 'abcc_last_validation_perplexity' ); ?>
+							<span class="api-validation-status<?php echo $last_v ? ' ' . esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ) : ''; ?>" data-provider="perplexity">
 								<?php
-								$last_v = get_transient( 'abcc_last_validation_perplexity' );
 								if ( $last_v ) {
-									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
-								}
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); }
 								?>
 							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'PERPLEXITY_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
@@ -678,12 +830,11 @@ function abcc_openai_text_settings_page() {
 							<input type="password" id="stability_api_key" name="stability_api_key"
 								value="<?php echo esc_attr( get_option( 'stability_api_key', '' ) ); ?>"
 								class="regular-text">
-							<span class="api-validation-status" data-provider="stability">
+							<?php $last_v = get_transient( 'abcc_last_validation_stability' ); ?>
+							<span class="api-validation-status<?php echo $last_v ? ' ' . esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ) : ''; ?>" data-provider="stability">
 								<?php
-								$last_v = get_transient( 'abcc_last_validation_stability' );
 								if ( $last_v ) {
-									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] );
-								}
+									echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); }
 								?>
 							</span>
 							<p class="description"><?php esc_html_e( 'For extra security, add to wp-config.php using define(\'STABILITY_API\', \'your-key\');', 'automated-blog-content-creator' ); ?></p>
@@ -903,7 +1054,7 @@ function abcc_openai_text_settings_page() {
 			<table class="form-table">
 				<tr>
 					<th scope="row"><label for="openai_auto_create">
-						<?php echo esc_html__( 'Schedule post creation:', 'automated-blog-content-creator' ); ?>
+						<?php echo esc_html__( 'Schedule post creation:', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'How often the plugin should automatically generate and publish a new post using your keyword groups.', 'automated-blog-content-creator' ) ) ); ?>
 					</label></th>
 					<td>
 						<select id="openai_auto_create" name="openai_auto_create">
@@ -927,8 +1078,7 @@ function abcc_openai_text_settings_page() {
 
 				<tr>
 					<th scope="row"><label for="openai_char_limit">
-						<?php echo esc_html__( 'Content Length', 'automated-blog-content-creator' ); ?>
-						<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Higher values produce longer, more detailed content and use more API credits.', 'automated-blog-content-creator' ); ?>"></span>
+						<?php echo esc_html__( 'Content Length', 'automated-blog-content-creator' ); ?><?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Higher values produce longer, more detailed content and use more API credits.', 'automated-blog-content-creator' ) ) ); ?>
 					</label></th>
 					<td>
 						<input type="number" id="openai_char_limit" name="openai_char_limit"

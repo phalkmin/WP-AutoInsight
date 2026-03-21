@@ -15,6 +15,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string Identifier of the active SEO plugin or 'none'.
  */
 function abcc_get_active_seo_plugin() {
+	if ( defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Options' ) ) {
+		return 'yoast';
+	}
+
+	if ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
+		return 'rankmath';
+	}
+
+	// Fallback for cases where constants might not be defined yet (like early in the load process).
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
@@ -22,9 +31,11 @@ function abcc_get_active_seo_plugin() {
 	if ( is_plugin_active( 'wordpress-seo/wp-seo.php' ) ) {
 		return 'yoast';
 	}
+
 	if ( is_plugin_active( 'seo-by-rank-math/rank-math.php' ) ) {
 		return 'rankmath';
 	}
+
 	return 'none';
 }
 
@@ -52,17 +63,23 @@ function abcc_get_seo_meta_fields( $seo_data ) {
 				)
 			);
 			break;
+
 		case 'rankmath':
+			// RankMath supports multiple focus keywords separated by commas.
+			$focus_keywords = array_merge( array( $seo_data['primary_keyword'] ), (array) $seo_data['secondary_keywords'] );
+			$focus_keywords = array_unique( array_filter( array_map( 'trim', $focus_keywords ) ) );
+
 			$meta_input = array_merge(
 				$meta_input,
 				array(
 					'rank_math_description'    => $seo_data['meta_description'],
-					'rank_math_focus_keyword'  => $seo_data['primary_keyword'],
+					'rank_math_focus_keyword'  => implode( ',', $focus_keywords ),
 					'rank_math_og_description' => $seo_data['social_excerpt'],
 				)
 			);
 			break;
 	}
+
 	return $meta_input;
 }
 
@@ -77,10 +94,10 @@ function abcc_get_seo_meta_fields( $seo_data ) {
  */
 function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info ) {
 	$site_context = '';
-	if ( ! empty( $site_info['name'] ) ) {
-		$site_context = "This post is for a site called '{$site_info['name']}'";
-		if ( ! empty( $site_info['description'] ) ) {
-			$site_context .= " - {$site_info['description']}";
+	if ( ! empty( $site_info['site_name'] ) ) {
+		$site_context = "This post is for a site called '{$site_info['site_name']}'";
+		if ( ! empty( $site_info['site_description'] ) ) {
+			$site_context .= " - {$site_info['site_description']}";
 		}
 		$site_context .= ". Ensure the title and meta reflect this context.\n\n";
 	}

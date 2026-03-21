@@ -1,4 +1,20 @@
-== Full Changelog (pre-3.1) ==
+== Full Changelog ==
+
+= 3.2.0 =
+* Added:
+  - **Gemini Nano Banana Image Generation**: Native Google image generation with configurable sizes (1K, 2K, 4K) and smart fallback chain.
+  - **OpenAI o-series Reasoning Models**: Support for o4-mini and proper routing for non-"gpt-" model names.
+* Updated:
+  - All models updated to latest versions: GPT-4.1 family, Claude 4.5 family, Gemini 2.5 family.
+  - Added 1M token context window support for GPT-4.1 models.
+* Fixed:
+  - Fixed several internal bugs affecting Gemini model routing and image generation.
+
+= 3.1.0 =
+* Added:
+  - **Complete Onboarding Experience**: 3-step setup with goal-based configuration, visual model selection, interactive API key testing, and automated first post generation.
+* Fixed:
+  - Fixed several internal bugs.
 
 = 3.0.0 =
 * Added:

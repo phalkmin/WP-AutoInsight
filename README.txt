@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 6.9
-Stable tag: 3.4.0
+Stable tag: 3.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -243,6 +243,19 @@ Multiple support channels available:
 
 == Changelog ==
 
+= 3.5.0 =
+* Added:
+  - **RankMath SEO Support**: Full integration with RankMath SEO. Automatically generates focus keywords (comma-separated list), meta descriptions, and social excerpts.
+  - **Keyword Groups**: Organize your content strategy with named groups. Each group can target a specific category and use a custom template. Scheduled generation now rotates through these groups.
+  - **Content Templates**: Create and manage multiple prompt templates. Use placeholders like `{keywords}`, `{title}`, `{tone}`, `{site_name}`, and `{category}` to customize how AI generates your content.
+  - **Advanced Generation Log**: Upgraded content history with "Regenerate" capability. Re-run any previous generation with its original parameters in one click.
+  - **Meta Box Consolidation**: Improved codebase health by consolidating all post-edit tools into a single, efficient registration system.
+* Updated:
+  - Improved RankMath detection and field mapping.
+  - Contextual tooltips now cover Content Length, Scheduling Frequency, and AI Model selection.
+  - Spinner and status feedback in Create AI Post and Regenerate Post now use the shared `abcc-ui.js` component instead of inline browser alerts.
+* Fixed some minor bugs and QoL updates
+
 = 3.4.0 =
 * Added:
   - **Inline API Key Validation**: Real-time verification for all AI providers directly from Advanced Settings. Displays "Verified" or "Failed" status and stores last validation result.
@@ -269,23 +282,7 @@ Multiple support channels available:
 * Fixed:
   - Fixed several internal bugs and onboarding improvements.
 
-= 3.2.0 =
-* Added:
-  - **Gemini Nano Banana Image Generation**: Native Google image generation with configurable sizes (1K, 2K, 4K) and smart fallback chain.
-  - **OpenAI o-series Reasoning Models**: Support for o4-mini and proper routing for non-"gpt-" model names.
-* Updated:
-  - All models updated to latest versions: GPT-4.1 family, Claude 4.5 family, Gemini 2.5 family.
-  - Added 1M token context window support for GPT-4.1 models.
-* Fixed:
-  - Fixed several internal bugs affecting Gemini model routing and image generation.
-
-= 3.1.0 =
-* Added:
-  - **Complete Onboarding Experience**: 3-step setup with goal-based configuration, visual model selection, interactive API key testing, and automated first post generation.
-* Fixed:
-  - Fixed several internal bugs.
-
-For the full changelog of versions 3.0 and earlier, see CHANGELOG.txt.
+For the full changelog of versions 3.2.0 and earlier, see CHANGELOG.txt.
 
 
 == Support ==
