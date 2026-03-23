@@ -46,7 +46,7 @@ class ABCC_Plugin {
 	 * Constructor
 	 */
 	public function __construct() {
-		$this->version = '3.1.0';
+		$this->version = '3.5.0';
 		$this->init_hooks();
 	}
 
@@ -68,6 +68,61 @@ class ABCC_Plugin {
 
 		// Onboarding
 		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
+
+		// Migrations
+		add_action( 'admin_init', array( $this, 'run_migrations' ) );
+	}
+
+	/**
+	 * Run database migrations.
+	 */
+	public function run_migrations() {
+		$installed_version = get_option( 'abcc_version', '1.0.0' );
+
+		if ( version_compare( $installed_version, '3.3.0', '<' ) ) {
+			// Upgrade from pre-3.3.0.
+			if ( get_option( 'openai_keywords' ) !== false ) {
+				if ( get_option( 'abcc_draft_first' ) === false ) {
+					update_option( 'abcc_draft_first', 0 ); // Unchecked
+				}
+			}
+
+			update_option( 'abcc_version', '3.3.0' );
+		}
+
+		if ( version_compare( $installed_version, '3.5.0', '<' ) ) {
+			// 1. Create default templates.
+			if ( get_option( 'abcc_content_templates' ) === false ) {
+				$default_templates = array(
+					'default' => array(
+						'name'   => 'Default Template',
+						'prompt' => "Write a {tone} blog post with the following title: {title}\n\nUsing these keywords: {keywords}",
+					),
+				);
+				update_option( 'abcc_content_templates', $default_templates );
+			}
+
+			// 2. Migrate flat keywords to groups.
+			if ( get_option( 'abcc_keyword_groups' ) === false ) {
+				$old_keywords        = get_option( 'openai_keywords', '' );
+				$selected_categories = get_option( 'openai_selected_categories', array() );
+
+				// Convert string keywords to array.
+				$keyword_array = array_filter( array_map( 'trim', explode( "\n", $old_keywords ) ) );
+
+				$default_groups = array(
+					array(
+						'name'     => 'Default Group',
+						'keywords' => $keyword_array,
+						'category' => ! empty( $selected_categories ) ? $selected_categories[0] : 0,
+						'template' => 'default',
+					),
+				);
+				update_option( 'abcc_keyword_groups', $default_groups );
+			}
+
+			update_option( 'abcc_version', '3.5.0' );
+		}
 	}
 
 	/**
@@ -89,12 +144,12 @@ class ABCC_Plugin {
 			);
 		}
 
-		if ( version_compare( $wp_version, '5.6', '<' ) ) {
+		if ( version_compare( $wp_version, '6.8', '<' ) ) {
 			deactivate_plugins( plugin_basename( dirname( __DIR__ ) . '/auto-post.php' ) );
 			wp_die(
 				sprintf(
 					/* translators: %s: WordPress version */
-					esc_html__( 'WP-AutoInsight requires WordPress version 5.6 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-blog-content-creator' ),
+					esc_html__( 'WP-AutoInsight requires WordPress version 6.8 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-blog-content-creator' ),
 					esc_html( $wp_version )
 				),
 				'Plugin Activation Error',
@@ -112,12 +167,22 @@ class ABCC_Plugin {
 
 	/**
 	 * Enqueue scripts and styles
+	 *
+	 * @param string $hook Current admin page hook.
 	 */
-	public function enqueue_scripts() {
+	public function enqueue_scripts( $hook ) {
+		// abcc-ui.js provides the shared status/spinner component used by meta boxes
+		// on post edit screens, so it loads on all admin pages.
+		wp_enqueue_script( 'abcc-ui-script', plugins_url( '/js/abcc-ui.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+
+		// Everything else is only needed on the plugin's own settings page.
+		if ( 'toplevel_page_automated-blog-content-creator-post' !== $hook ) {
+			return;
+		}
+
 		wp_enqueue_style( 'select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', array(), '4.1.0-rc.0' );
-		wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', 'jquery', '4.1.0-rc.0', true );
-		wp_enqueue_style( 'abcc-admin-style', plugins_url( '/css/admin-style.css', __DIR__ ), array(), $this->version, true );
-		wp_enqueue_script( 'abcc-admin-script', plugins_url( '/js/admin-script.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+		wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array( 'jquery' ), '4.1.0-rc.0', true );
+		wp_enqueue_style( 'abcc-admin-style', plugins_url( '/css/admin-style.css', __DIR__ ), array(), $this->version );
 	}
 
 	/**

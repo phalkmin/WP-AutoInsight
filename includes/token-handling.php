@@ -18,42 +18,31 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function abcc_get_model_context_window( $model ) {
 	$model_limits = array(
-		'gpt-3.5-turbo'              => 16385,
-		'gpt-4-turbo'                => 128000,
-		'gpt-4-turbo-2024-04-09'     => 128000,
-		'gpt-4'                      => 8192,
-		'gpt-4.5-preview'            => 128000,
-		'gpt-4.5-preview-2025-02-27' => 128000,
-		'gpt-4o'                     => 128000,
-		'gpt-4o-2024-05-13'          => 128000,
-		'gpt-4o-2024-08-06'          => 128000,
-		'gpt-4o-2024-11-20'          => 128000,
-		'gpt-4o-mini'                => 128000,
-		'gpt-4o-mini-2024-07-18'     => 128000,
-		'gpt-4-turbo-preview'        => 128000,
-		// Original Claude models (for backward compatibility)
-		'claude-3-haiku'             => 200000,
-		'claude-3-sonnet'            => 200000,
-		'claude-3-opus'              => 200000,
-		// New Claude models with specific versions
-		'claude-3-haiku-20240307'    => 200000,
-		'claude-3-sonnet-20240229'   => 200000,
-		'claude-3-opus-20240229'     => 200000,
-		'claude-3.5-haiku-20241022'  => 200000,
-		'claude-3.5-sonnet-20241022' => 200000,
-		'claude-3.7-sonnet-20250219' => 200000,
-		'claude-3-5-haiku-20241022'  => 200000,
-		'claude-sonnet-4-20250514'   => 200000,
-		// Gemini models
-		'gemini-pro'                 => 32768,  // Legacy compatibility
-		'gemini-1.5-flash'           => 1048576, // 1M tokens
-		'gemini-1.5-flash-8b'        => 1048576, // 1M tokens
-		'gemini-1.5-pro'             => 2097152, // 2M tokens
-		'gemini-2.0-flash'           => 1048576, // 1M tokens
-		'gemini-2.0-flash-lite'      => 1048576, // 1M tokens
-		'gemini-2.0-pro-exp-02-05'   => 2048576, // 2M tokens
-		'gemini-1.5-pro-latest'      => 2097152, // 2M tokens
-		'gemini-2.5-pro-preview'     => 2097152,
+		// OpenAI GPT-4.1 models (1M context).
+		'gpt-4.1'                 => 1000000,
+		'gpt-4.1-2025-04-14'      => 1000000,
+		'gpt-4.1-mini'            => 1000000,
+		'gpt-4.1-mini-2025-04-14' => 1000000,
+		'gpt-4.1-nano'            => 1000000,
+		'gpt-4.1-nano-2025-04-14' => 1000000,
+		// OpenAI o-series reasoning models.
+		'o4-mini'                 => 200000,
+		'o4-mini-2025-04-16'      => 200000,
+		// Claude 4.5 models (current).
+		'claude-haiku-4-5'           => 200000,
+		'claude-haiku-4-5-20251001'  => 200000,
+		'claude-sonnet-4-5'          => 200000,
+		'claude-sonnet-4-5-20250929' => 200000,
+		'claude-opus-4-5'            => 200000,
+		'claude-opus-4-5-20251101'   => 200000,
+		// Gemini 2.5 models (current).
+		'gemini-2.5-flash-lite' => 1048576, // 1M tokens.
+		'gemini-2.5-flash'      => 1048576, // 1M tokens.
+		'gemini-2.5-pro'        => 1048576, // 1M tokens.
+		// Perplexity Sonar models.
+		'sonar'                => 128000,
+		'sonar-pro'            => 200000,
+		'sonar-reasoning-pro'  => 128000,
 	);
 
 	return $model_limits[ $model ] ?? 4096;

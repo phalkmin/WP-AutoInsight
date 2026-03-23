@@ -38,7 +38,7 @@ function abcc_create_block( $block_name, $attributes = array(), $content = '' ) 
 		return sprintf(
 			'<!-- wp:paragraph%s --><p>%s</p><!-- /wp:paragraph -->',
 			$attributes_string,
-			esc_html( $content )
+			wp_kses_post( $content )
 		);
 	}
 
@@ -92,11 +92,21 @@ function abcc_create_blocks( $text_array ) {
 			continue;
 		}
 
-		// Handle regular paragraphs.
+		// Handle regular paragraphs (allow anchor and superscript tags for citations).
 		$blocks[] = array(
 			'name'       => 'paragraph',
 			'attributes' => array(),
-			'content'    => wp_strip_all_tags( $item ),
+			'content'    => wp_kses(
+				$item,
+				array(
+					'a'   => array(
+						'href'   => array(),
+						'target' => array(),
+						'rel'    => array(),
+					),
+					'sup' => array(),
+				)
+			),
 		);
 	}
 	return $blocks;

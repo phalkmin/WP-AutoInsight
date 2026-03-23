@@ -81,10 +81,11 @@ function abcc_handle_audio_transcription() {
 	}
 
 	try {
-		// Get the API key.
-		$api_key = abcc_check_api_key();
+		// Audio transcription always uses OpenAI Whisper — fetch the OpenAI key directly
+		// regardless of which text generation provider the user has selected.
+		$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
 		if ( empty( $api_key ) ) {
-			throw new Exception( __( 'OpenAI API key not configured', 'automated-blog-content-creator' ) );
+			throw new Exception( __( 'An OpenAI API key is required for audio transcription. Please add one in Advanced Settings.', 'automated-blog-content-creator' ) );
 		}
 
 		// Validate file.
@@ -266,7 +267,7 @@ function abcc_create_post_from_audio_transcript( $transcript, $attachment_id ) {
 
 	// Use existing content generation to enhance the transcript.
 	$api_key       = abcc_check_api_key();
-	$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+	$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 	$char_limit    = get_option( 'openai_char_limit', 200 );
 
 	// Create enhanced content prompt.
@@ -348,7 +349,8 @@ Format requirements:
 			$keywords  = explode( ' ', wp_trim_words( $transcript, 10 ) );
 			$image_url = abcc_generate_featured_image( $prompt_select, $keywords );
 			if ( $image_url ) {
-				abcc_set_featured_image( $post_id, $image_url );
+				$alt_text = get_the_title( $post_id );
+				abcc_set_featured_image( $post_id, $image_url, $alt_text );
 			}
 		} catch ( Exception $e ) {
 			error_log( 'Featured image generation failed for audio post: ' . $e->getMessage() );

@@ -1,0 +1,162 @@
+== Full Changelog ==
+
+= 3.2.0 =
+* Added:
+  - **Gemini Nano Banana Image Generation**: Native Google image generation with configurable sizes (1K, 2K, 4K) and smart fallback chain.
+  - **OpenAI o-series Reasoning Models**: Support for o4-mini and proper routing for non-"gpt-" model names.
+* Updated:
+  - All models updated to latest versions: GPT-4.1 family, Claude 4.5 family, Gemini 2.5 family.
+  - Added 1M token context window support for GPT-4.1 models.
+* Fixed:
+  - Fixed several internal bugs affecting Gemini model routing and image generation.
+
+= 3.1.0 =
+* Added:
+  - **Complete Onboarding Experience**: 3-step setup with goal-based configuration, visual model selection, interactive API key testing, and automated first post generation.
+* Fixed:
+  - Fixed several internal bugs.
+
+= 3.0.0 =
+* Added:
+ - Complete Admin Interface Redesign: New tabbed interface with dedicated sections for Content Settings, Advanced Settings, AI Models, Audio Transcription, and About
+ - Audio Transcription Feature: Full OpenAI Whisper integration for converting audio files to blog posts
+   - Support for multiple audio formats (MP3, WAV, M4A, WebM, FLAC, MP4)
+   - Language selection for transcription
+   - Two-step process: transcribe-only or transcribe-and-create-post
+   - Audio player embedded in generated posts
+ - AI Infographic Generation: Create visual infographics from blog post content using AI
+   - Analyzes post content to generate visual descriptions
+   - Creates professional infographics using DALL-E or Stability AI
+   - Saves directly to WordPress Media Library
+ - Enhanced Model Selection Interface: Visual model cards with cost indicators
+   - Interactive card-based selection instead of dropdown
+   - Clear cost tier indicators (Economy/Standard/Premium)
+ - Smart Post Type Selection: Configure which post types show AI content tools
+ - Advanced Admin Buttons:
+   - "Create AI Post" button on post list screens
+   - "Rewrite with AI" button in post editor
+   - "Create Infographic" button for existing posts
+ - Enhanced Error Handling: More detailed error messages and logging throughout
+
+* Updated:
+ - Model Offerings Updated:
+   - OpenAI: Added GPT-4 Turbo Preview, updated model descriptions
+   - Claude: Updated to Claude 3.5 Haiku, Claude 3.7 Sonnet, and Claude Sonnet 4
+   - Gemini: Added Gemini 2.0 Flash, Gemini 1.5 Pro Latest, and Gemini 2.5 Pro Preview
+ - Content Generation Flow: Improved prompt engineering for better content structure
+ - Token Handling: Enhanced token calculation and management across all AI models
+ - Admin Scripts: Completely refactored JavaScript for better user experience
+ - CSS Styling: Modern, responsive design with improved visual hierarchy
+
+* Fixed:
+ - Model Compatibility: Better backward compatibility for existing model selections
+ - Content Formatting: Better HTML structure and block generation
+ - SEO Integration: Enhanced metadata generation and validation
+ - Performance: Optimized AJAX calls and reduced redundant API requests
+
+* Technical Improvements:
+ - Code Organization: Better file structure and separation of concerns
+ - WordPress Standards: Improved adherence to WordPress coding standards
+ - Documentation: Enhanced PHPDoc comments and inline documentation
+ - Accessibility: Better keyboard navigation and screen reader support
+ - Internationalization: Improved translation readiness throughout the plugin
+
+= 2.1 =
+* Added:
+  - Advanced Token Management: Better control over content length with intelligent token allocation across different AI models
+  - SEO Integration: Automatic generation of SEO metadata with direct Yoast SEO plugin support
+  - Improved Content Structure: Enhanced HTML output with proper heading hierarchy
+  - Real-time Token Feedback: See estimated token usage before generating content
+  - More Reliable AI Integration: Better error handling and model compatibility
+
+* Changed:
+  - Refactored content generation for better HTML structure
+  - Improved model context window handling for each AI service
+  - Enhanced error handling and logging system
+  - Better prompt management for consistent output
+  - Updated admin interface with token usage indicators
+
+* Fixed:
+  - Content formatting issues with HTML tags
+  - Token limit calculation accuracy
+  - Model selection and API handling edge cases
+  - SEO metadata integration reliability
+  - HTML structure validation and sanitization
+
+= 2.0 =
+* Added:
+  - Claude 3 AI model integration (Haiku, Sonnet, and Opus)
+  - Enhanced image generation with DALL-E 3
+  - Stability AI integration as fallback
+  - Cost-aware model selection interface
+  - Better security features
+
+* Changed:
+  - Refactored code for better maintainability
+  - Improved API handling architecture
+  - Enhanced content generation quality
+
+* Fixed:
+  - Various bug fixes and improvements
+  - Better error handling
+  - Enhanced stability
+
+= 1.9 =
+* Added:
+  - Support for selecting GPT-3.5, GPT-4 and GPT-4o models for content generation
+  - Users of the old GPT-3.5 won't be affected by the change as there is backwards compatibility
+  - Enhanced plugin settings UI for better user experience and clearer model selection
+
+* Fixed:
+  - Code refinements for better modularity and maintainability
+  - Comprehensive error handling and logging
+  - Updated documentation to guide users through new features and configurations
+
+= 1.6 =
+* Fixed:
+  - Select2 integration
+  - Tone Select keeping custom value saved
+
+* Added:
+  - Minor description of some options
+
+= 1.5 =
+* Changed:
+  - Code linting and cleanup
+  - Better form usability
+  - Minor quality of life changes
+
+= 1.4 =
+* Added:
+  - Gemini API — Now you can use Google AI to create your posts!
+  - A tone selector so you can define how the post should be written
+
+* Changed:
+  - Now it's possible to use wp-config variables to store the OpenAI and GeminiAI API keys
+  - The admin menu and form was remade for easier navigation
+  - Minor changes for better usage
+
+= 1.0 =
+* Added:
+  - Implemented image generation using OpenAI's DALL-E model
+  - Option to select categories for posts
+  - Email notifications when a new post is created automatically
+
+* Changed:
+  - Refactored code for better readability and maintainability
+  - Updated UI/UX for the settings page
+  - Better scheduled post generation (hourly, daily, weekly)
+  - Revised error handling and logging
+
+* Fixed:
+  - Resolved issues related to API key validation and error handling
+  - Fixed bugs reported by users in the previous version
+
+= 0.9 =
+- Bug fixes and quality of life updates
+
+= 0.8 =
+- WordPress Review Guidelines fixes
+
+= 0.5 =
+- Initial release

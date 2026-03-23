@@ -115,7 +115,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'OpenAI', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'GPT-4, GPT-3.5 • Best for creative content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'GPT-4.1, o4-mini • Best for creative content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status openai-status"></div>
 					</div>
@@ -172,7 +172,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Claude', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Claude 3.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'Claude 4.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status claude-status"></div>
 					</div>
@@ -229,7 +229,7 @@ function abcc_show_onboarding_page() {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Google Gemini', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Gemini 2.0 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php esc_html_e( 'Gemini 2.5 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
 						</div>
 						<div class="abcc-provider-status gemini-status"></div>
 					</div>
@@ -269,6 +269,63 @@ function abcc_show_onboarding_page() {
 										<span class="dashicons dashicons-yes-alt"></span>
 										<strong><?php esc_html_e( 'Great news:', 'automated-blog-content-creator' ); ?></strong>
 										<?php esc_html_e( 'Gemini offers generous free usage limits - perfect for getting started!', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<!-- Perplexity -->
+				<div class="abcc-api-provider" data-provider="perplexity">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+							</svg>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'Perplexity', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'Sonar Pro - Web-grounded content with citations', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status perplexity-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'PERPLEXITY_API' ) && ! empty( PERPLEXITY_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security!', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="perplexity" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="perplexity-api-key" placeholder="<?php esc_attr_e( 'pplx-...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="perplexity">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="perplexity">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your Perplexity API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="perplexity" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Visit', 'automated-blog-content-creator' ); ?> <a href="https://www.perplexity.ai/settings/api" target="_blank">perplexity.ai/settings/api</a></li>
+										<li><?php esc_html_e( 'Sign up for an account or log in', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Navigate to the API section in Settings', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Generate a new API key', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "pplx-...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note">
+										<span class="dashicons dashicons-info"></span>
+										<strong><?php esc_html_e( 'Note:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'Perplexity API requires a paid plan. Content includes web citations automatically.', 'automated-blog-content-creator' ); ?>
 									</div>
 								</div>
 							</div>
@@ -448,8 +505,9 @@ function abcc_has_any_api_key() {
 	$openai_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
 	$claude_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
 	$gemini_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
+	$perplexity_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
 
-	return ! empty( $openai_key ) || ! empty( $claude_key ) || ! empty( $gemini_key );
+	return ! empty( $openai_key ) || ! empty( $claude_key ) || ! empty( $gemini_key ) || ! empty( $perplexity_key );
 }
 
 /**
@@ -497,6 +555,11 @@ function abcc_check_existing_user_on_activation() {
 function abcc_handle_onboarding_goal() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
 
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	$goal  = sanitize_text_field( wp_unslash( $_POST['goal'] ) );
 	$goals = abcc_get_onboarding_goals();
 
@@ -538,6 +601,9 @@ function abcc_handle_onboarding_test_api() {
 			case 'gemini':
 				$api_key = defined( 'GEMINI_API' ) ? GEMINI_API : '';
 				break;
+			case 'perplexity':
+				$api_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : '';
+				break;
 		}
 	}
 
@@ -561,11 +627,15 @@ function abcc_handle_onboarding_test_api() {
 		case 'gemini':
 			$test_result = abcc_test_gemini_connection( $api_key );
 			break;
+		case 'perplexity':
+			$test_result = abcc_test_perplexity_connection( $api_key );
+			break;
 	}
 
 	if ( $test_result['success'] ) {
-		// Save the API key only if it's not from wp-config
-		if ( ! $is_wp_config ) {
+		// Save the API key only if it's not from wp-config and provider is a known valid value.
+		$valid_providers = array( 'openai', 'claude', 'gemini', 'perplexity' );
+		if ( ! $is_wp_config && in_array( $provider, $valid_providers, true ) ) {
 			update_option( $provider . '_api_key', $api_key );
 		}
 
@@ -593,10 +663,15 @@ add_action( 'wp_ajax_abcc_onboarding_test_api', 'abcc_handle_onboarding_test_api
 function abcc_handle_onboarding_first_post() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
 
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	try {
 		$api_key       = abcc_check_api_key();
 		$keywords      = array( 'welcome', 'hello world', 'getting started' );
-		$prompt_select = get_option( 'prompt_select', 'gpt-3.5-turbo' );
+		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
 		$tone          = get_option( 'openai_tone', 'friendly' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 
@@ -644,6 +719,11 @@ add_action( 'wp_ajax_abcc_onboarding_first_post', 'abcc_handle_onboarding_first_
 function abcc_handle_onboarding_skip() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
 
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	update_option( 'abcc_onboarding_completed', true );
 	wp_send_json_success( array( 'message' => 'Onboarding skipped' ) );
 }
@@ -667,7 +747,7 @@ function abcc_test_openai_connection( $api_key ) {
 				),
 			),
 			array(
-				'model'      => 'gpt-3.5-turbo',
+				'model'      => 'gpt-4.1-mini',
 				'max_tokens' => 5,
 			)
 		);
@@ -716,7 +796,7 @@ function abcc_test_claude_connection( $api_key ) {
 		);
 
 		$body = array(
-			'model'      => 'claude-3-5-haiku-20241022',
+			'model'      => 'claude-haiku-4-5-20251001',
 			'max_tokens' => 5,
 			'messages'   => array(
 				array(
@@ -798,9 +878,9 @@ function abcc_test_gemini_connection( $api_key ) {
 	try {
 		$gemini = new \GeminiAPI\Client( $api_key );
 
-		// Try with the beta version for 2.0 models
-		$response = $gemini->withV1BetaVersion()
-			->generativeModel( 'gemini-2.0-flash-exp' )
+		// Use stable 2.5 model for testing.
+		$response = $gemini
+			->generativeModel( 'gemini-2.5-flash' )
 			->generateContent( new \GeminiAPI\Resources\Parts\TextPart( 'Hello' ) );
 
 		if ( empty( $response->text() ) ) {
@@ -855,3 +935,86 @@ function abcc_onboarding_completed_notice() {
 	}
 }
 add_action( 'admin_notices', 'abcc_onboarding_completed_notice' );
+
+/**
+ * Test Perplexity API connection.
+ *
+ * @since 3.3.0
+ * @param string $api_key The API key to test.
+ * @return array Whether the connection test succeeded.
+ */
+function abcc_test_perplexity_connection( $api_key ) {
+	try {
+		$response = wp_remote_post(
+			'https://api.perplexity.ai/chat/completions',
+			array(
+				'headers' => array(
+					'Content-Type'  => 'application/json',
+					'Authorization' => 'Bearer ' . $api_key,
+				),
+				'body'    => wp_json_encode(
+					array(
+						'model'      => 'sonar',
+						'max_tokens' => 5,
+						'messages'   => array(
+							array(
+								'role'    => 'user',
+								'content' => 'Hello',
+							),
+						),
+					)
+				),
+				'timeout' => 30,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'error'   => sprintf(
+					/* translators: %s: Error message */
+					__( 'Network error: %s', 'automated-blog-content-creator' ),
+					$response->get_error_message()
+				),
+			);
+		}
+
+		$response_code = wp_remote_retrieve_response_code( $response );
+		$response_body = wp_remote_retrieve_body( $response );
+
+		if ( 200 !== $response_code ) {
+			$error_data = json_decode( $response_body, true );
+			$error_msg  = isset( $error_data['error']['message'] ) ? $error_data['error']['message'] : 'Unknown API error';
+
+			return array(
+				'success' => false,
+				'error'   => sprintf(
+					/* translators: 1: HTTP status code, 2: Error message */
+					__( 'Perplexity API error (%1$d): %2$s', 'automated-blog-content-creator' ),
+					$response_code,
+					$error_msg
+				),
+			);
+		}
+
+		$data = json_decode( $response_body, true );
+		if ( ! isset( $data['choices'] ) || ! is_array( $data['choices'] ) ) {
+			return array(
+				'success' => false,
+				'error'   => __( 'Unexpected response format from Perplexity API', 'automated-blog-content-creator' ),
+			);
+		}
+
+		return array( 'success' => true );
+
+	} catch ( Exception $e ) {
+		return array(
+			'success' => false,
+			'error'   => sprintf(
+				/* translators: %s: Error message */
+				__( 'Perplexity connection failed: %s', 'automated-blog-content-creator' ),
+				$e->getMessage()
+			),
+		);
+	}
+}

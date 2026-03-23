@@ -46,14 +46,26 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 		// Generate image using determined service.
 		switch ( $image_service['service'] ) {
 			case 'openai':
-				$images = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1 );
+				$openai_size    = get_option( 'abcc_openai_image_size', '1024x1024' );
+				$openai_quality = get_option( 'abcc_openai_image_quality', 'standard' );
+				$images         = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1, $openai_size, $openai_quality );
 				if ( ! empty( $images ) && is_array( $images ) ) {
 					return $images[0];
 				}
 				break;
 
 			case 'stability':
-				$result = abcc_stability_generate_images( $prompt, 1, $image_service['api_key'] );
+				$stability_size = get_option( 'abcc_stability_image_size', '1024x1024' );
+				$result         = abcc_stability_generate_images( $prompt, 1, $image_service['api_key'], $stability_size );
+				if ( false !== $result ) {
+					return $result;
+				}
+				break;
+
+			case 'gemini':
+				$gemini_image_model = get_option( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
+				$gemini_image_size  = get_option( 'abcc_gemini_image_size', '2K' );
+				$result             = abcc_gemini_generate_images( $image_service['api_key'], $prompt, $gemini_image_model, $gemini_image_size );
 				if ( false !== $result ) {
 					return $result;
 				}
@@ -74,9 +86,10 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
  *
  * @param int    $post_id Post ID.
  * @param string $image_url Image URL.
+ * @param string $alt_text Optional alt text.
  * @return int|false Attachment ID on success, false on failure.
  */
-function abcc_set_featured_image( $post_id, $image_url ) {
+function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 	try {
 		if ( ! function_exists( 'media_sideload_image' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/media.php';
@@ -89,6 +102,11 @@ function abcc_set_featured_image( $post_id, $image_url ) {
 
 		if ( is_wp_error( $attachment_id ) ) {
 			throw new Exception( $attachment_id->get_error_message() );
+		}
+
+		// Set alt text if provided.
+		if ( ! empty( $alt_text ) ) {
+			update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
 		}
 
 		// Set as featured image.

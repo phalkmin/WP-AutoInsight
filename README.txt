@@ -1,59 +1,46 @@
 === WP-AutoInsight ===
 Contributors: phalkmin
-Tags: openai, anthropic, google-ai, generator, ai-content
-Requires at least: 5.8
-Tested up to: 6.7
-Stable tag: 3.1.0
+Tags: openai, anthropic, google-ai, perplexity, ai-content
+Requires at least: 6.8
+Tested up to: 6.9
+Stable tag: 3.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Short Description: Automatically create blog posts, rewrite content, and generate infographics using OpenAI, Anthropic Claude, and Google AI APIs.
+Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
 
-
-= Important Notice for Version 3.0.0 =
-
-**BREAKING CHANGES**: This major update includes significant changes and new features that may affect your current configuration. Please review and reconfigure (if needed) your settings after updating:
-
-1. **Backup your settings** before updating (note down your API keys, keywords, and preferences)
-3. **Reconfigure your AI model selection** using the new visual interface
-4. **Review Content Settings** for any missing configurations
-5. **Test content generation** before relying on scheduled posts
-
-We recommend updating on a staging site first. Some custom integrations may require updates due to function signature changes.
 
 == Description ==
 
-WP-AutoInsight revolutionizes content creation by harnessing multiple AI platforms including OpenAI, Anthropic's Claude, and Google's Gemini. Create SEO-optimized blog posts automatically with advanced AI models while maintaining full control over tone, style, and scheduling.
+WP-AutoInsight brings AI content generation into your WordPress dashboard without a platform subscription attached. It isn't a SaaS or another subscription service. You pay for what you use. Connect your OpenAI, Anthropic, Google, or Perplexity accounts to the plugin, and your site will generate content at low cost, for a fraction of what most SaaS tools charge $50-100 per month.
+
+Whether you're a small business keeping a blog active, an agency managing content for clients, or a blogger who'd rather talk through ideas than type them, WP-AutoInsight creates, you review, and *you* publish.
 
 = Key Features =
 
-* **Multi-Platform AI Integration**
-  - OpenAI Models (GPT-3.5, GPT-4, GPT-4o, GPT-4.5 Preview)
-  - Claude 3, 3.5, and 3.7 Models (Haiku, Sonnet, Opus)
-  - Gemini 1.5 and 2.0 Models (Flash, Flash-Lite, Pro)
-  - Image generation capabilities with DALL-E 3 and Stability AI
-  - Cost-aware model selection with clear pricing tiers
+* **Generate content in more ways than you'd expect**
+  - Write full blog posts from a keyword list, automatically or on demand
+  - Turn voice notes or meeting recordings into draft posts. Upload audio, get a structured article
+  - Create infographics from any existing post, saved directly to your Media Library
+  - Pull research-backed content through Perplexity Sonar, complete with clickable source citations
 
-* **Advanced Image Generation**
-  - Primary: DALL-E 3 integration for high-quality featured images
-  - Fallback: Stability AI support for reliable image generation
-  - Smart service selection based on your chosen text model
-  - Customizable image generation preferences
+* **Choose the AI. Pay the AI directly.**
+  - Supports OpenAI, Anthropic Claude, Google Gemini, and Perplexity models. Switch models anytime you want
+  - Each model shows an estimated cost per post before you choose it
+  - Your API keys, their actual rates. No markup, no lock-in
 
-* **Content Customization**
-  - Multiple writing tones: Business, Academic, Funny, Epic, Personal, or Custom
-  - Category-aware content generation
-  - SEO-optimized output with proper HTML structure
-  - Adjustable token limits for content length control
+* **Nothing publishes without your approval**
+  - Content saves as a draft by default. Review before anything goes live
+  - Content History tracks every generated post: which model, which status, when
+  - Set tone, keywords, categories, and length once. The plugin will follow your rules
 
-* **Flexible Post Management**
-  - Automated scheduling (hourly, daily, or weekly)
-  - Manual post generation with live preview
-  - Email notifications for new content
+* **Works with everything already on your site**
+  - Native Gutenberg block output. Not an HTML blob in a classic editor
+  - Yoast SEO and RankMath: focus keywords, meta descriptions, and social excerpts generated automatically
+  - Featured images via DALL-E 3, Stability AI, or Gemini image generation
 
-* **Enhanced Security**
-  - Support for wp-config.php API key storage
-  - Secure endpoint handling
-  - Input sanitization and validation
+* **For developers**
+  - Store API keys in wp-config.php for maximum security
+  - Configurable per post type, clean option names, no proprietary lock-in
 
 == Installation ==
 
@@ -68,8 +55,9 @@ WP-AutoInsight revolutionizes content creation by harnessing multiple AI platfor
 = API Keys =
 You'll need at least one of the following API keys:
 * OpenAI API key (for GPT models and DALL-E)
-* Claude API key (for Claude 3 models)
+* Claude API key (for Claude 4.5 models)
 * Gemini API key (for Google's AI)
+* Perplexity API key (for web-grounded content with citations)
 * Stability AI key (optional, for alternative image generation)
 
 For enhanced security, add your API keys to wp-config.php:
@@ -77,6 +65,7 @@ For enhanced security, add your API keys to wp-config.php:
 define('OPENAI_API', 'your-key-here');
 define('CLAUDE_API', 'your-key-here');
 define('GEMINI_API', 'your-key-here');
+define('PERPLEXITY_API', 'your-key-here');
 define('STABILITY_API', 'your-key-here');
 ```
 
@@ -93,7 +82,7 @@ define('STABILITY_API', 'your-key-here');
 
 = How do I get an OpenAI API key? =
 
-To use OpenAI models (GPT-3.5, GPT-4, GPT-4o), sign up at OpenAI and get your API key:
+To use OpenAI models (GPT-4.1, o4-mini), sign up at OpenAI and get your API key:
 1. Go to https://platform.openai.com/api-keys
 2. Sign up or log in to your account
 3. Click "Create new secret key"
@@ -209,7 +198,12 @@ Each provider offers different strengths:
 - **OpenAI**: Excellent for creative and versatile content
 - **Claude**: Great for analytical and structured content
 - **Gemini**: Strong at factual and research-based content
+- **Perplexity**: Generates web-grounded content with real source citations, ideal for research-heavy or news-adjacent posts
 - **Cost Tiers**: Economy (fast/cheap), Standard (balanced), Premium (highest quality)
+
+= How does Perplexity work differently from the other providers? =
+
+Perplexity searches the web in real time before generating content, then includes source citations alongside the text. Instead of generating from training data alone, it pulls from current sources and references them in the post. You can choose how citations appear: as inline hyperlinks, a references section at the bottom, or both. You can also set a recency filter to limit sources to the last day, week, month, or year. A Perplexity API key with an active paid plan is required.
 
 = Can I use multiple AI services together? =
 
@@ -237,7 +231,7 @@ WP-AutoInsight includes robust error handling:
 = How do I get support? =
 
 Multiple support channels available:
-- **WordPress Forum**: https://wordpress.org/support/plugin/wp-autoinsight/
+- **WordPress Forum**: https://wordpress.org/support/plugin/automated-blog-content-creator/
 - **GitHub Issues**: https://github.com/phalkmin/wp-autoinsight
 - **Direct Contact**: phalkmin@protonmail.com
 - **Documentation**: Check the About tab for tutorials and guides
@@ -249,180 +243,52 @@ Multiple support channels available:
 
 == Changelog ==
 
-= 3.1.0 =
+= 3.5.0 =
 * Added:
-  - **Complete Onboarding Experience**: New user onboarding with 3-step setup process
-    - Goal-based configuration (Personal Blog, Business, News, Creative content types)
-    - Visual AI model selection with cost indicators
-    - Interactive API key testing with detailed error messages
-    - Automated first post generation to verify setup
-    - Step-by-step documentation for obtaining API keys from all providers
-    - Better error handling with specific failure reasons
-  - **Smart Configuration**: 
-    - Automatic plugin configuration based on user goals
-    - Default model selection per provider (GPT-3.5, Claude Haiku, Gemini Flash)
-    - Backwards compatibility ensuring existing users never see onboarding
-
-* Fixed:
-  - On rewriting, the token count was wrong, causing the returned post to be smaller than the current post
-
-* Technical Improvements:
-  - **WordPress Standards**: Enhanced adherence to WordPress coding standards
-
-
-= 3.0.0 =
-* Added:
- - Complete Admin Interface Redesign: New tabbed interface with dedicated sections for Content Settings, Advanced Settings, AI Models, Audio Transcription, and About
- - Audio Transcription Feature: Full OpenAI Whisper integration for converting audio files to blog posts
-   - Support for multiple audio formats (MP3, WAV, M4A, WebM, FLAC, MP4)
-   - Language selection for transcription
-   - Two-step process: transcribe-only or transcribe-and-create-post
-   - Audio player embedded in generated posts
- - AI Infographic Generation: Create visual infographics from blog post content using AI
-   - Analyzes post content to generate visual descriptions
-   - Creates professional infographics using DALL-E or Stability AI
-   - Saves directly to WordPress Media Library
- - Enhanced Model Selection Interface: Visual model cards with cost indicators
-   - Interactive card-based selection instead of dropdown
-   - Clear cost tier indicators (Economy/Standard/Premium)
- - Smart Post Type Selection: Configure which post types show AI content tools
- - Advanced Admin Buttons: 
-   - "Create AI Post" button on post list screens
-   - "Rewrite with AI" button in post editor
-   - "Create Infographic" button for existing posts
- - Enhanced Error Handling: More detailed error messages and logging throughout
-
+  - **RankMath SEO Support**: Full integration with RankMath SEO. Automatically generates focus keywords (comma-separated list), meta descriptions, and social excerpts.
+  - **Keyword Groups**: Organize your content strategy with named groups. Each group can target a specific category and use a custom template. Scheduled generation now rotates through these groups.
+  - **Content Templates**: Create and manage multiple prompt templates. Use placeholders like `{keywords}`, `{title}`, `{tone}`, `{site_name}`, and `{category}` to customize how AI generates your content.
+  - **Advanced Generation Log**: Upgraded content history with "Regenerate" capability. Re-run any previous generation with its original parameters in one click.
+  - **Meta Box Consolidation**: Improved codebase health by consolidating all post-edit tools into a single, efficient registration system.
 * Updated:
- - Model Offerings Updated: 
-   - OpenAI: Added GPT-4 Turbo Preview, updated model descriptions
-   - Claude: Updated to Claude 3.5 Haiku, Claude 3.7 Sonnet, and Claude Sonnet 4
-   - Gemini: Added Gemini 2.0 Flash, Gemini 1.5 Pro Latest, and Gemini 2.5 Pro Preview
- - Content Generation Flow: Improved prompt engineering for better content structure
- - Token Handling: Enhanced token calculation and management across all AI models
- - Admin Scripts: Completely refactored JavaScript for better user experience
- - CSS Styling: Modern, responsive design with improved visual hierarchy
+  - Improved RankMath detection and field mapping.
+  - Contextual tooltips now cover Content Length, Scheduling Frequency, and AI Model selection.
+  - Spinner and status feedback in Create AI Post and Regenerate Post now use the shared `abcc-ui.js` component instead of inline browser alerts.
+* Fixed some minor bugs and QoL updates
 
-* Fixed:
- - Model Compatibility: Better backward compatibility for existing model selections
- - Content Formatting: Better HTML structure and block generation
- - SEO Integration: Enhanced metadata generation and validation
- - Performance: Optimized AJAX calls and reduced redundant API requests
-
-* Technical Improvements:
- - Code Organization: Better file structure and separation of concerns
- - WordPress Standards: Improved adherence to WordPress coding standards
- - Documentation: Enhanced PHPDoc comments and inline documentation
- - Accessibility: Better keyboard navigation and screen reader support
- - Internationalization: Improved translation readiness throughout the plugin
-
-= 2.1 =
+= 3.4.0 =
 * Added:
-  - Advanced Token Management: Better control over content length with intelligent token allocation across different AI models
-  - SEO Integration: Automatic generation of SEO metadata with direct Yoast SEO plugin support
-  - Improved Content Structure: Enhanced HTML output with proper heading hierarchy
-  - Real-time Token Feedback: See estimated token usage before generating content
-  - More Reliable AI Integration: Better error handling and model compatibility
-
-* Changed:
-  - Refactored content generation for better HTML structure
-  - Improved model context window handling for each AI service
-  - Enhanced error handling and logging system
-  - Better prompt management for consistent output
-  - Updated admin interface with token usage indicators
-
+  - **Inline API Key Validation**: Real-time verification for all AI providers directly from Advanced Settings. Displays "Verified" or "Failed" status and stores last validation result.
+  - **Model Cost Transparency**: Each AI model now displays an estimated cost per post based on current token rates. Includes a new `abcc_model_cost_estimate` filter for advanced users.
+  - **Advanced Image Controls**: Expanded size and quality options for OpenAI (DALL-E 3) and resolution presets for Stability AI.
+  - **Automatic Image SEO**: Featured images now automatically receive SEO-optimized alt text in the format `{post title} - {primary keyword}`.
+* Updated:
+  - **Scheduling Clarity**: Raw timestamps replaced with human-friendly text (e.g., "Next post in 6 hours") and a direct link to scheduling settings.
+  - **Contextual Help**: Added Dashicon-based tooltips for Keywords, Tone, Models, and API keys to explain settings without cluttering the UI.
+  - **SEO Reliability**: Refactored the title and metadata generator to use structured JSON parsing and site-specific context (`site_info`).
+  - **RankMath Integration**: Enhanced support with initial field mapping for Social Excerpts and focus keywords.
 * Fixed:
-  - Content formatting issues with HTML tags
-  - Token limit calculation accuracy
-  - Model selection and API handling edge cases
-  - SEO metadata integration reliability
-  - HTML structure validation and sanitization
+  - Fixed minor bugs and improved overall stability.
 
-
-= 2.0 =
+= 3.3.0 =
 * Added:
-  - Claude 3 AI model integration (Haiku, Sonnet, and Opus)
-  - Enhanced image generation with DALL-E 3
-  - Stability AI integration as fallback
-  - Cost-aware model selection interface
-  - Better security features
-
-* Changed:
-  - Refactored code for better maintainability
-  - Improved API handling architecture
-  - Enhanced content generation quality
-
+  - **Perplexity AI Integration**: Full support for web-grounded content generation with source citations. Three new models: Sonar, Sonar Pro, and Sonar Reasoning Pro. Configurable citation styles (inline, references section, or both) and source recency filters.
+  - **Draft-First Workflow**: New option to always save generated content as drafts for review before publishing.
+  - **Content History Log**: Track generated posts, models used, and publish status directly from Content Settings.
+* Updated:
+  - Keywords input is now a textarea supporting one topic per line.
+  - Renamed "Max Token Limit" to "Content Length" with explanatory tooltip; updated writing tone labels.
+  - Rebuilt "About" tab — focused on plugin philosophy and professional consulting services.
 * Fixed:
-  - Various bug fixes and improvements
-  - Better error handling
-  - Enhanced stability
+  - Fixed several internal bugs and onboarding improvements.
 
-= 1.9 =
-- Added:
-    - Added support for selecting GPT-3.5, GPT-4 and GPT-4o models for content generation;
-    - Users of the old GPT-3.5 won't be affected by the change as there is backwards compability;
-    - Enhanced plugin settings UI for better user experience and clearer model selection;
-
-- Fixed:
-    - Code refinements for better modularity and maintainability.
-    - Comprehensive error handling and logging.
-    - Updated documentation to guide users through new features and configurations.
-
-= 1.6 =
-- Fixed
-    - Select2;
-	- Tone Select keeping custom value saved;
-- Added
-    - Minor description of some options;
-	- Ko-fi button
-
-= 1.5 =
-- Changed
-    - Code linting and cleanup;
-    - Better form usability;
-    - Minor quality of life changes;
-
-= 1.4 =
-- Added
-	- Gemini API - Now you can use Google AI to create your posts!
-    - A tone selector so you can define how the post should be written.
-- Changed
-    - Now it's possible to use wp-config variables to store the OpenAI and GeminiAI API keys. It's more secure than storing them in the database;
-    - The admin menu and form was remade, so it's easier to work and don't get lost on so many options;
-    - Minor changes for better usage;
-
-= 1.0 =
-- Added
-	- Implemented image generation using OpenAI's DALL-E model based on provided prompts and keywords.
-	- Introduced the option to select categories for posts, allowing users to specify relevant categories for generated content.
-	- Provided an option to receive email notifications when a new post is created automatically.
-
-- Changed
-	- Refactored code for better readability, modularity, and maintainability.
-	- Updated UI/UX for the settings page to improve user experience.
-	- Better scheduled post generation feature, allowing users to schedule automatic post creation at hourly, daily, or weekly intervals.
-	- Revised error handling and logging mechanisms for smoother operation.
-	
-
-- Fixed
-	- Resolved issues related to API key validation and error handling.
-	- Fixed bugs and glitches reported by users in the previous version.
-
-= 0.9 =
-
-- Bug Fixes, Quality of life updates - Expect 1.0 in a few days
-
-= 0.8 =
-
-- WordPress Review Guidelines fixes
-
-= 0.5 =
-
-- Initial release.
+For the full changelog of versions 3.2.0 and earlier, see CHANGELOG.txt.
 
 
 == Support ==
 
 For support, feature requests, or to contribute to development:
-* Visit the [plugin homepage](https://wordpress.org/plugins/automated-blog-content-creator/)
-* Submit issues on [GitHub](https://github.com/phalkmin/openai-blog)
+* Visit the [WordPress support forum](https://wordpress.org/support/plugin/automated-blog-content-creator/)
+* Submit issues on [GitHub](https://github.com/phalkmin/wp-autoinsight)
+* For custom integrations or consulting: phalkmin@protonmail.com
 * Support development: [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U7U1LM8AP)

@@ -3,13 +3,13 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/
  * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version:           3.1.0
+ * Version:           3.5.0
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
  * Domain Path:       /languages
- * Requires at least: 5.6
- * Requires PHP:      8.1
+ * Requires at least: 6.8
+ * Requires PHP:      7.4
  *
  * @package WP-AutoInsight
  */
@@ -19,7 +19,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '3.1.0' );
+define( 'ABCC_VERSION', '3.5.0' );
+
+// Format requirements appended to every AI content generation prompt.
+// Defined here so they are enforced regardless of which template is active.
+define(
+	'ABCC_CONTENT_FORMAT_REQUIREMENTS',
+	"\n\nFormat requirements:\n- Use <h2>Heading</h2> for main sections\n- Use <h3>Heading</h3> for subsections\n- Put each paragraph in its own <p> tag\n- Do not include the title in the content\n- Put each section on a new line\n- Do not include empty lines or paragraphs\n- Ensure clean HTML without extra spaces or newlines\n- Always close every HTML tag before ending your response"
+);
 
 // Include required files.
 require_once __DIR__ . '/vendor/autoload.php';
@@ -37,6 +44,7 @@ require_once __DIR__ . '/includes/admin-buttons.php';
 require_once __DIR__ . '/includes/audio.php';
 require_once __DIR__ . '/includes/infographic.php';
 require_once __DIR__ . '/includes/onboarding.php';
+require_once __DIR__ . '/includes/meta-boxes.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/gpt.php';
 
