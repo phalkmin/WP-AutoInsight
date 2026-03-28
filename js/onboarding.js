@@ -91,6 +91,54 @@ jQuery(document).ready(function ($) {
     });
   }
 
+  function abccCheckWP70Connectors() {
+    $.ajax({
+      url: abccOnboarding.ajaxurl,
+      type: "POST",
+      data: {
+        action: "abcc_check_wp_connectors",
+        nonce: abccOnboarding.nonce,
+      },
+      success: function (response) {
+        if (!response.success) {
+          return;
+        }
+
+        const data = response.data;
+        $("#abcc-open-connectors").attr("href", data.connectors_url);
+
+        if (data.has_connectors && data.has_keys) {
+          const providerNames = data.providers
+            .map((provider) => provider.charAt(0).toUpperCase() + provider.slice(1))
+            .join(", ");
+
+          $("#abcc-wp70-connected-providers").text(
+            abccOnboarding.i18n.connectedVia.replace("%s", providerNames)
+          );
+
+          $("#abcc-wp70-connector-banner").slideDown();
+          $(".abcc-api-providers").show();
+        } else if (data.has_connectors && !data.has_keys) {
+          $("#abcc-wp70-no-keys-banner").slideDown();
+        }
+      },
+    });
+  }
+
+  // Handle Connectors button click
+  $(document).on("click", "#abcc-wp70-use-connectors", function (event) {
+    event.preventDefault();
+    connectedProvider = "wp-connectors";
+    $("#abcc-next-step-2").prop("disabled", false);
+    $(this).text("✓ Connectors Active").prop("disabled", true);
+    $(".abcc-api-providers").slideUp();
+  });
+
+  $(document).on("click", "#abcc-wp70-add-different", function () {
+    $("#abcc-wp70-connector-banner").slideUp();
+    $(".abcc-api-providers").slideDown();
+  });
+
   function selectGoal() {
     const $card = $(this);
     const goal = $card.data("goal");
@@ -396,6 +444,7 @@ function testApiConnection() {
     smoothScrollToTop();
     // Auto-test wp-config keys when entering step 2
     if (step === 1) {
+      abccCheckWP70Connectors();
       setTimeout(function () {
         var $wpConfigButtons = $('.abcc-test-api[data-wp-config="true"]');
         if ($wpConfigButtons.length) {
@@ -409,12 +458,6 @@ function testApiConnection() {
     originalPrevStep(step);
     smoothScrollToTop();
   };
-
-  // Handle page visibility changes (pause timers when tab not active)
-  let isPageVisible = true;
-  document.addEventListener("visibilitychange", function () {
-    isPageVisible = !document.hidden;
-  });
 
   // Copy API key button (if they want to save it)
   $(".abcc-api-input").each(function () {

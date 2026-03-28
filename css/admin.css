@@ -350,8 +350,60 @@
     margin-bottom: 5px;
 }
 
-.abcc-field-label {
+.abcc_field_label {
     display: block;
     font-weight: 600;
     margin-bottom: 5px;
 }
+
+/* Bulk Generate Panel Styles */
+.abcc-collapsible-panel {
+    max-width: 1000px;
+    margin: 20px 0;
+}
+
+.abcc-panel-header {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 10px 20px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.abcc-panel-header h2 {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.abcc-panel-header:hover {
+    background: #f6f7f7;
+}
+
+.abcc-bulk-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 30px;
+}
+
+.abcc-bulk-log-entry {
+    margin-bottom: 5px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.abcc-bulk-status--pending { color: #646970; }
+.abcc-bulk-status--running { color: #2271b1; font-weight: bold; }
+.abcc-bulk-status--success { color: #46b450; font-weight: bold; }
+.abcc-bulk-status--error   { color: #dc3232; font-weight: bold; }
+
+@media screen and (max-width: 782px) {
+    .abcc-bulk-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

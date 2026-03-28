@@ -10,6 +10,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Builds a normalized generation payload with defaults.
+ *
+ * @since 3.6.0
+ * @param array $args Overrides for the defaults.
+ * @return array The normalized payload.
+ */
+function abcc_build_generation_payload( $args = array() ) {
+	$defaults = array(
+		'keywords'   => array(),
+		'model'      => get_option( 'prompt_select', 'gpt-4.1-mini' ),
+		'tone'       => get_option( 'openai_tone', 'default' ),
+		'char_limit' => (int) get_option( 'openai_char_limit', 200 ),
+		'post_type'  => 'post',
+		'category'   => 0,
+		'template'   => 'default',
+		'source'     => 'manual', // manual, scheduled, bulk, regenerate
+	);
+
+	return wp_parse_args( $args, $defaults );
+}
+
+/**
  * Generates a new post using AI services.
  *
  * @param string  $api_key        The API key for the selected service
@@ -19,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param boolean $auto_create   Whether this is an automated creation
  * @param int     $char_limit    Maximum token limit
  * @param string  $post_type     The post type
- * @param array   $options       Additional options (e.g., template)
+ * @param array   $options       Additional options (e.g., template, category, source)
  * @return int|WP_Error Post ID on success, WP_Error on failure
  */
 function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone = 'default', $auto_create = false, $char_limit = 200, $post_type = 'post', $options = array() ) {
@@ -28,6 +50,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 
 		$category_id = isset( $options['category'] ) ? (int) $options['category'] : 0;
 		$template    = isset( $options['template'] ) ? $options['template'] : 'default';
+		$source      = isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' );
 
 		if ( true === $generate_seo ) {
 			// Generate title and SEO data.
@@ -123,13 +146,15 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$post_data['meta_input']['_abcc_model']     = $prompt_select;
 
 		// Store generation parameters for the "Regenerate" feature.
-		$generation_params = array(
+		$generation_params                                  = array(
 			'keywords'   => $keywords,
 			'model'      => $prompt_select,
 			'tone'       => $tone,
 			'char_limit' => $char_limit,
 			'post_type'  => $post_type,
-			'template'   => isset( $options['template'] ) ? $options['template'] : 'default',
+			'category'   => $category_id,
+			'template'   => $template,
+			'source'     => $source,
 		);
 		$post_data['meta_input']['_abcc_generation_params'] = wp_json_encode( $generation_params );
 
@@ -140,8 +165,6 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		}
 
 		if ( get_option( 'openai_generate_images', true ) ) {
-			error_log( 'WP-AutoInsight: Starting featured image generation...' );
-
 			try {
 				$category_ids   = get_option( 'openai_selected_categories', array() );
 				$category_names = array();
@@ -155,34 +178,20 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 					}
 				}
 
-				error_log( 'WP-AutoInsight: Image generation - Keywords: ' . print_r( $keywords, true ) );
-				error_log( 'WP-AutoInsight: Image generation - Categories: ' . print_r( $category_names, true ) );
-				error_log( 'WP-AutoInsight: Image generation - Model: ' . $prompt_select );
-
 				$image_url = abcc_generate_featured_image( $prompt_select, $keywords, $category_names );
 
 				if ( $image_url ) {
-					error_log( 'WP-AutoInsight: Featured image generated successfully: ' . $image_url );
-
 					$alt_text = '';
 					if ( ! empty( $title ) && ! empty( $seo_data['primary_keyword'] ) ) {
 						$alt_text = $title . ' - ' . $seo_data['primary_keyword'];
 					}
 
-					$attachment_id = abcc_set_featured_image( $post_id, $image_url, $alt_text );
-					if ( $attachment_id ) {
-						error_log( 'WP-AutoInsight: Featured image set successfully with attachment ID: ' . $attachment_id );
-					} else {
-						error_log( 'WP-AutoInsight: Failed to set featured image for post' );
-					}
-				} else {
-					error_log( 'WP-AutoInsight: Featured image generation returned false/empty' );
+					abcc_set_featured_image( $post_id, $image_url, $alt_text );
 				}
 			} catch ( Exception $e ) {
-				error_log( 'WP-AutoInsight: Featured image generation failed but post was created: ' . $e->getMessage() );
+				// Image failures should not abort successful text generation.
+				unset( $e );
 			}
-		} else {
-			error_log( 'WP-AutoInsight: Featured image generation is disabled in settings' );
 		}
 
 		if ( true === get_option( 'openai_email_notifications', false ) ) {
@@ -192,102 +201,10 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		return $post_id;
 
 	} catch ( Exception $e ) {
-		error_log( 'Post Generation Error: ' . $e->getMessage() );
 		return new WP_Error( 'post_generation_failed', $e->getMessage() );
 	}
 }
 
-/**
- * Helper function to build the content generation prompt.
- *
- * @param array  $keywords Array of keywords
- * @param string $tone Content tone
- * @param array  $category_names Array of category names
- * @param int    $char_limit Character limit
- * @return string
- */
-function abcc_build_content_prompt( $keywords, $tone, $category_names, $char_limit ) {
-	$site_name        = get_bloginfo( 'name' );
-	$site_description = get_bloginfo( 'description' );
-
-	// Build a more structured prompt.
-	$prompt_parts = array();
-
-	// Core instructions.
-	$prompt_parts[] = sprintf(
-		'You are an expert content writer for %s, a website focused on %s',
-		$site_name,
-		$site_description
-	);
-
-	// Tone setting.
-	$custom_tone_text  = get_option( 'custom_tone', '' );
-	$tone_instructions = array(
-		'professional' => 'Write in a professional and formal tone. Use clear, authoritative language. Keep the content structured, credible, and free of slang.',
-		'casual'       => 'Write in a conversational and relaxed tone. Use everyday language, contractions, and a friendly pace that feels easy to read.',
-		'friendly'     => 'Write in a warm and approachable tone. Be encouraging and personable, using inclusive language and a positive outlook.',
-		'custom'       => ! empty( $custom_tone_text ) ? $custom_tone_text : 'Balance professionalism with accessibility, creating engaging content that informs and entertains.',
-		'default'      => 'Balance professionalism with accessibility, creating engaging content that informs and entertains.',
-	);
-
-	$prompt_parts[] = isset( $tone_instructions[ $tone ] ) ? $tone_instructions[ $tone ] : $tone_instructions['default'];
-
-	// Content structure.
-	$prompt_parts[] = 'Create a comprehensive article that includes:
-        - An engaging <h1> title that includes key terms naturally
-        - A compelling introduction that hooks the reader
-        - Well-organized main sections with <h2> headings
-        - Subsections using <h3> headings where appropriate for detailed breakdowns
-        - A meta description (max 160 characters) summarizing the article for SEO
-        - 3-5 focus keywords for the article
-        - Relevant examples and references
-        - A strong conclusion that summarizes key points';
-
-	// Keywords and categories focus.
-	if ( ! empty( $keywords ) ) {
-		$prompt_parts[] = sprintf(
-			'Focus on these main topics and keywords: %s. Integrate them naturally throughout the content.',
-			implode( ', ', array_map( 'sanitize_text_field', $keywords ) )
-		);
-	}
-
-	if ( 'none' !== abcc_get_active_seo_plugin() ) {
-		$prompt_parts[] = 'Additionally, provide the following SEO elements separated by [SEO] tags:
-            - A compelling meta description (max 160 characters)
-            - Primary keyword
-            - Secondary keywords (2-3)
-            - Social media excerpt (max 200 characters)
-            
-            Format the SEO section exactly like this:
-            [SEO]
-            Meta Description: Your meta description here
-            Primary Keyword: Your primary keyword
-            Secondary Keywords: keyword1, keyword2, keyword3
-            Social Excerpt: Your social media excerpt here
-            [SEO]';
-	}
-
-	if ( ! empty( $category_names ) ) {
-		$prompt_parts[] = sprintf(
-			'This content belongs in the following categories: %s. Ensure the content aligns with these themes.',
-			implode( ', ', $category_names )
-		);
-	}
-
-	// SEO and formatting guidelines.
-	$prompt_parts[] = sprintf(
-		'Format requirements:
-		- Use HTML formatting
-		- Structure content with <h1> for the main title only
-		- Keep the total content under %d tokens
-		- Ensure the content is SEO-optimized with natural keyword placement
-		- Break up text into readable paragraphs
-		- Use engaging subheadings for each main section',
-		$char_limit
-	);
-
-	return implode( "\n\n", $prompt_parts );
-}
 
 /**
  * Helper function to generate content using selected AI service.
@@ -316,16 +233,6 @@ function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 			set_transient( $generation_id, $perplexity_result['citations'], 300 );
 			$result = $perplexity_result['text'];
 		}
-	}
-
-	if ( false === $result ) {
-		error_log(
-			sprintf(
-				'Content generation failed for service %s. Prompt: %s',
-				$service,
-				substr( $prompt, 0, 100 ) . '...' // Log first 100 chars of prompt
-			)
-		);
 	}
 
 	return $result;

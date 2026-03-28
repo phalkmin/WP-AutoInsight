@@ -19,21 +19,23 @@ function abcc_show_onboarding_page() {
 	wp_enqueue_style( 'abcc-onboarding-styles', plugins_url( '/css/onboarding.css', __DIR__ ), array(), ABCC_VERSION );
 	wp_enqueue_script( 'abcc-onboarding-scripts', plugins_url( '/js/onboarding.js', __DIR__ ), array( 'jquery' ), ABCC_VERSION, true );
 
-	wp_localize_script(
-		'abcc-onboarding-scripts',
-		'abccOnboarding',
-		array(
-			'ajaxurl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'abcc_onboarding' ),
-			'i18n'    => array(
-				'testing'    => __( 'Testing connection...', 'automated-blog-content-creator' ),
-				'success'    => __( 'Connection successful!', 'automated-blog-content-creator' ),
-				'error'      => __( 'Connection failed. Please check your API key.', 'automated-blog-content-creator' ),
-				'generating' => __( 'Generating your first post...', 'automated-blog-content-creator' ),
-				'welcome'    => __( 'Welcome to WP-AutoInsight!', 'automated-blog-content-creator' ),
-			),
-		)
-	);
+		wp_localize_script(
+			'abcc-onboarding-scripts',
+			'abccOnboarding',
+			array(
+				'ajaxurl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'abcc_onboarding' ),
+				'i18n'    => array(
+					'testing'      => __( 'Testing connection...', 'automated-blog-content-creator' ),
+					'success'      => __( 'Connection successful!', 'automated-blog-content-creator' ),
+					'error'        => __( 'Connection failed. Please check your API key.', 'automated-blog-content-creator' ),
+					'generating'   => __( 'Generating your first post...', 'automated-blog-content-creator' ),
+					'welcome'      => __( 'Welcome to WP-AutoInsight!', 'automated-blog-content-creator' ),
+					/* translators: %s: Comma-separated list of connected AI providers. */
+					'connectedVia' => __( 'Connected via WordPress Connectors: %s', 'automated-blog-content-creator' ),
+				),
+			)
+		);
 
 	?>
 	<div class="wrap abcc-onboarding-wrap">
@@ -103,6 +105,31 @@ function abcc_show_onboarding_page() {
 		<div class="abcc-step-content">
 			<h2><?php esc_html_e( 'Connect an AI Provider', 'automated-blog-content-creator' ); ?></h2>
 			<p><?php esc_html_e( 'Choose one AI service to power your content generation.', 'automated-blog-content-creator' ); ?></p>
+
+			<div class="abcc-wp70-detected" id="abcc-wp70-connector-banner" style="display: none;">
+				<div class="abcc-notice-success">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<div class="abcc-notice-content">
+						<strong><?php esc_html_e( 'AI provider already connected via WordPress Connectors!', 'automated-blog-content-creator' ); ?></strong>
+						<p id="abcc-wp70-connected-providers"></p>
+						<p>
+							<a href="#" id="abcc-wp70-use-connectors" class="button button-primary"><?php esc_html_e( 'Use existing connection', 'automated-blog-content-creator' ); ?></a>
+							<button type="button" class="button button-secondary" id="abcc-wp70-add-different"><?php esc_html_e( 'Add a different key manually', 'automated-blog-content-creator' ); ?></button>
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="abcc-wp70-no-keys" id="abcc-wp70-no-keys-banner" style="display: none;">
+				<div class="abcc-notice-info">
+					<span class="dashicons dashicons-info-outline"></span>
+					<div class="abcc-notice-content">
+						<strong><?php esc_html_e( 'Tip: Configure your AI key once in WordPress Connectors', 'automated-blog-content-creator' ); ?></strong>
+						<p><?php esc_html_e( 'WordPress 7.0 lets you manage all AI provider keys centrally at Settings > Connectors. Any key you add there works automatically here.', 'automated-blog-content-creator' ); ?></p>
+						<a href="#" id="abcc-open-connectors" class="button button-secondary" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open Connectors settings', 'automated-blog-content-creator' ); ?></a>
+					</div>
+				</div>
+			</div>
 
 			<div class="abcc-api-providers">
 				<!-- OpenAI -->
@@ -502,9 +529,20 @@ function abcc_get_goal_icon( $goal_key ) {
  * @return bool Whether any API key is configured.
  */
 function abcc_has_any_api_key() {
-	$openai_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
-	$claude_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
-	$gemini_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
+	// WP 7.0 fast path: check Connectors credential store.
+	if ( abcc_wp_ai_client_available() ) {
+		$wp_openai = abcc_get_wp_ai_credential( 'openai' );
+		$wp_claude = abcc_get_wp_ai_credential( 'claude' );
+		$wp_gemini = abcc_get_wp_ai_credential( 'gemini' );
+		if ( ! empty( $wp_openai ) || ! empty( $wp_claude ) || ! empty( $wp_gemini ) ) {
+			return true;
+		}
+	}
+
+	// Legacy fallback: wp-config constants and wp_options.
+	$openai_key     = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
+	$claude_key     = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
+	$gemini_key     = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
 	$perplexity_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
 
 	return ! empty( $openai_key ) || ! empty( $claude_key ) || ! empty( $gemini_key ) || ! empty( $perplexity_key );

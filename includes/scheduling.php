@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return array|bool An array with schedule details if the event is scheduled, false otherwise.
  */
-function get_openai_event_schedule() {
+function abcc_get_openai_event_schedule() {
 	$timestamp = wp_next_scheduled( 'abcc_openai_generate_post_hook' );
 
 	if ( false === $timestamp ) {
@@ -39,16 +39,10 @@ function get_openai_event_schedule() {
 function abcc_openai_generate_post_scheduled() {
 	try {
 		// Get required parameters.
-		$api_key       = abcc_check_api_key();
 		$tone          = get_option( 'openai_tone', 'default' );
 		$auto_create   = get_option( 'openai_auto_create', 'none' );
 		$char_limit    = get_option( 'openai_char_limit', 200 );
 		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
-
-		// Validate common conditions.
-		if ( empty( $api_key ) ) {
-			throw new Exception( 'API key not configured for scheduled post generation' );
-		}
 
 		if ( 'none' === $auto_create ) {
 			throw new Exception( 'Auto-create is disabled' );
@@ -84,30 +78,34 @@ function abcc_openai_generate_post_scheduled() {
 		$category = $selected_group['category'] ?? 0;
 		$template = $selected_group['template'] ?? 'default';
 
-		// Log scheduled attempt.
-		// translators: %1$s: Group name, %2$s: Model name, %3$d: Keywords count.
-		error_log(
-			sprintf(
-				'Scheduled post generation attempt - Group: %1$s, Model: %2$s, Keywords count: %3$d',
-				$selected_group['name'],
-				$prompt_select,
-				count( $keywords )
+		$payload = abcc_build_generation_payload(
+			array(
+				'keywords'   => $keywords,
+				'model'      => $prompt_select,
+				'tone'       => $tone,
+				'char_limit' => $char_limit,
+				'category'   => $category,
+				'template'   => $template,
+				'source'     => 'scheduled',
 			)
 		);
+		$api_key = abcc_check_api_key( $payload['model'] );
+
+		// Validate common conditions.
+		if ( empty( $api_key ) ) {
+			throw new Exception( 'API key not configured for scheduled post generation' );
+		}
 
 		// Generate the post.
 		$post_id = abcc_openai_generate_post(
 			$api_key,
-			$keywords,
-			$prompt_select,
-			$tone,
+			$payload['keywords'],
+			$payload['model'],
+			$payload['tone'],
 			true,
-			$char_limit,
-			'post',
-			array(
-				'template' => $template,
-				'category' => $category,
-			)
+			$payload['char_limit'],
+			$payload['post_type'],
+			$payload
 		);
 
 		if ( is_wp_error( $post_id ) ) {
@@ -119,8 +117,6 @@ function abcc_openai_generate_post_scheduled() {
 		return $post_id;
 
 	} catch ( Exception $e ) {
-		error_log( 'Scheduled Post Generation Error: ' . $e->getMessage() );
-
 		// Send admin notification about the failure if enabled.
 		if ( true === get_option( 'openai_email_notifications', false ) ) {
 			wp_mail(

@@ -26,7 +26,7 @@ class ABCC_Plugin {
 	 *
 	 * @var ABCC_Plugin
 	 */
-	protected static $_instance = null;
+	protected static $instance = null;
 
 	/**
 	 * Main ABCC_Plugin Instance
@@ -36,17 +36,17 @@ class ABCC_Plugin {
 	 * @return ABCC_Plugin - Main instance
 	 */
 	public static function instance() {
-		if ( is_null( self::$_instance ) ) {
-			self::$_instance = new self();
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new self();
 		}
-		return self::$_instance;
+		return self::$instance;
 	}
 
 	/**
 	 * Constructor
 	 */
 	public function __construct() {
-		$this->version = '3.5.0';
+		$this->version = '3.6.0';
 		$this->init_hooks();
 	}
 
@@ -55,7 +55,7 @@ class ABCC_Plugin {
 	 */
 	private function init_hooks() {
 		// Register activation hook
-		register_activation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'check_requirements' ) );
+		register_activation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'activate_plugin' ) );
 
 		// Register deactivation hook
 		register_deactivation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'deactivate_plugin' ) );
@@ -71,6 +71,9 @@ class ABCC_Plugin {
 
 		// Migrations
 		add_action( 'admin_init', array( $this, 'run_migrations' ) );
+
+		// WP 7.0 Connectors registration
+		add_action( 'connections-wp-admin-init', array( $this, 'register_wp70_connector' ) );
 	}
 
 	/**
@@ -123,6 +126,56 @@ class ABCC_Plugin {
 
 			update_option( 'abcc_version', '3.5.0' );
 		}
+
+		if ( version_compare( $installed_version, '3.6.0', '<' ) ) {
+			$this->setup_prompt_ai_capability();
+			update_option( 'abcc_version', '3.6.0' );
+		}
+	}
+
+	/**
+	 * Setup prompt_ai capability for administrators.
+	 *
+	 * @since 3.6.0
+	 */
+	public function setup_prompt_ai_capability() {
+		$roles_to_grant = array( 'administrator', 'editor' );
+
+		foreach ( $roles_to_grant as $role_name ) {
+			$role = get_role( $role_name );
+			if ( $role && ! $role->has_cap( 'prompt_ai' ) ) {
+				$role->add_cap( 'prompt_ai' );
+			}
+		}
+	}
+
+	/**
+	 * Register the plugin on the WordPress 7.0 Connectors page.
+	 *
+	 * @since 3.6.0
+	 */
+	public function register_wp70_connector() {
+		if ( ! function_exists( 'wp_ai_register_connector' ) ) {
+			return;
+		}
+
+		wp_ai_register_connector(
+			array(
+				'id'           => 'wp-autoinsight',
+				'name'         => __( 'WP-AutoInsight', 'automated-blog-content-creator' ),
+				'description'  => __( 'Automated AI content generation for posts, SEO, images, and scheduling.', 'automated-blog-content-creator' ),
+				'settings_url' => admin_url( 'admin.php?page=automated-blog-content-creator-post' ),
+				'version'      => defined( 'ABCC_VERSION' ) ? ABCC_VERSION : $this->version,
+			)
+		);
+	}
+
+	/**
+	 * Plugin activation logic.
+	 */
+	public function activate_plugin() {
+		$this->check_requirements();
+		$this->setup_prompt_ai_capability();
 	}
 
 	/**

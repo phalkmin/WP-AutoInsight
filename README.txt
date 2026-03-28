@@ -2,8 +2,8 @@
 Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
-Tested up to: 6.9
-Stable tag: 3.5.0
+Tested up to: 7.0
+Stable tag: 3.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -39,7 +39,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
   - Featured images via DALL-E 3, Stability AI, or Gemini image generation
 
 * **For developers**
-  - Store API keys in wp-config.php for maximum security
+  - Store API keys in wp-config.php for maximum security, or use WordPress 7.0's native Connectors API
   - Configurable per post type, clean option names, no proprietary lock-in
 
 == Installation ==
@@ -242,6 +242,16 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 3.6.0 =
+* Added:
+  - **WordPress 7.0 Connectors Support**: Native integration with the new Settings → Connectors screen in WordPress 7.0. If your site already has API keys configured there, the plugin detects and uses them automatically — no re-entry needed. Advanced Settings now shows three states per provider: set in wp-config.php, managed by WordPress Connectors, or editable manually. On WordPress 6.x the plugin works identically to v3.5.
+  - **Bulk Generation**: Generate multiple posts at once from a keyword list. Paste keywords (one per line) or upload a .txt file, select a template and model, and the plugin generates each post sequentially as a draft. Progress is shown live as it runs. This replaces a workflow that SaaS autoblogging tools charge $99/month for.
+  - **User Permissions panel**: Advanced Settings now includes a read-only panel showing whether your account has AI generation permission, with an explanation of how WordPress 7.0's native `prompt_ai` capability works.
+* Updated:
+  - Admin panel rebuilt into modular tab partials. Each settings tab is now a separate file under `includes/admin/`. No visible change for users, *but* as the plugin keeps growing, I'm trying to make the structure easier to modify, for v4.0 interface redesign.
+* Fixed:
+  - Fixed minor bugs and improved overall stability.
 
 = 3.5.0 =
 * Added:

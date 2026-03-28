@@ -1,4 +1,8 @@
 jQuery(document).ready(function ($) {
+  function abccEscapeHtml(value) {
+    return $("<div>").text(value).html();
+  }
+
   // Initialize Select2 for category dropdown
   $(".wpai-category-select, .wpai-post-type-select").select2();
 
@@ -333,8 +337,8 @@ jQuery(document).ready(function ($) {
       url: ajaxurl,
       method: "POST",
       data: {
-        action: "openai_generate_post",
-        _ajax_nonce: $("#abcc_openai_nonce").val(),
+        action: "abcc_create_post",
+        nonce: abccAdmin.buttonNonce,
         group_index: groupIndex,
       },
       success: function (response) {
@@ -355,6 +359,156 @@ jQuery(document).ready(function ($) {
         $btn.prop("disabled", false);
       },
     });
+  });
+
+  // Bulk Generate Panel Toggle
+  $(".abcc-panel-header").on("click", function () {
+    const $panel = $(this).closest(".abcc-collapsible-panel");
+    const $content = $panel.find(".abcc-panel-content");
+    const $icon = $(this).find(".dashicons");
+
+    $content.slideToggle(200);
+    if ($icon.hasClass("dashicons-arrow-down-alt2")) {
+      $icon.removeClass("dashicons-arrow-down-alt2").addClass("dashicons-arrow-up-alt2");
+    } else {
+      $icon.removeClass("dashicons-arrow-up-alt2").addClass("dashicons-arrow-down-alt2");
+    }
+  });
+
+  // Bulk Keywords Input Handler
+  $("#abcc-bulk-keywords-input").on("input", function () {
+    const keywords = $(this)
+      .val()
+      .split("\n")
+      .map((k) => k.trim())
+      .filter((k) => k !== "");
+    const count = keywords.length;
+    const $btn = $("#abcc-start-bulk");
+
+    $btn.text(abccAdmin.i18n.generateNPosts.replace("%d", count));
+    $btn.prop("disabled", count === 0);
+  });
+
+  $("#abcc-bulk-keywords-file").on("change", function (event) {
+    const file = event.target.files && event.target.files[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!/\.txt$/i.test(file.name)) {
+      window.alert("Please upload a .txt file.");
+      $(this).val("");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (loadEvent) {
+      const contents = String(loadEvent.target.result || "");
+      $("#abcc-bulk-keywords-input").val(contents).trigger("input");
+    };
+    reader.readAsText(file);
+  });
+
+  // Start Bulk Generation
+  $("#abcc-start-bulk").on("click", function () {
+    const $btn = $(this);
+    const keywords = $("#abcc-bulk-keywords-input")
+      .val()
+      .split("\n")
+      .map((k) => k.trim())
+      .filter((k) => k !== "");
+    const template = $("#abcc-bulk-template").val();
+    const model = $("#abcc-bulk-model").val();
+    const runId = `bulk-${Date.now()}`;
+    const $progress = $("#abcc-bulk-progress");
+    const $log = $("#abcc-bulk-log");
+
+    if (keywords.length === 0) return;
+
+    if (
+      !confirm(
+        `You are about to generate ${keywords.length} posts sequentially. This may take several minutes. Continue?`
+      )
+    ) {
+      return;
+    }
+
+    $btn.prop("disabled", true);
+    $("#abcc-bulk-keywords-input").prop("disabled", true);
+    $("#abcc-bulk-keywords-file").prop("disabled", true);
+    $progress.show();
+    $log.empty();
+
+    processBulkSequential(keywords, template, model, runId, 0);
+  });
+
+  function processBulkSequential(keywords, template, model, runId, index) {
+    if (index >= keywords.length) {
+      $("#abcc-bulk-log").prepend(
+        '<div class="abcc-bulk-log-entry" style="color: #46b450; font-weight: bold;">\u2713 All tasks completed!</div>'
+      );
+      $("#abcc-start-bulk").prop("disabled", false).text(abccAdmin.i18n.generateNPosts.replace("%d", keywords.length));
+      $("#abcc-bulk-keywords-input").prop("disabled", false);
+      $("#abcc-bulk-keywords-file").prop("disabled", false).val("");
+      return;
+    }
+
+    const keyword = keywords[index];
+    const $log = $("#abcc-bulk-log");
+    const $entry = $(
+      `<div class="abcc-bulk-log-entry" id="bulk-entry-${index}">` +
+        `[${index + 1}/${keywords.length}] Generating: <strong>${abccEscapeHtml(keyword)}</strong>... ` +
+        `<span class="abcc-bulk-status--running">Processing...</span>` +
+        `</div>`
+    );
+
+    $log.prepend($entry);
+
+    $.ajax({
+      url: ajaxurl,
+      method: "POST",
+      data: {
+        action: "abcc_bulk_generate_single",
+        nonce: abccAdmin.nonce,
+        keyword: keyword,
+        template: template,
+        model: model,
+        run_id: runId,
+      },
+      success: function (response) {
+        const $status = $entry.find("span");
+        if (response.success) {
+          $status
+            .removeClass("abcc-bulk-status--running")
+            .addClass("abcc-bulk-status--success")
+            .html(`\u2713 Success (Post ID: ${response.data.post_id})`);
+        } else {
+          $status
+            .removeClass("abcc-bulk-status--running")
+            .addClass("abcc-bulk-status--error")
+            .html(`\u2717 Error: ${abccEscapeHtml(response.data.message)}`);
+        }
+      },
+      error: function (xhr) {
+        $entry
+          .find("span")
+          .removeClass("abcc-bulk-status--running")
+          .addClass("abcc-bulk-status--error")
+          .html(`\u2717 Network Error: ${abccEscapeHtml(xhr.statusText)}`);
+      },
+      complete: function () {
+        // Sequential delay to avoid rate limits
+        setTimeout(() => {
+          processBulkSequential(keywords, template, model, runId, index + 1);
+        }, 1000);
+      },
+    });
+  }
+
+  $("#preferred_image_service").on("change", function () {
+    const showGeminiFields = $(this).val() === "gemini";
+    $("#gemini-image-settings, #gemini-image-size-settings").toggle(showGeminiFields);
   });
 
   // Regenerate Post Logic
