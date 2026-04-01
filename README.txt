@@ -243,6 +243,16 @@ Multiple support channels available:
 
 == Changelog ==
 
+= 3.7.0 =
+* Added:
+  - **Background Generation Jobs**: Manual, scheduled, bulk, and regenerate flows now create queued jobs that run through WordPress' default WP-Cron mechanism instead of blocking the admin request.
+  - **Live Generation Log**: Content History is now a full job log with status, source, model, keywords, template, created time, runtime, and result or error details.
+  - **Generation Log Controls**: Added a status filter, a "Refresh now" button, and an auto-refresh toggle so you can monitor jobs without reloading the page.
+  - **Faster Error Handling**: Failed jobs now include a "Copy error" action and a direct "Report this error" link for quick support requests.
+* Updated:
+  - **Manual and Bulk UX**: Manual generation, regenerate, and bulk generation now queue immediately and update their status live while jobs run in the background.
+  - **Generation Results**: Successful jobs now include direct Edit and View links from the log for faster follow-up actions.
+
 = 3.6.0 =
 * Added:
   - **WordPress 7.0 Connectors Support**: Native integration with the new Settings → Connectors screen in WordPress 7.0. If your site already has API keys configured there, the plugin detects and uses them automatically — no re-entry needed. Advanced Settings now shows three states per provider: set in wp-config.php, managed by WordPress Connectors, or editable manually. On WordPress 6.x the plugin works identically to v3.5.

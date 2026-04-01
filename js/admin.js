@@ -1,7 +1,134 @@
 jQuery(document).ready(function ($) {
+  let abccJobRefreshTimer = null;
+  let abccActiveRunId = "";
+
   function abccEscapeHtml(value) {
     return $("<div>").text(value).html();
   }
+
+  function refreshJobLog(runId) {
+    const effectiveRunId = typeof runId !== "undefined" ? runId : abccActiveRunId;
+
+    if (!$("#abcc-job-log-body").length) {
+      return;
+    }
+
+    $.post(ajaxurl, {
+      action: "abcc_get_job_log",
+      nonce: abccAdmin.nonce,
+      run_id: effectiveRunId || "",
+      status_filter: $("#abcc-job-filter").length ? $("#abcc-job-filter").val() : "",
+    }).done(function (response) {
+      if (response.success && response.data.html) {
+        $("#abcc-job-log-body").html(response.data.html);
+      }
+    });
+  }
+
+  function scheduleJobLogRefresh() {
+    if (abccJobRefreshTimer) {
+      window.clearInterval(abccJobRefreshTimer);
+      abccJobRefreshTimer = null;
+    }
+
+    if (!$("#abcc-job-auto-refresh").length || !$("#abcc-job-auto-refresh").is(":checked")) {
+      return;
+    }
+
+    abccJobRefreshTimer = window.setInterval(function () {
+      refreshJobLog();
+    }, 10000);
+  }
+
+  function pollJob(jobId, callbacks) {
+    const options = callbacks || {};
+
+    function pollOnce() {
+      $.post(ajaxurl, {
+        action: "abcc_get_job_status",
+        nonce: abccAdmin.nonce,
+        job_id: jobId,
+      }).done(function (response) {
+        if (!response.success) {
+          if (options.onError) {
+            options.onError(response.data && response.data.message ? response.data.message : "An error occurred.");
+          }
+          return;
+        }
+
+        const job = response.data;
+
+        if (options.onUpdate) {
+          options.onUpdate(job);
+        }
+
+        refreshJobLog();
+
+        if (job.status === "queued" || job.status === "running") {
+          window.setTimeout(pollOnce, 3000);
+          return;
+        }
+
+        if (job.status === "succeeded") {
+          if (options.onSuccess) {
+            options.onSuccess(job);
+          }
+          return;
+        }
+
+        if (options.onFailed) {
+          options.onFailed(job.message || "Generation failed.");
+        }
+      }).fail(function () {
+        if (options.onError) {
+          options.onError("Network error occurred.");
+        }
+      });
+    }
+
+    pollOnce();
+  }
+
+  $("#abcc-job-refresh").on("click", function () {
+    refreshJobLog();
+  });
+
+  $("#abcc-job-filter").on("change", function () {
+    refreshJobLog();
+  });
+
+  $("#abcc-job-auto-refresh").on("change", function () {
+    scheduleJobLogRefresh();
+  });
+
+  $(document).on("click", ".abcc-copy-error", function () {
+    const $button = $(this);
+    const errorText = $button.data("error") || "";
+
+    if (!errorText) {
+      return;
+    }
+
+    const afterCopy = function () {
+      const originalText = $button.text();
+      $button.text(abccAdmin.i18n.copied);
+      window.setTimeout(function () {
+        $button.text(originalText);
+      }, 1500);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(errorText).then(afterCopy);
+      return;
+    }
+
+    const $temp = $("<textarea>").val(errorText).appendTo("body").select();
+    document.execCommand("copy");
+    $temp.remove();
+    afterCopy();
+  });
+
+  scheduleJobLogRefresh();
 
   // Initialize Select2 for category dropdown
   $(".wpai-category-select, .wpai-post-type-select").select2();
@@ -327,7 +454,7 @@ jQuery(document).ready(function ($) {
     var $status = $("#abcc-manual-generation-status");
 
     $btn.prop("disabled", true);
-    abcc.showStatus($status, "Generating post\u2026 this may take a moment.");
+    abcc.showStatus($status, "Queueing generation job\u2026");
 
     var groupIndex = $("#abcc-group-select").length
       ? $("#abcc-group-select").val()
@@ -340,22 +467,43 @@ jQuery(document).ready(function ($) {
         action: "abcc_create_post",
         nonce: abccAdmin.buttonNonce,
         group_index: groupIndex,
+        post_type: $("#abcc_selected_post_types").length
+          ? ($("#abcc_selected_post_types").val() || [])[0] || "post"
+          : "post",
       },
       success: function (response) {
         if (response.success) {
-          abcc.showStatus(
-            $status,
-            response.data.message + " Post ID: " + response.data.post_id,
-            "success"
-          );
+          abccActiveRunId = "";
+          abcc.showStatus($status, response.data.message);
+          refreshJobLog();
+          pollJob(response.data.job_id, {
+            onUpdate: function (job) {
+              abcc.showStatus($status, "Status: " + job.statusLabel);
+            },
+            onSuccess: function (job) {
+              abcc.showStatus(
+                $status,
+                "Post created successfully. Post ID: " + job.post_id,
+                "success"
+              );
+              $btn.prop("disabled", false);
+            },
+            onFailed: function (message) {
+              abcc.setError($status, message);
+              $btn.prop("disabled", false);
+            },
+            onError: function (message) {
+              abcc.setError($status, message);
+              $btn.prop("disabled", false);
+            },
+          });
         } else {
           abcc.setError($status, response.data.message);
+          $btn.prop("disabled", false);
         }
       },
       error: function (xhr) {
         abcc.setError($status, "Error generating post: " + xhr.statusText);
-      },
-      complete: function () {
         $btn.prop("disabled", false);
       },
     });
@@ -439,6 +587,8 @@ jQuery(document).ready(function ($) {
     $("#abcc-bulk-keywords-file").prop("disabled", true);
     $progress.show();
     $log.empty();
+    abccActiveRunId = runId;
+    refreshJobLog(runId);
 
     processBulkSequential(keywords, template, model, runId, 0);
   });
@@ -446,7 +596,7 @@ jQuery(document).ready(function ($) {
   function processBulkSequential(keywords, template, model, runId, index) {
     if (index >= keywords.length) {
       $("#abcc-bulk-log").prepend(
-        '<div class="abcc-bulk-log-entry" style="color: #46b450; font-weight: bold;">\u2713 All tasks completed!</div>'
+        '<div class="abcc-bulk-log-entry" style="color: #46b450; font-weight: bold;">\u2713 All jobs queued. The generation log will keep updating below.</div>'
       );
       $("#abcc-start-bulk").prop("disabled", false).text(abccAdmin.i18n.generateNPosts.replace("%d", keywords.length));
       $("#abcc-bulk-keywords-input").prop("disabled", false);
@@ -458,8 +608,8 @@ jQuery(document).ready(function ($) {
     const $log = $("#abcc-bulk-log");
     const $entry = $(
       `<div class="abcc-bulk-log-entry" id="bulk-entry-${index}">` +
-        `[${index + 1}/${keywords.length}] Generating: <strong>${abccEscapeHtml(keyword)}</strong>... ` +
-        `<span class="abcc-bulk-status--running">Processing...</span>` +
+        `[${index + 1}/${keywords.length}] Queueing: <strong>${abccEscapeHtml(keyword)}</strong>... ` +
+        `<span class="abcc-bulk-status--running">Submitting...</span>` +
         `</div>`
     );
 
@@ -479,10 +629,37 @@ jQuery(document).ready(function ($) {
       success: function (response) {
         const $status = $entry.find("span");
         if (response.success) {
-          $status
-            .removeClass("abcc-bulk-status--running")
-            .addClass("abcc-bulk-status--success")
-            .html(`\u2713 Success (Post ID: ${response.data.post_id})`);
+          $status.text(`Queued (Job ID: ${response.data.job_id})`);
+          refreshJobLog(runId);
+          pollJob(response.data.job_id, {
+            onUpdate: function (job) {
+              $status
+                .removeClass("abcc-bulk-status--success abcc-bulk-status--error")
+                .addClass("abcc-bulk-status--running")
+                .text(job.statusLabel);
+            },
+            onSuccess: function (job) {
+              $status
+                .removeClass("abcc-bulk-status--running abcc-bulk-status--error")
+                .addClass("abcc-bulk-status--success")
+                .html(`\u2713 Success (Post ID: ${job.post_id})`);
+              refreshJobLog(runId);
+            },
+            onFailed: function (message) {
+              $status
+                .removeClass("abcc-bulk-status--running")
+                .addClass("abcc-bulk-status--error")
+                .html(`\u2717 Error: ${abccEscapeHtml(message)}`);
+              refreshJobLog(runId);
+            },
+            onError: function (message) {
+              $status
+                .removeClass("abcc-bulk-status--running")
+                .addClass("abcc-bulk-status--error")
+                .html(`\u2717 Error: ${abccEscapeHtml(message)}`);
+              refreshJobLog(runId);
+            },
+          });
         } else {
           $status
             .removeClass("abcc-bulk-status--running")
@@ -512,7 +689,7 @@ jQuery(document).ready(function ($) {
   });
 
   // Regenerate Post Logic
-  $(".abcc-regenerate-post").on("click", function (e) {
+  $(document).on("click", ".abcc-regenerate-post", function (e) {
     e.preventDefault();
     const $link = $(this);
     const postId = $link.data("post-id");
@@ -538,8 +715,26 @@ jQuery(document).ready(function ($) {
       },
       function (response) {
         if (response.success) {
-          abcc.showStatus($statusCell, "Done! Redirecting\u2026", "success");
-          window.location.href = response.data.edit_url;
+          abccActiveRunId = "";
+          abcc.showStatus($statusCell, response.data.message);
+          refreshJobLog();
+          pollJob(response.data.job_id, {
+            onUpdate: function (job) {
+              abcc.showStatus($statusCell, "Status: " + job.statusLabel);
+            },
+            onSuccess: function (job) {
+              abcc.showStatus($statusCell, "Done! Redirecting\u2026", "success");
+              window.location.href = job.edit_url;
+            },
+            onFailed: function (message) {
+              abcc.setError($statusCell, message);
+              $link.css("pointer-events", "auto");
+            },
+            onError: function (message) {
+              abcc.setError($statusCell, message);
+              $link.css("pointer-events", "auto");
+            },
+          });
         } else {
           abcc.setError(
             $statusCell,

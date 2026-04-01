@@ -237,6 +237,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 	<hr style="margin: 40px 0 20px;">
 	<div id="abcc-manual-generation-status" style="margin: 10px 0;"></div>
+	<?php if ( ! abcc_is_wp_cron_available() || abcc_has_stale_queued_jobs() ) : ?>
+		<div class="notice notice-warning inline">
+			<p>
+				<?php esc_html_e( 'Background jobs may be delayed. WP-Cron appears disabled or queued jobs have not started yet. If this keeps happening, check your site cron configuration.', 'automated-blog-content-creator' ); ?>
+			</p>
+		</div>
+	<?php endif; ?>
 	<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
 		<?php if ( count( $keyword_groups ) > 1 ) : ?>
 			<select id="abcc-group-select" style="max-width: 260px;">
@@ -256,70 +263,44 @@ if ( ! defined( 'ABSPATH' ) ) {
 	</div>
 
 	<hr style="margin: 40px 0 20px;">
-	<h2><?php esc_html_e( 'Content History', 'automated-blog-content-creator' ); ?></h2>
+	<h2><?php esc_html_e( 'Generation Log', 'automated-blog-content-creator' ); ?></h2>
+	<div class="abcc-job-log-toolbar">
+		<label for="abcc-job-filter">
+			<?php esc_html_e( 'Show:', 'automated-blog-content-creator' ); ?>
+		</label>
+		<select id="abcc-job-filter">
+			<option value=""><?php esc_html_e( 'All jobs', 'automated-blog-content-creator' ); ?></option>
+			<option value="queued"><?php esc_html_e( 'Queued', 'automated-blog-content-creator' ); ?></option>
+			<option value="running"><?php esc_html_e( 'Running', 'automated-blog-content-creator' ); ?></option>
+			<option value="failed"><?php esc_html_e( 'Failed', 'automated-blog-content-creator' ); ?></option>
+			<option value="succeeded"><?php esc_html_e( 'Succeeded', 'automated-blog-content-creator' ); ?></option>
+		</select>
+		<label class="abcc-job-log-autorefresh">
+			<input type="checkbox" id="abcc-job-auto-refresh" checked>
+			<?php esc_html_e( 'Auto-refresh', 'automated-blog-content-creator' ); ?>
+		</label>
+		<button type="button" id="abcc-job-refresh" class="button button-secondary">
+			<?php esc_html_e( 'Refresh now', 'automated-blog-content-creator' ); ?>
+		</button>
+	</div>
 	<table class="wp-list-table widefat fixed striped">
 		<thead>
 			<tr>
-				<th><?php esc_html_e( 'Post Title', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Status', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Source', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></th>
 				<th><?php esc_html_e( 'Keywords Used', 'automated-blog-content-creator' ); ?></th>
 				<th><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></th>
-				<th><?php esc_html_e( 'Date', 'automated-blog-content-creator' ); ?></th>
-				<th><?php esc_html_e( 'Status', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Created', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Runtime', 'automated-blog-content-creator' ); ?></th>
+				<th><?php esc_html_e( 'Result', 'automated-blog-content-creator' ); ?></th>
 			</tr>
 		</thead>
-		<tbody>
-			<?php
-			$history_posts = get_posts(
-				array(
-					'post_type'      => 'any',
-					'post_status'    => 'any',
-					'posts_per_page' => 10,
-					'meta_key'       => '_abcc_generated',
-					'meta_value'     => '1',
-					'orderby'        => 'date',
-					'order'          => 'DESC',
-				)
-			);
-			if ( $history_posts ) :
-				foreach ( $history_posts as $h_post ) :
-					$h_model    = get_post_meta( $h_post->ID, '_abcc_model', true );
-					$h_params   = json_decode( get_post_meta( $h_post->ID, '_abcc_generation_params', true ), true );
-					$h_kw       = isset( $h_params['keywords'] ) ? implode( ', ', (array) $h_params['keywords'] ) : 'n/a';
-					$h_tpl      = isset( $h_params['template'] ) ? $h_params['template'] : 'default';
-					$h_tpl_name = $content_templates[ $h_tpl ]['name'] ?? ucfirst( $h_tpl );
-					?>
-						<tr>
-							<td>
-								<strong><a href="<?php echo esc_url( get_edit_post_link( $h_post->ID ) ); ?>"><?php echo esc_html( $h_post->post_title ); ?></a></strong>
-								<div class="row-actions">
-									<span class="edit"><a href="<?php echo esc_url( get_edit_post_link( $h_post->ID ) ); ?>"><?php esc_html_e( 'Edit', 'automated-blog-content-creator' ); ?></a> | </span>
-									<span class="view"><a href="<?php echo esc_url( get_permalink( $h_post->ID ) ); ?>"><?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?></a> | </span>
-									<span class="abcc-regenerate-row"><a href="#" class="abcc-regenerate-post" data-post-id="<?php echo esc_attr( $h_post->ID ); ?>"><?php esc_html_e( 'Regenerate', 'automated-blog-content-creator' ); ?></a></span>
-								</div>
-							</td>
-							<td><small><?php echo esc_html( wp_trim_words( $h_kw, 10 ) ); ?></small></td>
-							<td><small><?php echo esc_html( $h_tpl_name ); ?></small></td>
-							<td><?php echo esc_html( get_the_date( '', $h_post ) ); ?></td>
-							<td>
-								<?php
-								$status_obj = get_post_status_object( get_post_status( $h_post ) );
-								echo esc_html( $status_obj->label );
-								?>
-							</td>
-						</tr>
-					<?php
-					endforeach;
-				else :
-					?>
-				<tr>
-					<td colspan="5"><?php esc_html_e( 'No content history found.', 'automated-blog-content-creator' ); ?></td>
-				</tr>
-			<?php endif; ?>
+		<tbody id="abcc-job-log-body">
+			<?php echo abcc_render_job_log_rows(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		</tbody>
 	</table>
 	<p>
-		<a href="<?php echo esc_url( admin_url( 'edit.php?post_status=all&post_type=post&meta_key=_abcc_generated&meta_value=1' ) ); ?>">
-			<?php esc_html_e( 'View all generated posts', 'automated-blog-content-creator' ); ?>
-		</a>
+		<?php esc_html_e( 'The latest jobs update automatically while generation runs in the background.', 'automated-blog-content-creator' ); ?>
 	</p>
 </div>

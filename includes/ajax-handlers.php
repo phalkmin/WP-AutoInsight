@@ -21,8 +21,13 @@ function abcc_handle_create_post() {
 	}
 
 	try {
-		$groups    = get_option( 'abcc_keyword_groups', array() );
-		$post_type = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : 'post';
+		$groups              = get_option( 'abcc_keyword_groups', array() );
+		$selected_post_types = get_option( 'abcc_selected_post_types', array( 'post' ) );
+		$post_type           = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
+
+		if ( empty( $post_type ) ) {
+			$post_type = ! empty( $selected_post_types ) ? $selected_post_types[0] : 'post';
+		}
 
 		if ( empty( $groups ) ) {
 			throw new Exception( __( 'No keyword groups found. Please add at least one group in Content Settings.', 'automated-blog-content-creator' ) );
@@ -32,7 +37,6 @@ function abcc_handle_create_post() {
 			throw new Exception( __( 'Invalid post type requested.', 'automated-blog-content-creator' ) );
 		}
 
-		$selected_post_types = get_option( 'abcc_selected_post_types', array( 'post' ) );
 		if ( ! in_array( $post_type, $selected_post_types, true ) ) {
 			throw new Exception( __( 'This post type is not enabled for manual generation.', 'automated-blog-content-creator' ) );
 		}
@@ -69,27 +73,16 @@ function abcc_handle_create_post() {
 				'source'    => 'manual',
 			)
 		);
-		$api_key = abcc_check_api_key( $payload['model'] );
+		$job_id = abcc_queue_generation_job( $payload );
 
-		$result = abcc_openai_generate_post(
-			$api_key,
-			$payload['keywords'],
-			$payload['model'],
-			$payload['tone'],
-			false,
-			$payload['char_limit'],
-			$payload['post_type'],
-			$payload
-		);
-
-		if ( is_wp_error( $result ) ) {
-			throw new Exception( $result->get_error_message() );
+		if ( is_wp_error( $job_id ) ) {
+			throw new Exception( $job_id->get_error_message() );
 		}
 
 		wp_send_json_success(
 			array(
-				'message' => esc_html__( 'Post created successfully!', 'automated-blog-content-creator' ),
-				'post_id' => $result,
+				'message' => esc_html__( 'Generation job queued successfully.', 'automated-blog-content-creator' ),
+				'job_id'  => $job_id,
 			)
 		);
 
@@ -316,27 +309,21 @@ function abcc_handle_bulk_generate_single() {
 				'source'   => 'bulk',
 			)
 		);
-		$api_key = abcc_check_api_key( $payload['model'] );
-
-		$result = abcc_openai_generate_post(
-			$api_key,
-			$payload['keywords'],
-			$payload['model'],
-			$payload['tone'],
-			false,
-			$payload['char_limit'],
-			$payload['post_type'],
-			$payload
+		$job_id = abcc_queue_generation_job(
+			$payload,
+			array(
+				'run_id' => $run_id,
+			)
 		);
 
-		if ( is_wp_error( $result ) ) {
-			throw new Exception( $result->get_error_message() );
+		if ( is_wp_error( $job_id ) ) {
+			throw new Exception( $job_id->get_error_message() );
 		}
 
 		wp_send_json_success(
 			array(
 				'message' => __( 'Success', 'automated-blog-content-creator' ),
-				'post_id' => $result,
+				'job_id'  => $job_id,
 				'run_id'  => $run_id,
 			)
 		);
@@ -427,28 +414,16 @@ function abcc_handle_regenerate_post() {
 				'source'     => 'regenerate',
 			)
 		);
-		$api_key = abcc_check_api_key( $payload['model'] );
+		$job_id = abcc_queue_generation_job( $payload );
 
-		$result = abcc_openai_generate_post(
-			$api_key,
-			$payload['keywords'],
-			$payload['model'],
-			$payload['tone'],
-			false,
-			$payload['char_limit'],
-			$payload['post_type'],
-			$payload
-		);
-
-		if ( is_wp_error( $result ) ) {
-			throw new Exception( $result->get_error_message() );
+		if ( is_wp_error( $job_id ) ) {
+			throw new Exception( $job_id->get_error_message() );
 		}
 
 		wp_send_json_success(
 			array(
-				'message'  => __( 'Post regenerated successfully!', 'automated-blog-content-creator' ),
-				'post_id'  => $result,
-				'edit_url' => get_edit_post_link( $result, 'none' ),
+				'message' => __( 'Regeneration job queued successfully!', 'automated-blog-content-creator' ),
+				'job_id'  => $job_id,
 			)
 		);
 
@@ -457,3 +432,57 @@ function abcc_handle_regenerate_post() {
 	}
 }
 add_action( 'wp_ajax_abcc_regenerate_post', 'abcc_handle_regenerate_post' );
+
+/**
+ * AJAX handler for polling a generation job.
+ *
+ * @since 3.7.0
+ */
+function abcc_handle_get_job_status() {
+	check_ajax_referer( 'abcc_openai_generate_post', 'nonce' );
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$job_id = isset( $_POST['job_id'] ) ? absint( $_POST['job_id'] ) : 0;
+	$job    = abcc_get_job_data( $job_id );
+
+	if ( empty( $job ) ) {
+		wp_send_json_error( array( 'message' => __( 'Generation job not found.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	wp_send_json_success( $job );
+}
+add_action( 'wp_ajax_abcc_get_job_status', 'abcc_handle_get_job_status' );
+
+/**
+ * AJAX handler for refreshing the generation log.
+ *
+ * @since 3.7.0
+ */
+function abcc_handle_get_job_log() {
+	check_ajax_referer( 'abcc_openai_generate_post', 'nonce' );
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$run_id = isset( $_POST['run_id'] ) ? sanitize_key( wp_unslash( $_POST['run_id'] ) ) : '';
+	$status = isset( $_POST['status_filter'] ) ? sanitize_text_field( wp_unslash( $_POST['status_filter'] ) ) : '';
+
+	wp_send_json_success(
+		array(
+			'html' => abcc_render_job_log_rows(
+				array(
+					'run_id' => $run_id,
+					'status' => $status,
+				)
+			),
+		)
+	);
+}
+add_action( 'wp_ajax_abcc_get_job_log', 'abcc_handle_get_job_log' );

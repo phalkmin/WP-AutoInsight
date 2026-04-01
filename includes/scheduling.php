@@ -89,47 +89,20 @@ function abcc_openai_generate_post_scheduled() {
 				'source'     => 'scheduled',
 			)
 		);
-		$api_key = abcc_check_api_key( $payload['model'] );
-
-		// Validate common conditions.
-		if ( empty( $api_key ) ) {
-			throw new Exception( 'API key not configured for scheduled post generation' );
-		}
-
-		// Generate the post.
-		$post_id = abcc_openai_generate_post(
-			$api_key,
-			$payload['keywords'],
-			$payload['model'],
-			$payload['tone'],
-			true,
-			$payload['char_limit'],
-			$payload['post_type'],
-			$payload
+		$job_id = abcc_queue_generation_job(
+			$payload,
+			array(
+				'created_by' => 0,
+			)
 		);
 
-		if ( is_wp_error( $post_id ) ) {
-			throw new Exception( $post_id->get_error_message() );
+		if ( is_wp_error( $job_id ) ) {
+			throw new Exception( $job_id->get_error_message() );
 		}
 
-		// Note: success notification is sent inside abcc_openai_generate_post().
-
-		return $post_id;
+		return $job_id;
 
 	} catch ( Exception $e ) {
-		// Send admin notification about the failure if enabled.
-		if ( true === get_option( 'openai_email_notifications', false ) ) {
-			wp_mail(
-				get_option( 'admin_email' ),
-				__( 'Scheduled Post Generation Failed', 'automated-blog-content-creator' ),
-				sprintf(
-					/* translators: %s: Error message */
-					__( 'The scheduled post generation failed with error: %s', 'automated-blog-content-creator' ),
-					$e->getMessage()
-				)
-			);
-		}
-
 		return false;
 	}
 }

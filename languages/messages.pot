@@ -1,81 +1,1770 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
-#
-#, fuzzy
+# Copyright (C) 2026 Paulo H. Alkmin
+# This file is distributed under the same license as the WP-AutoInsight plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-05-08 18:28-0300\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Project-Id-Version: WP-AutoInsight 3.7.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/Private-Insight\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-03-28T19:37:59+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.10.0\n"
+"X-Domain: automated-blog-content-creator\n"
 
-#: admin.php:17 admin.php:18
+#. Plugin Name of the plugin
+#: auto-post.php
+#: admin.php:38
+#: admin.php:39
+#: includes/admin/tab-about.php:18
+#: includes/class-abcc-plugin.php:169
 msgid "WP-AutoInsight"
 msgstr ""
 
-#: admin.php:26 admin.php:27
-msgid "Text Settings"
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: auto-post.php
+msgid "https://phalkmin.me/"
 msgstr ""
 
-#: admin.php:35 admin.php:36
+#. Description of the plugin
+#: auto-post.php
+msgid "Create blog posts automatically using the OpenAI and Gemini APIs!"
+msgstr ""
+
+#. Author of the plugin
+#: auto-post.php
+msgid "Paulo H. Alkmin"
+msgstr ""
+
+#: admin.php:211
+msgid "Default"
+msgstr ""
+
+#: admin.php:365
+msgid "Settings saved successfully!"
+msgstr ""
+
+#. translators: %d: number of posts to generate
+#: admin.php:389
+msgid "Generate %d Posts"
+msgstr ""
+
+#: admin.php:390
+msgid "Copied"
+msgstr ""
+
+#: admin.php:401
+msgid "Content Settings"
+msgstr ""
+
+#: admin.php:404
 msgid "Advanced Settings"
 msgstr ""
 
-#: auto-post.php:154
-msgid "My work is to create well-optimized SEO articles for the site "
+#: admin.php:407
+msgid "AI Models"
 msgstr ""
 
-#: auto-post.php:156
-msgid " with the URL "
+#: admin.php:410
+msgid "Audio Transcription"
 msgstr ""
 
-#: auto-post.php:159
-msgid " and this meta description: \""
+#: admin.php:413
+msgid "About"
 msgstr ""
 
-#: auto-post.php:162
-msgid ""
-"I need you to assume the persona of a web content writer with a strong focus "
-"on SEO and create an article for the website I specified. "
+#: admin.php:479
+msgid "The previously selected AI model is no longer available. A default model has been selected based on your available API keys."
 msgstr ""
 
-#: auto-post.php:164
-msgid "The article should focus on the following keywords: \""
+#. Translators: %1$s is the API name, %2$s is the error message.
+#: auto-post.php:78
+msgid "Error in %1$s API request: %2$s"
 msgstr ""
 
-#: auto-post.php:166
-msgid ". Use the following tone: "
+#: includes/admin-buttons.php:32
+msgid "Create AI Post"
 msgstr ""
 
-#: auto-post.php:168
-msgid ""
-". Use only HTML for the content, no need to add <article> or extra tags. Use "
-"<h1> for the title in the beginning. There is no need to add sections like "
-"category, keywords, etc. I just need the content that will be used on the "
-"article."
+#: includes/admin-buttons.php:44
+msgid "Create a new post using AI?"
 msgstr ""
 
-#: auto-post.php:171
-msgid " and in the following categories: \""
+#: includes/admin-buttons.php:49
+msgid "Queueing generation job\\u2026"
 msgstr ""
 
-#: auto-post.php:172
-msgid "Emphasize on: \""
+#: includes/admin-buttons.php:64
+#: includes/admin-buttons.php:85
+#: includes/audio.php:402
+msgid "An error occurred"
 msgstr ""
 
-#: auto-post.php:172
-msgid "\" and other relevant visual elements."
+#: includes/admin-buttons.php:69
+#: includes/admin-buttons.php:110
+#: includes/meta-boxes.php:147
+#: includes/meta-boxes.php:257
+msgid "Network error occurred"
 msgstr ""
 
-#: auto-post.php:177
-#, php-format
-msgid "Draw images representing %1$s. %2$s Visit %3$s for inspiration."
+#: includes/admin-buttons.php:101
+msgid "Done! Redirecting\\u2026"
+msgstr ""
+
+#: includes/admin-buttons.php:106
+msgid "Generation failed."
+msgstr ""
+
+#: includes/admin/tab-about.php:19
+msgid "Your Site, Your Rules. High-quality AI content without the SaaS markup."
+msgstr ""
+
+#. translators: %s: version number.
+#: includes/admin/tab-about.php:24
+msgid "Version %s (Den-O)"
+msgstr ""
+
+#: includes/admin/tab-about.php:37
+msgid "What's New in v3.7 (Den-O)"
+msgstr ""
+
+#: includes/admin/tab-about.php:41
+msgid "Background Jobs:"
+msgstr ""
+
+#: includes/admin/tab-about.php:42
+msgid "Manual, bulk, scheduled, and regenerate flows now queue immediately and run through WP-Cron in the background."
+msgstr ""
+
+#: includes/admin/tab-about.php:45
+msgid "Live Generation Log:"
+msgstr ""
+
+#: includes/admin/tab-about.php:46
+msgid "Track queued, running, succeeded, and failed jobs with source, runtime, and clear error reasons."
+msgstr ""
+
+#: includes/admin/tab-about.php:49
+msgid "Clearer Failures:"
+msgstr ""
+
+#: includes/admin/tab-about.php:50
+msgid "Failed jobs now show the actual error message and include a direct report link for support."
+msgstr ""
+
+#: includes/admin/tab-about.php:53
+msgid "Still Your Workflow:"
+msgstr ""
+
+#: includes/admin/tab-about.php:54
+msgid "Existing draft-first generation, bulk tools, scheduling, and regenerate actions continue to work on top of the new job system."
+msgstr ""
+
+#: includes/admin/tab-about.php:63
+msgid "Our Philosophy"
+msgstr ""
+
+#: includes/admin/tab-about.php:66
+msgid "WP-AutoInsight is built on the belief that you should own your tools and your data. Unlike SaaS platforms that charge high monthly fees and lock your content behind a subscription, this plugin runs on your own infrastructure and uses your own API keys at cost."
+msgstr ""
+
+#: includes/admin/tab-about.php:69
+msgid "You pay only for what you use, directly to the AI providers, with no markup from us. Your site, your rules, your content."
+msgstr ""
+
+#: includes/admin/tab-about.php:81
+msgid "Professional Services"
+msgstr ""
+
+#: includes/admin/tab-about.php:82
+msgid "Need help with content strategy or custom AI integrations?"
+msgstr ""
+
+#: includes/admin/tab-about.php:84
+msgid "Work With Me"
+msgstr ""
+
+#: includes/admin/tab-about.php:90
+msgid "Resources"
+msgstr ""
+
+#: includes/admin/tab-about.php:94
+msgid "Support Forum"
+msgstr ""
+
+#: includes/admin/tab-about.php:98
+msgid "Rate the Plugin"
+msgstr ""
+
+#: includes/admin/tab-about.php:102
+msgid "Source Code"
+msgstr ""
+
+#. translators: %s: developer name.
+#: includes/admin/tab-about.php:112
+msgid "Developed with passion by %s."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:18
+msgid "API Configuration"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:22
+msgid "Your OpenAI API key is already set in wp-config.php."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:27
+msgid "OpenAI: connected via WordPress AI Connectors."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:28
+#: includes/admin/tab-advanced.php:60
+#: includes/admin/tab-advanced.php:92
+msgid "Active"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:29
+#: includes/admin/tab-advanced.php:61
+#: includes/admin/tab-advanced.php:93
+msgid "This key is managed by WordPress. To change it, go to Settings &rarr; AI Connectors."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:34
+msgid "OpenAI API key:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:34
+msgid "Get your key at platform.openai.com"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:47
+msgid "For extra security, add to wp-config.php using define('OPENAI_API', 'your-key');"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:54
+msgid "Your Gemini API key is already set in wp-config.php."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:59
+msgid "Google Gemini: connected via WordPress AI Connectors."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:66
+msgid "Gemini API key:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:66
+msgid "Get your key at aistudio.google.com"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:79
+msgid "For extra security, add to wp-config.php using define('GEMINI_API', 'your-key');"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:86
+msgid "Your Claude API key is already set in wp-config.php."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:91
+msgid "Claude (Anthropic): connected via WordPress AI Connectors."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:98
+msgid "Claude API key:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:98
+msgid "Get your key at console.anthropic.com"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:111
+msgid "For extra security, add to wp-config.php using define('CLAUDE_API', 'your-key');"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:119
+msgid "Perplexity API key:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:119
+msgid "Get your key at perplexity.ai/settings/api"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:132
+msgid "For extra security, add to wp-config.php using define('PERPLEXITY_API', 'your-key');"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:137
+msgid "Your Perplexity API key is already set in wp-config.php."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:145
+msgid "Stability AI API key:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:145
+msgid "Get your key at platform.stability.ai"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:158
+msgid "For extra security, add to wp-config.php using define('STABILITY_API', 'your-key');"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:163
+msgid "Your Stability AI API key is already set in wp-config.php."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:169
+msgid "Perplexity Settings"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:174
+msgid "Citation Style:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:181
+msgid "Inline hyperlinks"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:184
+msgid "References section at bottom"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:187
+msgid "Both inline + references section"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:191
+msgid "How source citations from Perplexity appear in generated posts."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:198
+msgid "Source Recency Filter:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:205
+msgid "No filter (all time)"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:208
+msgid "Last 24 hours"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:211
+msgid "Last week"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:214
+msgid "Last month"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:217
+msgid "Last year"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:221
+msgid "Limit Perplexity sources to recent content only."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:227
+msgid "Image Generation"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:232
+msgid "Generate Featured Images:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:240
+msgid "Automatically generate featured images for posts using AI"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:247
+msgid "OpenAI Image Size:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:247
+msgid "DALL-E 3 supported resolutions."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:261
+msgid "HD quality costs more but produces better detail."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:262
+msgid "OpenAI Image Quality:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:268
+msgid "Standard"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:269
+msgid "HD"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:276
+msgid "Stability AI Resolution:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:276
+msgid "SDXL supported resolution presets."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:291
+msgid "Image Generation Service:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:297
+msgid "Automatic (based on text model)"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:300
+msgid "Always use DALL-E"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:303
+msgid "Always use Stability AI"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:306
+msgid "Always use Gemini Nano Banana"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:310
+msgid "Choose how to handle image generation for different text models"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:317
+msgid "Gemini Image Model:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:323
+msgid "Nano Banana (Gemini 2.5 Flash) - Fast & Efficient"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:326
+msgid "Nano Banana Pro (Gemini 3 Pro) - Premium Quality"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:330
+msgid "Nano Banana Pro offers higher quality and text rendering capabilities"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:337
+msgid "Gemini Image Size:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:343
+msgid "1K - Standard Quality"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:346
+msgid "2K - High Quality (Recommended)"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:349
+msgid "4K - Ultra High Quality"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:353
+msgid "Higher resolution images take longer to generate and use more API quota"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:358
+msgid "Automation & Scheduling"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:362
+msgid "Schedule post creation:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:362
+msgid "How often the plugin should automatically generate and publish a new post using your keyword groups."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:368
+msgid "None"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:371
+msgid "Hourly"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:374
+msgid "Daily"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:377
+msgid "Weekly"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:380
+msgid "You can disable the automatic creation of posts or schedule as you wish"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:386
+msgid "Content Length"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:386
+msgid "Higher values produce longer, more detailed content and use more API credits."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:391
+msgid "The maximum number of tokens (words and characters) will be used by the AI during post generation. Range: 1-4096"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:397
+msgid "Enable Email Notifications:"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:403
+msgid "Receive email notifications when a new post is created."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:409
+msgid "User Permissions"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:412
+msgid "AI Prompting Capability"
+msgstr ""
+
+#: includes/admin/tab-advanced.php:418
+msgid "You have permission to generate content."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:420
+msgid "You do not have permission to generate content."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:425
+msgid "In WordPress 7.0+, permissions are controlled via the native \"prompt_ai\" capability. By default, Administrators have this capability."
+msgstr ""
+
+#: includes/admin/tab-advanced.php:430
+msgid "Save Advanced Settings"
+msgstr ""
+
+#: includes/admin/tab-audio.php:15
+msgid "Audio Transcription Settings"
+msgstr ""
+
+#: includes/admin/tab-audio.php:16
+msgid "Configure audio transcription and automatic post creation from audio files."
+msgstr ""
+
+#: includes/admin/tab-audio.php:24
+msgid "Enable Audio Transcription"
+msgstr ""
+
+#: includes/admin/tab-audio.php:32
+msgid "Allow transcribing audio files and converting them to blog posts using OpenAI Whisper"
+msgstr ""
+
+#: includes/admin/tab-audio.php:39
+msgid "Supported Audio Formats"
+msgstr ""
+
+#: includes/admin/tab-audio.php:65
+msgid "Select which audio formats to enable for transcription. OpenAI Whisper supports most common audio formats."
+msgstr ""
+
+#: includes/admin/tab-audio.php:72
+msgid "Transcription Language"
+msgstr ""
+
+#: includes/admin/tab-audio.php:104
+msgid "Select the primary language for transcription. Auto-detect will let OpenAI determine the language."
+msgstr ""
+
+#: includes/admin/tab-audio.php:110
+msgid "Usage Information"
+msgstr ""
+
+#: includes/admin/tab-audio.php:114
+msgid "How to use Audio Transcription:"
+msgstr ""
+
+#: includes/admin/tab-audio.php:116
+msgid "Upload an audio file to your Media Library"
+msgstr ""
+
+#: includes/admin/tab-audio.php:117
+msgid "Go to the audio file's edit page"
+msgstr ""
+
+#: includes/admin/tab-audio.php:118
+msgid "Click \"Transcribe & Create Post\" in the publish box"
+msgstr ""
+
+#: includes/admin/tab-audio.php:119
+msgid "The AI will transcribe the audio and create a formatted blog post"
+msgstr ""
+
+#: includes/admin/tab-audio.php:121
+#: includes/onboarding.php:240
+#: includes/onboarding.php:354
+msgid "Note:"
+msgstr ""
+
+#: includes/admin/tab-audio.php:121
+msgid "Audio files must be under 25MB (OpenAI Whisper limit). Longer files may take several minutes to process."
+msgstr ""
+
+#: includes/admin/tab-audio.php:126
+msgid "Save Audio Settings"
+msgstr ""
+
+#. Translators: %1$s is the human-readable time difference, %2$s is the next run date.
+#: includes/admin/tab-content.php:24
+msgid "Next post scheduled in %1$s — %2$s. %3$s"
+msgstr ""
+
+#: includes/admin/tab-content.php:27
+msgid "Change schedule →"
+msgstr ""
+
+#: includes/admin/tab-content.php:33
+msgid "There are no scheduled posts to be published."
+msgstr ""
+
+#: includes/admin/tab-content.php:40
+msgid "Keyword Groups"
+msgstr ""
+
+#: includes/admin/tab-content.php:40
+msgid "Organize your keywords into groups with specific categories and templates."
+msgstr ""
+
+#: includes/admin/tab-content.php:41
+msgid "Each keyword group can have its own category and content template. Scheduled generation will rotate through these groups."
+msgstr ""
+
+#: includes/admin/tab-content.php:48
+msgid "Group Name"
+msgstr ""
+
+#: includes/admin/tab-content.php:49
+msgid "Remove Group"
+msgstr ""
+
+#: includes/admin/tab-content.php:49
+#: includes/admin/tab-content.php:103
+msgid "Remove"
+msgstr ""
+
+#: includes/admin/tab-content.php:53
+#: includes/admin/tab-content.php:184
+msgid "Keywords (one per line)"
+msgstr ""
+
+#: includes/admin/tab-content.php:57
+msgid "Target Category"
+msgstr ""
+
+#: includes/admin/tab-content.php:61
+#: includes/admin/tab-content.php:194
+msgid "Content Template"
+msgstr ""
+
+#: includes/admin/tab-content.php:74
+msgid "Add Keyword Group"
+msgstr ""
+
+#: includes/admin/tab-content.php:79
+msgid "Content Templates"
+msgstr ""
+
+#: includes/admin/tab-content.php:79
+msgid "Define the structure and instructions for your AI-generated content."
+msgstr ""
+
+#: includes/admin/tab-content.php:80
+msgid "Use placeholders to inject dynamic data into your prompts: {keywords}, {title}, {tone}, {site_name}, {category}."
+msgstr ""
+
+#: includes/admin/tab-content.php:88
+msgid "System default — read only"
+msgstr ""
+
+#: includes/admin/tab-content.php:92
+#: includes/admin/tab-content.php:107
+msgid "Prompt Pattern"
+msgstr ""
+
+#: includes/admin/tab-content.php:94
+msgid "HTML structure rules (headings, paragraphs, tag closing) are enforced automatically on top of any template — including this one."
+msgstr ""
+
+#: includes/admin/tab-content.php:101
+msgid "Template Name"
+msgstr ""
+
+#: includes/admin/tab-content.php:103
+msgid "Remove Template"
+msgstr ""
+
+#: includes/admin/tab-content.php:110
+msgid "Available Placeholders:"
+msgstr ""
+
+#: includes/admin/tab-content.php:124
+msgid "Add Content Template"
+msgstr ""
+
+#: includes/admin/tab-content.php:131
+msgid "Target Post Types"
+msgstr ""
+
+#: includes/admin/tab-content.php:143
+msgid "Select which post types should have the \"Create Post\" button"
+msgstr ""
+
+#: includes/admin/tab-content.php:147
+msgid "Tone"
+msgstr ""
+
+#: includes/admin/tab-content.php:147
+msgid "Controls the writing style of your generated content."
+msgstr ""
+
+#: includes/admin/tab-content.php:150
+msgid "Professional & formal"
+msgstr ""
+
+#: includes/admin/tab-content.php:151
+msgid "Conversational & relaxed"
+msgstr ""
+
+#: includes/admin/tab-content.php:152
+msgid "Warm & approachable"
+msgstr ""
+
+#: includes/admin/tab-content.php:153
+msgid "Custom (define your own)"
+msgstr ""
+
+#: includes/admin/tab-content.php:156
+msgid "Enter custom tone"
+msgstr ""
+
+#: includes/admin/tab-content.php:161
+msgid "Workflow Settings"
+msgstr ""
+
+#: includes/admin/tab-content.php:165
+msgid "Always save as draft for review before publishing"
+msgstr ""
+
+#: includes/admin/tab-content.php:167
+msgid "When enabled, new posts will be created as drafts. Recommended for quality control."
+msgstr ""
+
+#: includes/admin/tab-content.php:178
+msgid "Bulk Generate"
+msgstr ""
+
+#: includes/admin/tab-content.php:179
+msgid "Create multiple posts at once from a list of keywords."
+msgstr ""
+
+#: includes/admin/tab-content.php:185
+msgid "Example:\\nArtificial Intelligence\\nMachine Learning\\nData Science"
+msgstr ""
+
+#: includes/admin/tab-content.php:187
+msgid "Or upload a .txt file"
+msgstr ""
+
+#: includes/admin/tab-content.php:190
+msgid "Each line will trigger one separate post generation."
+msgstr ""
+
+#: includes/admin/tab-content.php:202
+msgid "AI Model"
+msgstr ""
+
+#: includes/admin/tab-content.php:220
+msgid "Create as draft (mandatory for bulk)"
+msgstr ""
+
+#: includes/admin/tab-content.php:225
+msgid "Generate 0 Posts"
+msgstr ""
+
+#: includes/admin/tab-content.php:231
+msgid "Generation Progress"
+msgstr ""
+
+#: includes/admin/tab-content.php:243
+msgid "Background jobs may be delayed. WP-Cron appears disabled or queued jobs have not started yet. If this keeps happening, check your site cron configuration."
+msgstr ""
+
+#. translators: %d: Group number.
+#: includes/admin/tab-content.php:254
+msgid "Group %d"
+msgstr ""
+
+#: includes/admin/tab-content.php:261
+msgid "Create post manually"
+msgstr ""
+
+#: includes/admin/tab-content.php:266
+msgid "Generation Log"
+msgstr ""
+
+#: includes/admin/tab-content.php:269
+msgid "Show:"
+msgstr ""
+
+#: includes/admin/tab-content.php:272
+msgid "All jobs"
+msgstr ""
+
+#: includes/admin/tab-content.php:273
+#: includes/class-abcc-job.php:262
+msgid "Queued"
+msgstr ""
+
+#: includes/admin/tab-content.php:274
+#: includes/class-abcc-job.php:263
+msgid "Running"
+msgstr ""
+
+#: includes/admin/tab-content.php:275
+#: includes/class-abcc-job.php:265
+msgid "Failed"
+msgstr ""
+
+#: includes/admin/tab-content.php:276
+#: includes/class-abcc-job.php:264
+msgid "Succeeded"
+msgstr ""
+
+#: includes/admin/tab-content.php:280
+msgid "Auto-refresh"
+msgstr ""
+
+#: includes/admin/tab-content.php:283
+msgid "Refresh now"
+msgstr ""
+
+#: includes/admin/tab-content.php:289
+msgid "Status"
+msgstr ""
+
+#: includes/admin/tab-content.php:290
+msgid "Source"
+msgstr ""
+
+#: includes/admin/tab-content.php:291
+msgid "Model"
+msgstr ""
+
+#: includes/admin/tab-content.php:292
+msgid "Keywords Used"
+msgstr ""
+
+#: includes/admin/tab-content.php:293
+msgid "Template"
+msgstr ""
+
+#: includes/admin/tab-content.php:294
+msgid "Created"
+msgstr ""
+
+#: includes/admin/tab-content.php:295
+msgid "Runtime"
+msgstr ""
+
+#: includes/admin/tab-content.php:296
+msgid "Result"
+msgstr ""
+
+#: includes/admin/tab-content.php:304
+msgid "The latest jobs update automatically while generation runs in the background."
+msgstr ""
+
+#: includes/admin/tab-models.php:17
+msgid "Select the AI model for content generation."
+msgstr ""
+
+#: includes/admin/tab-models.php:17
+msgid "Higher-tier models produce richer, more accurate content but cost more per API call. Economy models are great for drafts; Premium for final-quality output."
+msgstr ""
+
+#: includes/admin/tab-models.php:54
+msgid "Save Model Settings"
+msgstr ""
+
+#: includes/ajax-handlers.php:19
+#: includes/ajax-handlers.php:112
+#: includes/ajax-handlers.php:289
+#: includes/ajax-handlers.php:388
+#: includes/ajax-handlers.php:445
+#: includes/ajax-handlers.php:470
+#: includes/onboarding.php:597
+#: includes/onboarding.php:705
+#: includes/onboarding.php:761
+msgid "Permission denied."
+msgstr ""
+
+#: includes/ajax-handlers.php:33
+msgid "No keyword groups found. Please add at least one group in Content Settings."
+msgstr ""
+
+#: includes/ajax-handlers.php:37
+msgid "Invalid post type requested."
+msgstr ""
+
+#: includes/ajax-handlers.php:41
+msgid "This post type is not enabled for manual generation."
+msgstr ""
+
+#: includes/ajax-handlers.php:60
+msgid "No keywords found in any group."
+msgstr ""
+
+#: includes/ajax-handlers.php:84
+msgid "Generation job queued successfully."
+msgstr ""
+
+#: includes/ajax-handlers.php:101
+#: includes/infographic.php:18
+msgid "Security check failed"
+msgstr ""
+
+#: includes/ajax-handlers.php:107
+#: includes/ajax-handlers.php:383
+msgid "Invalid post ID"
+msgstr ""
+
+#: includes/ajax-handlers.php:120
+#: includes/infographic.php:31
+msgid "Post not found"
+msgstr ""
+
+#: includes/ajax-handlers.php:130
+#: includes/infographic.php:39
+msgid "API key not configured"
+msgstr ""
+
+#: includes/ajax-handlers.php:158
+msgid "Failed to generate new content"
+msgstr ""
+
+#: includes/ajax-handlers.php:187
+msgid "Post rewritten successfully!"
+msgstr ""
+
+#: includes/ajax-handlers.php:211
+#: includes/ajax-handlers.php:346
+msgid "Unauthorized"
+msgstr ""
+
+#: includes/ajax-handlers.php:238
+msgid "API key is empty"
+msgstr ""
+
+#: includes/ajax-handlers.php:241
+msgid "Invalid provider"
+msgstr ""
+
+#: includes/ajax-handlers.php:261
+#: includes/ajax-handlers.php:265
+msgid "Verified just now"
+msgstr ""
+
+#: includes/ajax-handlers.php:271
+#: includes/ajax-handlers.php:275
+msgid "Connection failed"
+msgstr ""
+
+#: includes/ajax-handlers.php:299
+msgid "Empty keyword."
+msgstr ""
+
+#: includes/ajax-handlers.php:325
+msgid "Success"
+msgstr ""
+
+#: includes/ajax-handlers.php:394
+msgid "Generation parameters not found for this post."
+msgstr ""
+
+#: includes/ajax-handlers.php:400
+msgid "Invalid generation parameters."
+msgstr ""
+
+#: includes/ajax-handlers.php:425
+msgid "Regeneration job queued successfully!"
+msgstr ""
+
+#: includes/ajax-handlers.php:453
+msgid "Generation job not found."
+msgstr ""
+
+#: includes/audio.php:39
+msgid "AI Transcription:"
+msgstr ""
+
+#: includes/audio.php:42
+msgid "Transcribe & Create Post"
+msgstr ""
+
+#: includes/audio.php:45
+msgid "Transcribe Only"
+msgstr ""
+
+#: includes/audio.php:50
+msgid "Transcript:"
+msgstr ""
+
+#: includes/audio.php:54
+msgid "Create Post from Transcript"
+msgstr ""
+
+#: includes/audio.php:73
+#: includes/audio.php:156
+msgid "Permission denied"
+msgstr ""
+
+#: includes/audio.php:80
+msgid "Invalid attachment ID"
+msgstr ""
+
+#: includes/audio.php:88
+msgid "An OpenAI API key is required for audio transcription. Please add one in Advanced Settings."
+msgstr ""
+
+#: includes/audio.php:94
+msgid "File not found"
+msgstr ""
+
+#. translators: %s: File extension
+#: includes/audio.php:105
+msgid "Unsupported file format: %s"
+msgstr ""
+
+#: includes/audio.php:113
+#: includes/audio.php:196
+msgid "File too large. Maximum size is 25MB."
+msgstr ""
+
+#: includes/audio.php:125
+msgid "Post created successfully from audio transcription!"
+msgstr ""
+
+#: includes/audio.php:135
+msgid "Audio transcribed successfully!"
+msgstr ""
+
+#: includes/audio.php:163
+msgid "Missing required data"
+msgstr ""
+
+#: includes/audio.php:171
+msgid "Post created successfully from transcript!"
+msgstr ""
+
+#. translators: %s: cURL error message
+#. translators: %s: Error message
+#: includes/audio.php:229
+#: includes/onboarding.php:861
+#: includes/onboarding.php:1014
+msgid "Network error: %s"
+msgstr ""
+
+#. translators: %1$d: HTTP status code, %2$s: Error message
+#: includes/audio.php:242
+msgid "Transcription failed. Status code: %1$d. Error: %2$s"
+msgstr ""
+
+#: includes/audio.php:400
+msgid "Transcribing audio..."
+msgstr ""
+
+#: includes/audio.php:401
+msgid "Creating post..."
+msgstr ""
+
+#: includes/class-abcc-job.php:34
+msgid "Generation Jobs"
+msgstr ""
+
+#. translators: %s: generation source.
+#: includes/class-abcc-job.php:59
+msgid "Generation Job: %s"
+msgstr ""
+
+#: includes/class-abcc-job.php:166
+msgid "Invalid generation payload."
+msgstr ""
+
+#: includes/class-abcc-job.php:177
+msgid "API key not configured for the selected model."
+msgstr ""
+
+#: includes/class-abcc-job.php:227
+msgid "Scheduled Post Generation Failed"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/class-abcc-job.php:230
+msgid "The scheduled post generation failed with error: %s"
+msgstr ""
+
+#: includes/class-abcc-job.php:245
+msgid "Manual"
+msgstr ""
+
+#: includes/class-abcc-job.php:246
+msgid "Scheduled"
+msgstr ""
+
+#: includes/class-abcc-job.php:247
+msgid "Bulk"
+msgstr ""
+
+#: includes/class-abcc-job.php:248
+#: includes/class-abcc-job.php:379
+msgid "Regenerate"
+msgstr ""
+
+#: includes/class-abcc-job.php:320
+msgid "No generation jobs found."
+msgstr ""
+
+#. translators: %s: runtime in seconds.
+#: includes/class-abcc-job.php:351
+msgid "%ss"
+msgstr ""
+
+#: includes/class-abcc-job.php:369
+#: includes/meta-boxes.php:247
+msgid "Edit"
+msgstr ""
+
+#: includes/class-abcc-job.php:374
+#: includes/meta-boxes.php:246
+msgid "View"
+msgstr ""
+
+#: includes/class-abcc-job.php:387
+msgid "Copy error"
+msgstr ""
+
+#: includes/class-abcc-job.php:391
+msgid "WP-AutoInsight generation error"
+msgstr ""
+
+#: includes/class-abcc-job.php:395
+msgid "Report this error"
+msgstr ""
+
+#: includes/class-abcc-plugin.php:170
+msgid "Automated AI content generation for posts, SEO, images, and scheduling."
+msgstr ""
+
+#. translators: %s: PHP version
+#: includes/class-abcc-plugin.php:196
+msgid "WP-AutoInsight requires PHP version 7.4 or higher. Your current PHP version is %s. Please upgrade your PHP version or contact your host for assistance."
+msgstr ""
+
+#. translators: %s: WordPress version
+#: includes/class-abcc-plugin.php:209
+msgid "WP-AutoInsight requires WordPress version 6.8 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin."
+msgstr ""
+
+#: includes/content-generation.php:404
+msgid "Sources"
+msgstr ""
+
+#: includes/infographic.php:24
+msgid "Invalid post or permission denied"
+msgstr ""
+
+#: includes/infographic.php:61
+msgid "Failed to generate infographic description"
+msgstr ""
+
+#: includes/infographic.php:74
+msgid "No image generation service available"
+msgstr ""
+
+#: includes/infographic.php:90
+msgid "Failed to generate infographic image"
+msgstr ""
+
+#: includes/infographic.php:116
+msgid "Infographic created successfully!"
+msgstr ""
+
+#: includes/meta-boxes.php:23
+msgid "AI Content Tools"
+msgstr ""
+
+#: includes/meta-boxes.php:33
+msgid "AI Infographic Tools"
+msgstr ""
+
+#: includes/meta-boxes.php:54
+#: includes/meta-boxes.php:142
+#: includes/meta-boxes.php:149
+msgid "Rewrite with AI"
+msgstr ""
+
+#: includes/meta-boxes.php:63
+msgid "AI Social Excerpt:"
+msgstr ""
+
+#: includes/meta-boxes.php:78
+msgid "Last Generation:"
+msgstr ""
+
+#: includes/meta-boxes.php:81
+msgid "Model:"
+msgstr ""
+
+#: includes/meta-boxes.php:85
+msgid "Template:"
+msgstr ""
+
+#: includes/meta-boxes.php:89
+msgid "Keywords:"
+msgstr ""
+
+#: includes/meta-boxes.php:98
+#: includes/meta-boxes.php:183
+#: includes/meta-boxes.php:188
+msgid "Regenerate as New Draft"
+msgstr ""
+
+#: includes/meta-boxes.php:115
+msgid "Are you sure you want to rewrite this post? This will replace the current content."
+msgstr ""
+
+#: includes/meta-boxes.php:119
+msgid "Rewriting..."
+msgstr ""
+
+#: includes/meta-boxes.php:120
+msgid "Analyzing content..."
+msgstr ""
+
+#: includes/meta-boxes.php:132
+msgid "Success! Reloading page..."
+msgstr ""
+
+#: includes/meta-boxes.php:140
+#: includes/meta-boxes.php:250
+msgid "Error: "
+msgstr ""
+
+#: includes/meta-boxes.php:140
+#: includes/meta-boxes.php:250
+msgid "Unknown error"
+msgstr ""
+
+#: includes/meta-boxes.php:160
+msgid "Regenerate this post? A new draft will be created with the same parameters."
+msgstr ""
+
+#: includes/meta-boxes.php:164
+msgid "Regenerating\\u2026"
+msgstr ""
+
+#: includes/meta-boxes.php:165
+msgid "Generating new draft\\u2026"
+msgstr ""
+
+#: includes/meta-boxes.php:177
+msgid "Done! Opening new draft\\u2026"
+msgstr ""
+
+#: includes/meta-boxes.php:182
+msgid "An error occurred."
+msgstr ""
+
+#: includes/meta-boxes.php:187
+msgid "Network error occurred."
+msgstr ""
+
+#: includes/meta-boxes.php:205
+msgid "Save the post with content first to generate an infographic."
+msgstr ""
+
+#: includes/meta-boxes.php:214
+#: includes/meta-boxes.php:252
+#: includes/meta-boxes.php:259
+msgid "Create Infographic"
+msgstr ""
+
+#: includes/meta-boxes.php:228
+msgid "Create an infographic for this post?"
+msgstr ""
+
+#: includes/meta-boxes.php:232
+msgid "Creating..."
+msgstr ""
+
+#: includes/meta-boxes.php:233
+msgid "Generating infographic..."
+msgstr ""
+
+#: includes/meta-boxes.php:245
+msgid "Success! "
+msgstr ""
+
+#: includes/onboarding.php:29
+msgid "Testing connection..."
+msgstr ""
+
+#: includes/onboarding.php:30
+#: includes/onboarding.php:688
+msgid "Connection successful!"
+msgstr ""
+
+#: includes/onboarding.php:31
+msgid "Connection failed. Please check your API key."
+msgstr ""
+
+#: includes/onboarding.php:32
+#: includes/onboarding.php:407
+msgid "Generating your first post..."
+msgstr ""
+
+#: includes/onboarding.php:33
+#: includes/onboarding.php:45
+msgid "Welcome to WP-AutoInsight!"
+msgstr ""
+
+#. translators: %s: Comma-separated list of connected AI providers.
+#: includes/onboarding.php:35
+msgid "Connected via WordPress Connectors: %s"
+msgstr ""
+
+#: includes/onboarding.php:46
+msgid "Let's get you set up and creating content in just a few minutes."
+msgstr ""
+
+#: includes/onboarding.php:60
+msgid "What's your primary goal?"
+msgstr ""
+
+#: includes/onboarding.php:61
+msgid "This helps us configure the perfect settings for your content."
+msgstr ""
+
+#. translators: 1: tone, 2: content length
+#: includes/onboarding.php:80
+msgid "Tone: %1$s • Length: %2$s tokens"
+msgstr ""
+
+#: includes/onboarding.php:94
+#: includes/onboarding.php:369
+msgid "Continue"
+msgstr ""
+
+#: includes/onboarding.php:97
+msgid "Skip setup (for advanced users)"
+msgstr ""
+
+#: includes/onboarding.php:106
+msgid "Connect an AI Provider"
+msgstr ""
+
+#: includes/onboarding.php:107
+msgid "Choose one AI service to power your content generation."
+msgstr ""
+
+#: includes/onboarding.php:113
+msgid "AI provider already connected via WordPress Connectors!"
+msgstr ""
+
+#: includes/onboarding.php:116
+msgid "Use existing connection"
+msgstr ""
+
+#: includes/onboarding.php:117
+msgid "Add a different key manually"
+msgstr ""
+
+#: includes/onboarding.php:127
+msgid "Tip: Configure your AI key once in WordPress Connectors"
+msgstr ""
+
+#: includes/onboarding.php:128
+msgid "WordPress 7.0 lets you manage all AI provider keys centrally at Settings > Connectors. Any key you add there works automatically here."
+msgstr ""
+
+#: includes/onboarding.php:129
+msgid "Open Connectors settings"
+msgstr ""
+
+#: includes/onboarding.php:144
+msgid "OpenAI"
+msgstr ""
+
+#: includes/onboarding.php:145
+msgid "GPT-4.1, o4-mini • Best for creative content"
+msgstr ""
+
+#: includes/onboarding.php:153
+#: includes/onboarding.php:210
+#: includes/onboarding.php:267
+msgid "API key configured in wp-config.php - excellent security! 🔒"
+msgstr ""
+
+#: includes/onboarding.php:157
+#: includes/onboarding.php:214
+#: includes/onboarding.php:271
+#: includes/onboarding.php:328
+msgid "Test Connection"
+msgstr ""
+
+#: includes/onboarding.php:162
+msgid "sk-..."
+msgstr ""
+
+#: includes/onboarding.php:164
+#: includes/onboarding.php:221
+#: includes/onboarding.php:278
+#: includes/onboarding.php:335
+msgid "Test"
+msgstr ""
+
+#: includes/onboarding.php:170
+msgid "How to get your OpenAI API key"
+msgstr ""
+
+#: includes/onboarding.php:175
+#: includes/onboarding.php:289
+#: includes/onboarding.php:346
+msgid "Visit"
+msgstr ""
+
+#: includes/onboarding.php:176
+msgid "Sign up for an account or log in to your existing account"
+msgstr ""
+
+#: includes/onboarding.php:177
+msgid "Click the \"Create new secret key\" button"
+msgstr ""
+
+#: includes/onboarding.php:178
+msgid "Give your key a name (e.g., \"WP-AutoInsight\")"
+msgstr ""
+
+#: includes/onboarding.php:179
+msgid "Copy the API key (starts with \"sk-...\")"
+msgstr ""
+
+#: includes/onboarding.php:183
+msgid "Important:"
+msgstr ""
+
+#: includes/onboarding.php:184
+msgid "You'll need to add billing information to your OpenAI account. New accounts usually get $5 in free credits."
+msgstr ""
+
+#: includes/onboarding.php:201
+msgid "Claude"
+msgstr ""
+
+#: includes/onboarding.php:202
+msgid "Claude 4.5 Sonnet • Great for analytical content"
+msgstr ""
+
+#: includes/onboarding.php:219
+msgid "sk-ant-api..."
+msgstr ""
+
+#: includes/onboarding.php:227
+msgid "How to get your Claude API key"
+msgstr ""
+
+#: includes/onboarding.php:232
+msgid "Go to"
+msgstr ""
+
+#: includes/onboarding.php:233
+msgid "Create an account or sign in"
+msgstr ""
+
+#: includes/onboarding.php:234
+msgid "Navigate to \"API Keys\" in the left sidebar"
+msgstr ""
+
+#: includes/onboarding.php:235
+msgid "Click \"Create Key\" button"
+msgstr ""
+
+#: includes/onboarding.php:236
+msgid "Copy the API key (starts with \"sk-ant-api...\")"
+msgstr ""
+
+#: includes/onboarding.php:241
+msgid "Claude requires a paid account. New users get $5 in free credits after adding a payment method."
+msgstr ""
+
+#: includes/onboarding.php:258
+msgid "Google Gemini"
+msgstr ""
+
+#: includes/onboarding.php:259
+msgid "Gemini 2.5 Flash • Excellent for factual content"
+msgstr ""
+
+#: includes/onboarding.php:276
+msgid "AIza..."
+msgstr ""
+
+#: includes/onboarding.php:284
+msgid "How to get your Gemini API key"
+msgstr ""
+
+#: includes/onboarding.php:290
+msgid "Sign in with your Google account"
+msgstr ""
+
+#: includes/onboarding.php:291
+msgid "Click \"Create API key\" button"
+msgstr ""
+
+#: includes/onboarding.php:292
+msgid "Choose \"Create API key in new project\" (recommended)"
+msgstr ""
+
+#: includes/onboarding.php:293
+msgid "Copy the API key (starts with \"AIza...\")"
+msgstr ""
+
+#: includes/onboarding.php:297
+msgid "Great news:"
+msgstr ""
+
+#: includes/onboarding.php:298
+msgid "Gemini offers generous free usage limits - perfect for getting started!"
+msgstr ""
+
+#: includes/onboarding.php:315
+msgid "Perplexity"
+msgstr ""
+
+#: includes/onboarding.php:316
+msgid "Sonar Pro - Web-grounded content with citations"
+msgstr ""
+
+#: includes/onboarding.php:324
+msgid "API key configured in wp-config.php - excellent security!"
+msgstr ""
+
+#: includes/onboarding.php:333
+msgid "pplx-..."
+msgstr ""
+
+#: includes/onboarding.php:341
+msgid "How to get your Perplexity API key"
+msgstr ""
+
+#: includes/onboarding.php:347
+msgid "Sign up for an account or log in"
+msgstr ""
+
+#: includes/onboarding.php:348
+msgid "Navigate to the API section in Settings"
+msgstr ""
+
+#: includes/onboarding.php:349
+msgid "Generate a new API key"
+msgstr ""
+
+#: includes/onboarding.php:350
+msgid "Copy the API key (starts with \"pplx-...\")"
+msgstr ""
+
+#: includes/onboarding.php:355
+msgid "Perplexity API requires a paid plan. Content includes web citations automatically."
+msgstr ""
+
+#: includes/onboarding.php:366
+#: includes/onboarding.php:412
+msgid "Back"
+msgstr ""
+
+#: includes/onboarding.php:378
+msgid "Generate Your First Post"
+msgstr ""
+
+#: includes/onboarding.php:379
+msgid "Let's create your first AI-generated post to make sure everything is working perfectly."
+msgstr ""
+
+#: includes/onboarding.php:386
+msgid "Welcome Post"
+msgstr ""
+
+#: includes/onboarding.php:387
+msgid "We'll create a \"Hello World\" style post to test your setup and show you how the plugin works."
+msgstr ""
+
+#: includes/onboarding.php:391
+msgid "AI-generated content"
+msgstr ""
+
+#: includes/onboarding.php:395
+msgid "SEO-optimized"
+msgstr ""
+
+#: includes/onboarding.php:399
+msgid "Featured image"
+msgstr ""
+
+#: includes/onboarding.php:416
+msgid "Generate First Post"
+msgstr ""
+
+#: includes/onboarding.php:428
+msgid "Congratulations! 🎉"
+msgstr ""
+
+#: includes/onboarding.php:429
+msgid "WP-AutoInsight is now set up and ready to help you create amazing content."
+msgstr ""
+
+#: includes/onboarding.php:433
+msgid "Edit Your First Post"
+msgstr ""
+
+#: includes/onboarding.php:436
+msgid "Go to Settings"
+msgstr ""
+
+#: includes/onboarding.php:441
+msgid "What's Next?"
+msgstr ""
+
+#: includes/onboarding.php:443
+msgid "Customize your keywords and categories"
+msgstr ""
+
+#: includes/onboarding.php:444
+msgid "Set up automated scheduling"
+msgstr ""
+
+#: includes/onboarding.php:445
+msgid "Try the audio transcription feature"
+msgstr ""
+
+#: includes/onboarding.php:446
+msgid "Generate infographics for existing posts"
+msgstr ""
+
+#: includes/onboarding.php:465
+msgid "Personal/Business Blog"
+msgstr ""
+
+#: includes/onboarding.php:466
+msgid "Create engaging blog posts for your audience"
+msgstr ""
+
+#: includes/onboarding.php:475
+msgid "Business/Corporate Content"
+msgstr ""
+
+#: includes/onboarding.php:476
+msgid "Professional content for business websites"
+msgstr ""
+
+#: includes/onboarding.php:485
+msgid "News/Information Site"
+msgstr ""
+
+#: includes/onboarding.php:486
+msgid "Quick, informative articles and updates"
+msgstr ""
+
+#: includes/onboarding.php:495
+msgid "Creative/Entertainment"
+msgstr ""
+
+#: includes/onboarding.php:496
+msgid "Fun, engaging content with personality"
+msgstr ""
+
+#: includes/onboarding.php:649
+msgid "API key is required"
+msgstr ""
+
+#: includes/onboarding.php:803
+msgid "Unexpected response format from OpenAI"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/onboarding.php:814
+msgid "OpenAI connection failed: %s"
+msgstr ""
+
+#. translators: 1: HTTP status code, 2: Error message
+#: includes/onboarding.php:878
+msgid "Claude API error (%1$d): %2$s"
+msgstr ""
+
+#: includes/onboarding.php:890
+msgid "Unexpected response format from Claude API"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/onboarding.php:901
+msgid "Claude connection failed: %s"
+msgstr ""
+
+#: includes/onboarding.php:927
+msgid "Gemini API returned empty response"
+msgstr ""
+
+#: includes/onboarding.php:936
+msgid "Invalid Gemini API key"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/onboarding.php:943
+msgid "Gemini API error: %s"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/onboarding.php:952
+msgid "Gemini connection failed: %s"
+msgstr ""
+
+#: includes/onboarding.php:970
+msgid "🎉 Welcome to WP-AutoInsight! Your first post has been created and you're ready to go!"
+msgstr ""
+
+#. translators: 1: HTTP status code, 2: Error message
+#: includes/onboarding.php:1031
+msgid "Perplexity API error (%1$d): %2$s"
+msgstr ""
+
+#: includes/onboarding.php:1042
+msgid "Unexpected response format from Perplexity API"
+msgstr ""
+
+#. translators: %s: Error message
+#: includes/onboarding.php:1053
+msgid "Perplexity connection failed: %s"
+msgstr ""
+
+#. translators: %s: Post title
+#: includes/scheduling.php:142
+msgid "New AI Generated Post: %s"
+msgstr ""
+
+#. translators: %1$s: Post title, %2$s: Edit post URL
+#: includes/scheduling.php:148
+msgid "A new post \"%1$s\" has been created automatically.\\n\\nYou can edit it here: %2$s"
 msgstr ""

@@ -375,9 +375,9 @@ function abcc_openai_text_settings_page() {
 	$current_tab       = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
 
 	// Add admin styles.
-	wp_enqueue_style( 'wpai-admin-styles', plugins_url( 'css/admin.css', __FILE__ ), array(), '3.6.0' );
+	wp_enqueue_style( 'wpai-admin-styles', plugins_url( 'css/admin.css', __FILE__ ), array(), ABCC_VERSION );
 	// abcc-ui-script is already registered globally by ABCC_Plugin::enqueue_scripts().
-	wp_enqueue_script( 'wpai-admin-scripts', plugins_url( 'js/admin.js', __FILE__ ), array( 'jquery', 'abcc-ui-script' ), '3.6.0', true );
+	wp_enqueue_script( 'wpai-admin-scripts', plugins_url( 'js/admin.js', __FILE__ ), array( 'jquery', 'abcc-ui-script' ), ABCC_VERSION, true );
 	wp_localize_script(
 		'wpai-admin-scripts',
 		'abccAdmin',
@@ -387,6 +387,7 @@ function abcc_openai_text_settings_page() {
 			'i18n'        => array(
 				/* translators: %d: number of posts to generate */
 				'generateNPosts' => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
+				'copied'         => __( 'Copied', 'automated-blog-content-creator' ),
 			),
 		)
 	);

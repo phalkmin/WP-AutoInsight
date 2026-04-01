@@ -401,9 +401,54 @@
 .abcc-bulk-status--success { color: #46b450; font-weight: bold; }
 .abcc-bulk-status--error   { color: #dc3232; font-weight: bold; }
 
+.abcc-job-status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.abcc-job-status-badge--queued {
+    background: #e2e3e5;
+    color: #3c434a;
+}
+
+.abcc-job-status-badge--running {
+    background: #dbeafe;
+    color: #135e96;
+}
+
+.abcc-job-status-badge--succeeded {
+    background: #d4edda;
+    color: #0f5132;
+}
+
+.abcc-job-status-badge--failed {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.abcc-job-error {
+    color: #b32d2e;
+}
+
+.abcc-job-log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0 16px;
+}
+
+.abcc-job-log-autorefresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 @media screen and (max-width: 782px) {
     .abcc-bulk-grid {
         grid-template-columns: 1fr;
     }
 }
-

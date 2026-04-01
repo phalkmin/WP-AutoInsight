@@ -3,7 +3,7 @@
  * Tab: About
  *
  * @package WP-AutoInsight
- * @since 3.6.0
+ * @since 3.7.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<span style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px; font-size: 0.9em;">
 					<?php
 					/* translators: %s: version number. */
-					printf( esc_html__( 'Version %s (Kabuto)', 'automated-blog-content-creator' ), '3.6.0' );
+					printf( esc_html__( 'Version %s (Den-O)', 'automated-blog-content-creator' ), esc_html( ABCC_VERSION ) );
 					?>
 				</span>
 			</div>
@@ -34,24 +34,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="about-section" style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #e9ecef;">
 					<h3 style="color: #2c3e50; margin-top: 0;">
 						<span class="dashicons dashicons-clipboard" style="color: #2271b1;"></span>
-						<?php esc_html_e( "What's New in v3.6 (Kabuto)", 'automated-blog-content-creator' ); ?>
+						<?php esc_html_e( "What's New in v3.7 (Den-O)", 'automated-blog-content-creator' ); ?>
 					</h3>
 					<ul style="list-style: none; padding: 0;">
 						<li style="margin-bottom: 12px;">
-							<strong><?php esc_html_e( 'Bulk Generation:', 'automated-blog-content-creator' ); ?></strong>
-							<?php esc_html_e( 'Generate multiple posts from a keyword list — what autoblogging SaaS tools charge $99/month for.', 'automated-blog-content-creator' ); ?>
+							<strong><?php esc_html_e( 'Background Jobs:', 'automated-blog-content-creator' ); ?></strong>
+							<?php esc_html_e( 'Manual, bulk, scheduled, and regenerate flows now queue immediately and run through WP-Cron in the background.', 'automated-blog-content-creator' ); ?>
 						</li>
 						<li style="margin-bottom: 12px;">
-							<strong><?php esc_html_e( 'WordPress 7.0 Ready:', 'automated-blog-content-creator' ); ?></strong>
-							<?php esc_html_e( 'Native Connectors support and prompt_ai capability — first content plugin with WP 7.0 integration.', 'automated-blog-content-creator' ); ?>
+							<strong><?php esc_html_e( 'Live Generation Log:', 'automated-blog-content-creator' ); ?></strong>
+							<?php esc_html_e( 'Track queued, running, succeeded, and failed jobs with source, runtime, and clear error reasons.', 'automated-blog-content-creator' ); ?>
 						</li>
 						<li style="margin-bottom: 12px;">
-							<strong><?php esc_html_e( 'Cleaner Admin:', 'automated-blog-content-creator' ); ?></strong>
-							<?php esc_html_e( 'Settings extracted into focused partials — faster loads and the foundation for the v4.0 redesign.', 'automated-blog-content-creator' ); ?>
+							<strong><?php esc_html_e( 'Clearer Failures:', 'automated-blog-content-creator' ); ?></strong>
+							<?php esc_html_e( 'Failed jobs now show the actual error message and include a direct report link for support.', 'automated-blog-content-creator' ); ?>
 						</li>
 						<li style="margin-bottom: 12px;">
-							<strong><?php esc_html_e( 'Auditable Generation Log:', 'automated-blog-content-creator' ); ?></strong>
-							<?php esc_html_e( 'Every post records its source (manual, scheduled, bulk, regenerate) so you can see exactly what ran and when.', 'automated-blog-content-creator' ); ?>
+							<strong><?php esc_html_e( 'Still Your Workflow:', 'automated-blog-content-creator' ); ?></strong>
+							<?php esc_html_e( 'Existing draft-first generation, bulk tools, scheduling, and regenerate actions continue to work on top of the new job system.', 'automated-blog-content-creator' ); ?>
 						</li>
 					</ul>
 				</div>

@@ -6,7 +6,7 @@
  * for text and image generation.
  *
  * @package WP-AutoInsight
- * @version 3.6.0
+ * @version 3.7.0
  */
 
 use GeminiAPI\Client;

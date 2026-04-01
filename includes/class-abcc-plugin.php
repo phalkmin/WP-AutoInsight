@@ -46,7 +46,7 @@ class ABCC_Plugin {
 	 * Constructor
 	 */
 	public function __construct() {
-		$this->version = '3.6.0';
+		$this->version = ABCC_VERSION;
 		$this->init_hooks();
 	}
 
@@ -130,6 +130,10 @@ class ABCC_Plugin {
 		if ( version_compare( $installed_version, '3.6.0', '<' ) ) {
 			$this->setup_prompt_ai_capability();
 			update_option( 'abcc_version', '3.6.0' );
+		}
+
+		if ( version_compare( $installed_version, '3.7.0', '<' ) ) {
+			update_option( 'abcc_version', '3.7.0' );
 		}
 	}
 

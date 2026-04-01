@@ -46,7 +46,7 @@ function abcc_add_create_post_button() {
 			}
 
 			$button.css('pointer-events', 'none');
-			abcc.showStatus($status, '<?php echo esc_js( __( 'Creating post\u2026', 'automated-blog-content-creator' ) ); ?>');
+			abcc.showStatus($status, '<?php echo esc_js( __( 'Queueing generation job\u2026', 'automated-blog-content-creator' ) ); ?>');
 
 			$.ajax({
 				url: ajaxurl,
@@ -58,10 +58,8 @@ function abcc_add_create_post_button() {
 				},
 				success: function(response) {
 					if (response.success) {
-						abcc.showStatus($status, '<?php echo esc_js( __( 'Done! Redirecting\u2026', 'automated-blog-content-creator' ) ); ?>', 'success');
-						if (response.data.post_id) {
-							window.location.href = '<?php echo esc_url( admin_url( 'post.php?action=edit&post=' ) ); ?>' + response.data.post_id;
-						}
+						abcc.showStatus($status, response.data.message);
+						pollJobStatus(response.data.job_id);
 					} else {
 						abcc.setError($status, response.data.message || '<?php echo esc_js( __( 'An error occurred', 'automated-blog-content-creator' ) ); ?>');
 						$button.css('pointer-events', 'auto');
@@ -72,6 +70,48 @@ function abcc_add_create_post_button() {
 					$button.css('pointer-events', 'auto');
 				}
 			});
+
+			function pollJobStatus(jobId) {
+				$.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					data: {
+						action: 'abcc_get_job_status',
+						nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_openai_generate_post' ) ); ?>',
+						job_id: jobId
+					},
+					success: function(jobResponse) {
+						if (!jobResponse.success) {
+							abcc.setError($status, jobResponse.data.message || '<?php echo esc_js( __( 'An error occurred', 'automated-blog-content-creator' ) ); ?>');
+							$button.css('pointer-events', 'auto');
+							return;
+						}
+
+						const job = jobResponse.data;
+						abcc.showStatus($status, 'Status: ' + job.statusLabel);
+
+						if ('queued' === job.status || 'running' === job.status) {
+							setTimeout(function() {
+								pollJobStatus(jobId);
+							}, 3000);
+							return;
+						}
+
+						if ('succeeded' === job.status && job.post_id) {
+							abcc.showStatus($status, '<?php echo esc_js( __( 'Done! Redirecting\u2026', 'automated-blog-content-creator' ) ); ?>', 'success');
+							window.location.href = '<?php echo esc_url( admin_url( 'post.php?action=edit&post=' ) ); ?>' + job.post_id;
+							return;
+						}
+
+						abcc.setError($status, job.message || '<?php echo esc_js( __( 'Generation failed.', 'automated-blog-content-creator' ) ); ?>');
+						$button.css('pointer-events', 'auto');
+					},
+					error: function() {
+						abcc.setError($status, '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+						$button.css('pointer-events', 'auto');
+					}
+				});
+			}
 		});
 	});
 	</script>
