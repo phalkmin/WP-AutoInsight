@@ -161,7 +161,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<th scope="row"><?php esc_html_e( 'Workflow Settings', 'automated-blog-content-creator' ); ?></th>
 				<td>
 					<label for="abcc_draft_first">
-						<input type="checkbox" name="abcc_draft_first" id="abcc_draft_first" value="1" <?php checked( get_option( 'abcc_draft_first', true ) ); ?>>
+						<input type="checkbox" name="abcc_draft_first" id="abcc_draft_first" value="1" <?php checked( abcc_get_setting( 'abcc_draft_first', true ) ); ?>>
 						<?php esc_html_e( 'Always save as draft for review before publishing', 'automated-blog-content-creator' ); ?>
 					</label>
 					<p class="description"><?php esc_html_e( 'When enabled, new posts will be created as drafts. Recommended for quality control.', 'automated-blog-content-creator' ); ?></p>
@@ -203,7 +203,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<select id="abcc-bulk-model" class="widefat">
 							<?php
 							$model_options = abcc_get_ai_model_options();
-							$current_model = get_option( 'prompt_select', 'gpt-4.1-mini' );
+							$current_model = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 							foreach ( $model_options as $provider => $data ) :
 								printf( '<optgroup label="%s">', esc_attr( $data['group'] ) );
 								foreach ( $data['options'] as $m_id => $m_data ) {

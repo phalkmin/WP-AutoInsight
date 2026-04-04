@@ -82,6 +82,24 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 }
 
 /**
+ * Build featured image alt text.
+ *
+ * @param string $title           Post title.
+ * @param string $primary_keyword Primary keyword.
+ * @return string
+ */
+function abcc_build_featured_image_alt_text( $title, $primary_keyword ) {
+	$title           = trim( (string) $title );
+	$primary_keyword = trim( (string) $primary_keyword );
+
+	if ( '' === $title || '' === $primary_keyword ) {
+		return '';
+	}
+
+	return $title . ' - ' . $primary_keyword;
+}
+
+/**
  * Sets the featured image for a post.
  *
  * @param int    $post_id Post ID.

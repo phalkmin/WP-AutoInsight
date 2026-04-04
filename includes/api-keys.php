@@ -27,33 +27,7 @@ function abcc_wp_ai_client_available() {
  * @return string
  */
 function abcc_get_model_provider( $model = '' ) {
-	$model = ! empty( $model ) ? $model : get_option( 'prompt_select', 'gpt-4.1-mini' );
-
-	$model_options = abcc_get_ai_model_options();
-
-	foreach ( $model_options as $provider_key => $group ) {
-		if ( isset( $group['options'][ $model ] ) ) {
-			return $provider_key;
-		}
-	}
-
-	if ( false !== strpos( $model, 'claude' ) ) {
-		return 'claude';
-	}
-
-	if ( false !== strpos( $model, 'gemini' ) ) {
-		return 'gemini';
-	}
-
-	if ( 0 === strpos( $model, 'sonar' ) ) {
-		return 'perplexity';
-	}
-
-	if ( false !== strpos( $model, 'gpt' ) || preg_match( '/^o[0-9]/', $model ) ) {
-		return 'openai';
-	}
-
-	return '';
+	return abcc_get_provider_for_model( $model );
 }
 
 /**
@@ -73,12 +47,9 @@ function abcc_get_wp_ai_credential( $provider ) {
 		return null;
 	}
 
-	// Map our internal slugs to WP 7.0 Connectors IDs.
-	$connector_id = $provider;
-	if ( 'claude' === $provider ) {
-		$connector_id = 'anthropic';
-	} elseif ( 'gemini' === $provider ) {
-		$connector_id = 'google';
+	$connector_id = abcc_get_provider_wp_connector_id( $provider );
+	if ( empty( $connector_id ) ) {
+		return null;
 	}
 
 	// Only proceed if WP has this connector registered.
@@ -113,8 +84,6 @@ function abcc_get_wp_ai_credential( $provider ) {
  * @return string
  */
 function abcc_get_provider_api_key( $provider ) {
-	$api_key = '';
-
 	if ( abcc_wp_ai_client_available() ) {
 		$wp_key = abcc_get_wp_ai_credential( $provider );
 		if ( ! empty( $wp_key ) ) {
@@ -122,29 +91,12 @@ function abcc_get_provider_api_key( $provider ) {
 		}
 	}
 
-	switch ( $provider ) {
-		case 'openai':
-			$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
-			break;
-
-		case 'claude':
-			$api_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
-			break;
-
-		case 'gemini':
-			$api_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
-			break;
-
-		case 'perplexity':
-			$api_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
-			break;
-
-		case 'stability':
-			$api_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
-			break;
+	$constant_name = abcc_get_provider_constant_name( $provider );
+	if ( ! empty( $constant_name ) && defined( $constant_name ) ) {
+		return constant( $constant_name );
 	}
 
-	return $api_key;
+	return abcc_get_provider_saved_api_key( $provider );
 }
 
 /**
@@ -186,7 +138,7 @@ function abcc_determine_image_service( $text_model ) {
 	$stability_key = abcc_get_provider_api_key( 'stability' );
 	$gemini_key    = abcc_get_provider_api_key( 'gemini' );
 
-	$preferred_image_service = get_option( 'preferred_image_service', 'auto' );
+	$preferred_image_service = abcc_get_setting( 'preferred_image_service', 'auto' );
 
 	// If user has explicitly selected a service, use it if available.
 	if ( 'auto' !== $preferred_image_service ) {
@@ -211,16 +163,7 @@ function abcc_determine_image_service( $text_model ) {
 	}
 
 	// Determine provider based on text model.
-	$model_provider = '';
-	if ( false !== strpos( $text_model, 'gpt' ) || 'openai' === $text_model || preg_match( '/^o[0-9]/', $text_model ) ) {
-		$model_provider = 'openai';
-	} elseif ( false !== strpos( $text_model, 'claude' ) ) {
-		$model_provider = 'claude';
-	} elseif ( false !== strpos( $text_model, 'gemini' ) ) {
-		$model_provider = 'gemini';
-	} elseif ( false !== strpos( $text_model, 'sonar' ) ) {
-		$model_provider = 'perplexity';
-	}
+	$model_provider = abcc_get_model_provider( $text_model );
 
 	// Auto-select based on text model provider.
 	if ( 'openai' === $model_provider && ! empty( $openai_key ) ) {

@@ -80,61 +80,7 @@ class ABCC_Plugin {
 	 * Run database migrations.
 	 */
 	public function run_migrations() {
-		$installed_version = get_option( 'abcc_version', '1.0.0' );
-
-		if ( version_compare( $installed_version, '3.3.0', '<' ) ) {
-			// Upgrade from pre-3.3.0.
-			if ( get_option( 'openai_keywords' ) !== false ) {
-				if ( get_option( 'abcc_draft_first' ) === false ) {
-					update_option( 'abcc_draft_first', 0 ); // Unchecked
-				}
-			}
-
-			update_option( 'abcc_version', '3.3.0' );
-		}
-
-		if ( version_compare( $installed_version, '3.5.0', '<' ) ) {
-			// 1. Create default templates.
-			if ( get_option( 'abcc_content_templates' ) === false ) {
-				$default_templates = array(
-					'default' => array(
-						'name'   => 'Default Template',
-						'prompt' => "Write a {tone} blog post with the following title: {title}\n\nUsing these keywords: {keywords}",
-					),
-				);
-				update_option( 'abcc_content_templates', $default_templates );
-			}
-
-			// 2. Migrate flat keywords to groups.
-			if ( get_option( 'abcc_keyword_groups' ) === false ) {
-				$old_keywords        = get_option( 'openai_keywords', '' );
-				$selected_categories = get_option( 'openai_selected_categories', array() );
-
-				// Convert string keywords to array.
-				$keyword_array = array_filter( array_map( 'trim', explode( "\n", $old_keywords ) ) );
-
-				$default_groups = array(
-					array(
-						'name'     => 'Default Group',
-						'keywords' => $keyword_array,
-						'category' => ! empty( $selected_categories ) ? $selected_categories[0] : 0,
-						'template' => 'default',
-					),
-				);
-				update_option( 'abcc_keyword_groups', $default_groups );
-			}
-
-			update_option( 'abcc_version', '3.5.0' );
-		}
-
-		if ( version_compare( $installed_version, '3.6.0', '<' ) ) {
-			$this->setup_prompt_ai_capability();
-			update_option( 'abcc_version', '3.6.0' );
-		}
-
-		if ( version_compare( $installed_version, '3.7.0', '<' ) ) {
-			update_option( 'abcc_version', '3.7.0' );
-		}
+		abcc_run_settings_migrations();
 	}
 
 	/**

@@ -6,7 +6,7 @@
  * for text and image generation.
  *
  * @package WP-AutoInsight
- * @version 3.7.0
+ * @version 3.8.0
  */
 
 use GeminiAPI\Client;
@@ -273,7 +273,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 		error_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
 
 		// Get Stability AI key for fallback.
-		$stability_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
+		$stability_key = abcc_get_provider_api_key( 'stability' );
 		return abcc_stability_generate_images( $prompt, $n, $stability_key );
 	}
 
@@ -281,7 +281,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 		error_log( 'OpenAI Image API: Missing expected data in response' );
 
 		// Get Stability AI key for fallback.
-		$stability_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
+		$stability_key = abcc_get_provider_api_key( 'stability' );
 		return abcc_stability_generate_images( $prompt, $n, $stability_key );
 	}
 

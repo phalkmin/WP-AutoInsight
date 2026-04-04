@@ -39,10 +39,10 @@ function abcc_get_openai_event_schedule() {
 function abcc_openai_generate_post_scheduled() {
 	try {
 		// Get required parameters.
-		$tone          = get_option( 'openai_tone', 'default' );
+		$tone          = abcc_get_setting( 'openai_tone', 'default' );
 		$auto_create   = get_option( 'openai_auto_create', 'none' );
-		$char_limit    = get_option( 'openai_char_limit', 200 );
-		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
+		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
+		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 
 		if ( 'none' === $auto_create ) {
 			throw new Exception( 'Auto-create is disabled' );

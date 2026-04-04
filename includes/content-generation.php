@@ -19,9 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_build_generation_payload( $args = array() ) {
 	$defaults = array(
 		'keywords'   => array(),
-		'model'      => get_option( 'prompt_select', 'gpt-4.1-mini' ),
-		'tone'       => get_option( 'openai_tone', 'default' ),
-		'char_limit' => (int) get_option( 'openai_char_limit', 200 ),
+		'model'      => abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' ),
+		'tone'       => abcc_get_setting( 'openai_tone', 'default' ),
+		'char_limit' => (int) abcc_get_setting( 'openai_char_limit', 200 ),
 		'post_type'  => 'post',
 		'category'   => 0,
 		'template'   => 'default',
@@ -29,6 +29,31 @@ function abcc_build_generation_payload( $args = array() ) {
 	);
 
 	return wp_parse_args( $args, $defaults );
+}
+
+/**
+ * Build the tracking meta written to generated posts.
+ *
+ * @param array $payload Generation payload.
+ * @return array
+ */
+function abcc_build_generation_tracking_meta( $payload ) {
+	return array(
+		'_abcc_generated'         => '1',
+		'_abcc_model'             => $payload['model'],
+		'_abcc_generation_params' => wp_json_encode(
+			array(
+				'keywords'   => (array) $payload['keywords'],
+				'model'      => $payload['model'],
+				'tone'       => $payload['tone'],
+				'char_limit' => (int) $payload['char_limit'],
+				'post_type'  => $payload['post_type'],
+				'category'   => (int) $payload['category'],
+				'template'   => $payload['template'],
+				'source'     => $payload['source'],
+			)
+		),
+	);
 }
 
 /**
@@ -46,11 +71,23 @@ function abcc_build_generation_payload( $args = array() ) {
  */
 function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone = 'default', $auto_create = false, $char_limit = 200, $post_type = 'post', $options = array() ) {
 	try {
-		$generate_seo = get_option( 'openai_generate_seo', true ) && 'none' !== abcc_get_active_seo_plugin();
+		$generate_seo = abcc_get_setting( 'openai_generate_seo', true ) && 'none' !== abcc_get_active_seo_plugin();
 
-		$category_id = isset( $options['category'] ) ? (int) $options['category'] : 0;
-		$template    = isset( $options['template'] ) ? $options['template'] : 'default';
-		$source      = isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' );
+		$payload     = abcc_build_generation_payload(
+			array(
+				'keywords'   => $keywords,
+				'model'      => $prompt_select,
+				'tone'       => $tone,
+				'char_limit' => $char_limit,
+				'post_type'  => $post_type,
+				'category'   => isset( $options['category'] ) ? (int) $options['category'] : 0,
+				'template'   => isset( $options['template'] ) ? $options['template'] : 'default',
+				'source'     => isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' ),
+			)
+		);
+		$category_id = (int) $payload['category'];
+		$template    = $payload['template'];
+		$source      = $payload['source'];
 
 		if ( true === $generate_seo ) {
 			// Generate title and SEO data.
@@ -127,7 +164,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$post_data = array(
 			'post_title'    => $title,
 			'post_content'  => wp_kses_post( $post_content ),
-			'post_status'   => get_option( 'abcc_draft_first', true ) ? 'draft' : 'publish',
+			'post_status'   => abcc_get_setting( 'abcc_draft_first', true ) ? 'draft' : 'publish',
 			'post_author'   => get_current_user_id(),
 			'post_type'     => $post_type,
 			'post_category' => $category_id ? array( $category_id ) : get_option( 'openai_selected_categories', array() ),
@@ -142,21 +179,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		if ( ! isset( $post_data['meta_input'] ) ) {
 			$post_data['meta_input'] = array();
 		}
-		$post_data['meta_input']['_abcc_generated'] = '1';
-		$post_data['meta_input']['_abcc_model']     = $prompt_select;
-
-		// Store generation parameters for the "Regenerate" feature.
-		$generation_params                                  = array(
-			'keywords'   => $keywords,
-			'model'      => $prompt_select,
-			'tone'       => $tone,
-			'char_limit' => $char_limit,
-			'post_type'  => $post_type,
-			'category'   => $category_id,
-			'template'   => $template,
-			'source'     => $source,
-		);
-		$post_data['meta_input']['_abcc_generation_params'] = wp_json_encode( $generation_params );
+		$post_data['meta_input'] = array_merge( $post_data['meta_input'], abcc_build_generation_tracking_meta( $payload ) );
 
 		$post_id = wp_insert_post( $post_data, true );
 
@@ -164,7 +187,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			throw new Exception( $post_id->get_error_message() );
 		}
 
-		if ( get_option( 'openai_generate_images', true ) ) {
+		if ( abcc_get_setting( 'openai_generate_images', true ) ) {
 			try {
 				$category_ids   = get_option( 'openai_selected_categories', array() );
 				$category_names = array();
@@ -181,10 +204,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				$image_url = abcc_generate_featured_image( $prompt_select, $keywords, $category_names );
 
 				if ( $image_url ) {
-					$alt_text = '';
-					if ( ! empty( $title ) && ! empty( $seo_data['primary_keyword'] ) ) {
-						$alt_text = $title . ' - ' . $seo_data['primary_keyword'];
-					}
+					$alt_text = abcc_build_featured_image_alt_text( $title, $seo_data['primary_keyword'] ?? '' );
 
 					abcc_set_featured_image( $post_id, $image_url, $alt_text );
 				}
@@ -194,7 +214,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			}
 		}
 
-		if ( true === get_option( 'openai_email_notifications', false ) ) {
+		if ( true === abcc_get_setting( 'openai_email_notifications', false ) ) {
 			abcc_send_post_notification( $post_id );
 		}
 
@@ -218,21 +238,25 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 	$result = false;
 
-	// OpenAI models (gpt-* and o-series reasoning models like o3, o4-mini).
-	if ( 0 === strpos( $service, 'gpt-' ) || preg_match( '/^o[0-9]/', $service ) ) {
-		$result = abcc_openai_generate_text( $api_key, $prompt, $char_limit, $service );
-	} elseif ( 0 === strpos( $service, 'claude' ) ) {
-		$result = abcc_claude_generate_text( $api_key, $prompt, $char_limit, $service );
-	} elseif ( 0 === strpos( $service, 'gemini' ) ) {
-		$result = abcc_gemini_generate_text( $api_key, $prompt, $char_limit, $service );
-	} elseif ( 0 === strpos( $service, 'sonar' ) ) {
-		$perplexity_result = abcc_perplexity_generate_text( $api_key, $prompt, $char_limit, $service );
+	$provider = abcc_get_model_provider( $service );
+	$callback = abcc_get_provider_text_generation_callback( $provider );
+
+	if ( empty( $callback ) || ! is_callable( $callback ) ) {
+		return $result;
+	}
+
+	$response = call_user_func( $callback, $api_key, $prompt, $char_limit, $service );
+
+	if ( abcc_provider_supports_citations( $provider ) ) {
+		$perplexity_result = $response;
 		if ( false !== $perplexity_result && ! empty( $perplexity_result['text'] ) ) {
 			// Store citations in a transient for downstream use.
 			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
 			set_transient( $generation_id, $perplexity_result['citations'], 300 );
 			$result = $perplexity_result['text'];
 		}
+	} else {
+		$result = $response;
 	}
 
 	return $result;

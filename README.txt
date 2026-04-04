@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 3.6.0
+Stable tag: 3.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -243,6 +243,19 @@ Multiple support channels available:
 
 == Changelog ==
 
+= 3.8.0 =
+* Added:
+  - **Provider Registry**: Centralized provider metadata for OpenAI, Claude, Gemini, Perplexity, and Stability AI. Model availability, credential mapping, and connection testing now come from one registry instead of scattered conditionals.
+  - **Versioned Settings Schema**: Settings now migrate through a schema-driven upgrade path. Existing API keys, keyword groups, templates, and selected models are preserved during upgrades, with a confirmation notice after migration.
+  - **Capability Helpers**: Text generation, image generation, citations, and audio transcription support are now resolved through explicit provider capabilities rather than model-name heuristics.
+  - **Regression Test Suite**: Added focused PHP regression coverage for provider routing, credential resolution, settings migration, generation payload persistence, SEO parsing, image alt text, and AJAX hook registration.
+* Updated:
+  - Credential resolution, provider selection, and image-service fallback logic now use the shared registry and settings layer.
+  - Admin and onboarding flows now save and validate provider settings through the schema-backed settings API.
+  - Upgrade messaging now confirms when settings have been migrated successfully.
+* Fixed:
+  - API key validation no longer reports false-positive success states when a provider test fails.
+
 = 3.7.0 =
 * Added:
   - **Background Generation Jobs**: Manual, scheduled, bulk, and regenerate flows now create queued jobs that run through WordPress' default WP-Cron mechanism instead of blocking the admin request.
@@ -262,7 +275,6 @@ Multiple support channels available:
   - Admin panel rebuilt into modular tab partials. Each settings tab is now a separate file under `includes/admin/`. No visible change for users, *but* as the plugin keeps growing, I'm trying to make the structure easier to modify, for v4.0 interface redesign.
 * Fixed:
   - Fixed minor bugs and improved overall stability.
-
 = 3.5.0 =
 * Added:
   - **RankMath SEO Support**: Full integration with RankMath SEO. Automatically generates focus keywords (comma-separated list), meta descriptions, and social excerpts.
@@ -276,33 +288,7 @@ Multiple support channels available:
   - Spinner and status feedback in Create AI Post and Regenerate Post now use the shared `abcc-ui.js` component instead of inline browser alerts.
 * Fixed some minor bugs and QoL updates
 
-= 3.4.0 =
-* Added:
-  - **Inline API Key Validation**: Real-time verification for all AI providers directly from Advanced Settings. Displays "Verified" or "Failed" status and stores last validation result.
-  - **Model Cost Transparency**: Each AI model now displays an estimated cost per post based on current token rates. Includes a new `abcc_model_cost_estimate` filter for advanced users.
-  - **Advanced Image Controls**: Expanded size and quality options for OpenAI (DALL-E 3) and resolution presets for Stability AI.
-  - **Automatic Image SEO**: Featured images now automatically receive SEO-optimized alt text in the format `{post title} - {primary keyword}`.
-* Updated:
-  - **Scheduling Clarity**: Raw timestamps replaced with human-friendly text (e.g., "Next post in 6 hours") and a direct link to scheduling settings.
-  - **Contextual Help**: Added Dashicon-based tooltips for Keywords, Tone, Models, and API keys to explain settings without cluttering the UI.
-  - **SEO Reliability**: Refactored the title and metadata generator to use structured JSON parsing and site-specific context (`site_info`).
-  - **RankMath Integration**: Enhanced support with initial field mapping for Social Excerpts and focus keywords.
-* Fixed:
-  - Fixed minor bugs and improved overall stability.
-
-= 3.3.0 =
-* Added:
-  - **Perplexity AI Integration**: Full support for web-grounded content generation with source citations. Three new models: Sonar, Sonar Pro, and Sonar Reasoning Pro. Configurable citation styles (inline, references section, or both) and source recency filters.
-  - **Draft-First Workflow**: New option to always save generated content as drafts for review before publishing.
-  - **Content History Log**: Track generated posts, models used, and publish status directly from Content Settings.
-* Updated:
-  - Keywords input is now a textarea supporting one topic per line.
-  - Renamed "Max Token Limit" to "Content Length" with explanatory tooltip; updated writing tone labels.
-  - Rebuilt "About" tab — focused on plugin philosophy and professional consulting services.
-* Fixed:
-  - Fixed several internal bugs and onboarding improvements.
-
-For the full changelog of versions 3.2.0 and earlier, see CHANGELOG.txt.
+For the full changelog of versions 3.4.0 and earlier, see CHANGELOG.txt.
 
 
 == Support ==

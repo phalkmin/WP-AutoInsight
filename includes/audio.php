@@ -19,7 +19,7 @@ function abcc_add_transcribe_button_to_media() {
 	global $post;
 
 	// Check if audio transcription is enabled.
-	if ( ! get_option( 'abcc_enable_audio_transcription', true ) ) {
+	if ( ! abcc_get_setting( 'abcc_enable_audio_transcription', true ) ) {
 		return;
 	}
 
@@ -28,7 +28,7 @@ function abcc_add_transcribe_button_to_media() {
 	}
 
 	// Check if this audio format is supported.
-	$supported_formats = get_option( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) );
+	$supported_formats = abcc_get_setting( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) );
 	$file_extension    = pathinfo( get_attached_file( $post->ID ), PATHINFO_EXTENSION );
 
 	if ( ! in_array( strtolower( $file_extension ), $supported_formats, true ) ) {
@@ -83,7 +83,7 @@ function abcc_handle_audio_transcription() {
 	try {
 		// Audio transcription always uses OpenAI Whisper — fetch the OpenAI key directly
 		// regardless of which text generation provider the user has selected.
-		$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
+		$api_key = abcc_get_provider_api_key( 'openai' );
 		if ( empty( $api_key ) ) {
 			throw new Exception( __( 'An OpenAI API key is required for audio transcription. Please add one in Advanced Settings.', 'automated-blog-content-creator' ) );
 		}
@@ -95,7 +95,7 @@ function abcc_handle_audio_transcription() {
 		}
 
 		// Check file format.
-		$supported_formats = get_option( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) );
+		$supported_formats = abcc_get_setting( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) );
 		$file_extension    = pathinfo( $file_path, PATHINFO_EXTENSION );
 
 		if ( ! in_array( strtolower( $file_extension ), $supported_formats, true ) ) {
@@ -211,7 +211,7 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 				'file'            => new CURLFile( $file_path ),
 				'model'           => 'whisper-1',
 				'response_format' => 'text',
-				'language'        => get_option( 'abcc_transcription_language', 'en' ),
+				'language'        => abcc_get_setting( 'abcc_transcription_language', 'en' ),
 			),
 			CURLOPT_TIMEOUT        => 300, // 5 minutes for large files.
 		)
@@ -267,8 +267,8 @@ function abcc_create_post_from_audio_transcript( $transcript, $attachment_id ) {
 
 	// Use existing content generation to enhance the transcript.
 	$api_key       = abcc_check_api_key();
-	$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
-	$char_limit    = get_option( 'openai_char_limit', 200 );
+	$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
 
 	// Create enhanced content prompt.
 	$prompt = sprintf(

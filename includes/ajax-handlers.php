@@ -122,9 +122,9 @@ function abcc_handle_rewrite_post() {
 
 		// Get settings.
 		$api_key       = abcc_check_api_key();
-		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
-		$tone          = get_option( 'openai_tone', 'default' );
-		$char_limit    = get_option( 'openai_char_limit', 200 );
+		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+		$tone          = abcc_get_setting( 'openai_tone', 'default' );
+		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
 
 		if ( empty( $api_key ) ) {
 			throw new Exception( __( 'API key not configured', 'automated-blog-content-creator' ) );
@@ -213,37 +213,16 @@ function abcc_handle_validate_api_key() {
 	}
 
 	$provider = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
-	$api_key  = '';
-
-	switch ( $provider ) {
-		case 'openai':
-			$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
-			$result  = abcc_test_openai_connection( $api_key );
-			break;
-		case 'gemini':
-			$api_key = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
-			$result  = abcc_test_gemini_connection( $api_key );
-			break;
-		case 'claude':
-			$api_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
-			$result  = abcc_test_claude_connection( $api_key );
-			break;
-		case 'perplexity':
-			$api_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
-			$result  = abcc_test_perplexity_connection( $api_key );
-			break;
-		case 'stability':
-			$api_key = defined( 'STABILITY_API' ) ? STABILITY_API : get_option( 'stability_api_key', '' );
-			// No built-in test for stability yet, let's just check if it's not empty for now or add one.
-			$result = ! empty( $api_key ) ? true : new WP_Error( 'empty', __( 'API key is empty', 'automated-blog-content-creator' ) );
-			break;
-		default:
-			wp_send_json_error( array( 'message' => __( 'Invalid provider', 'automated-blog-content-creator' ) ) );
-			return;
-	}
+	$api_key  = abcc_get_provider_api_key( $provider );
+	$result   = abcc_test_provider_connection( $provider, $api_key );
 
 	if ( is_wp_error( $result ) ) {
-		$error_message = $result->get_error_message();
+		wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		return;
+	}
+
+	if ( is_wp_error( $result ) || ( is_array( $result ) && empty( $result['success'] ) ) ) {
+		$error_message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['error'] ?? __( 'Validation failed', 'automated-blog-content-creator' ) );
 		set_transient(
 			'abcc_last_validation_' . $provider,
 			array(
@@ -253,7 +232,7 @@ function abcc_handle_validate_api_key() {
 			HOUR_IN_SECONDS
 		);
 		wp_send_json_error( array( 'message' => $error_message ) );
-	} elseif ( $result ) {
+	} elseif ( ! empty( $result['success'] ) ) {
 		set_transient(
 			'abcc_last_validation_' . $provider,
 			array(

@@ -529,23 +529,13 @@ function abcc_get_goal_icon( $goal_key ) {
  * @return bool Whether any API key is configured.
  */
 function abcc_has_any_api_key() {
-	// WP 7.0 fast path: check Connectors credential store.
-	if ( abcc_wp_ai_client_available() ) {
-		$wp_openai = abcc_get_wp_ai_credential( 'openai' );
-		$wp_claude = abcc_get_wp_ai_credential( 'claude' );
-		$wp_gemini = abcc_get_wp_ai_credential( 'gemini' );
-		if ( ! empty( $wp_openai ) || ! empty( $wp_claude ) || ! empty( $wp_gemini ) ) {
+	foreach ( abcc_get_provider_ids() as $provider ) {
+		if ( ! empty( abcc_get_provider_api_key( $provider ) ) ) {
 			return true;
 		}
 	}
 
-	// Legacy fallback: wp-config constants and wp_options.
-	$openai_key     = defined( 'OPENAI_API' ) ? OPENAI_API : get_option( 'openai_api_key', '' );
-	$claude_key     = defined( 'CLAUDE_API' ) ? CLAUDE_API : get_option( 'claude_api_key', '' );
-	$gemini_key     = defined( 'GEMINI_API' ) ? GEMINI_API : get_option( 'gemini_api_key', '' );
-	$perplexity_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : get_option( 'perplexity_api_key', '' );
-
-	return ! empty( $openai_key ) || ! empty( $claude_key ) || ! empty( $gemini_key ) || ! empty( $perplexity_key );
+	return false;
 }
 
 /**
@@ -629,19 +619,9 @@ function abcc_handle_onboarding_test_api() {
 
 	// Get API key from wp-config if needed
 	if ( $is_wp_config ) {
-		switch ( $provider ) {
-			case 'openai':
-				$api_key = defined( 'OPENAI_API' ) ? OPENAI_API : '';
-				break;
-			case 'claude':
-				$api_key = defined( 'CLAUDE_API' ) ? CLAUDE_API : '';
-				break;
-			case 'gemini':
-				$api_key = defined( 'GEMINI_API' ) ? GEMINI_API : '';
-				break;
-			case 'perplexity':
-				$api_key = defined( 'PERPLEXITY_API' ) ? PERPLEXITY_API : '';
-				break;
+		$constant_name = abcc_get_provider_constant_name( $provider );
+		if ( ! empty( $constant_name ) && defined( $constant_name ) ) {
+			$api_key = constant( $constant_name );
 		}
 	}
 
@@ -649,40 +629,21 @@ function abcc_handle_onboarding_test_api() {
 		wp_send_json_error( array( 'message' => __( 'API key is required', 'automated-blog-content-creator' ) ) );
 	}
 
-	// Test the API key based on provider with detailed error reporting
-	$test_result = array(
-		'success' => false,
-		'error'   => 'Unknown error',
-	);
-
-	switch ( $provider ) {
-		case 'openai':
-			$test_result = abcc_test_openai_connection( $api_key );
-			break;
-		case 'claude':
-			$test_result = abcc_test_claude_connection( $api_key );
-			break;
-		case 'gemini':
-			$test_result = abcc_test_gemini_connection( $api_key );
-			break;
-		case 'perplexity':
-			$test_result = abcc_test_perplexity_connection( $api_key );
-			break;
+	$test_result = abcc_test_provider_connection( $provider, $api_key );
+	if ( is_wp_error( $test_result ) ) {
+		wp_send_json_error( array( 'message' => $test_result->get_error_message() ) );
 	}
 
 	if ( $test_result['success'] ) {
 		// Save the API key only if it's not from wp-config and provider is a known valid value.
 		$valid_providers = array( 'openai', 'claude', 'gemini', 'perplexity' );
 		if ( ! $is_wp_config && in_array( $provider, $valid_providers, true ) ) {
-			update_option( $provider . '_api_key', $api_key );
+			abcc_set_provider_saved_api_key( $provider, $api_key );
 		}
 
-		// Get available models and select the first economy option
-		$model_options = abcc_get_ai_model_options();
-		if ( isset( $model_options[ $provider ]['options'] ) ) {
-			$provider_models = $model_options[ $provider ]['options'];
-			$first_model     = key( $provider_models );
-			update_option( 'prompt_select', $first_model );
+		$first_model = abcc_get_provider_default_model( $provider );
+		if ( ! empty( $first_model ) ) {
+			abcc_update_setting( 'prompt_select', $first_model );
 		}
 
 		wp_send_json_success( array( 'message' => __( 'Connection successful!', 'automated-blog-content-creator' ) ) );
@@ -709,9 +670,9 @@ function abcc_handle_onboarding_first_post() {
 	try {
 		$api_key       = abcc_check_api_key();
 		$keywords      = array( 'welcome', 'hello world', 'getting started' );
-		$prompt_select = get_option( 'prompt_select', 'gpt-4.1-mini' );
-		$tone          = get_option( 'openai_tone', 'friendly' );
-		$char_limit    = get_option( 'openai_char_limit', 200 );
+		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+		$tone          = abcc_get_setting( 'openai_tone', 'friendly' );
+		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
 
 		$post_id = abcc_openai_generate_post(
 			$api_key,

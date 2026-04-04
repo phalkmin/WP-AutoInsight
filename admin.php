@@ -51,128 +51,7 @@ add_action( 'admin_menu', 'abcc_add_subpages_to_menu' );
  * @return array Array of AI model options grouped by available providers.
  */
 function abcc_get_ai_model_options() {
-	$options = array();
-
-	$openai_key     = abcc_get_provider_api_key( 'openai' );
-	$claude_key     = abcc_get_provider_api_key( 'claude' );
-	$gemini_key     = abcc_get_provider_api_key( 'gemini' );
-	$perplexity_key = abcc_get_provider_api_key( 'perplexity' );
-
-	if ( ! empty( $openai_key ) ) {
-		$options['openai'] = array(
-			'group'   => 'OpenAI Models',
-			'options' => array(
-				// Economy option.
-				'gpt-4.1-mini-2025-04-14' => array(
-					'name'          => 'GPT-4.1 Mini',
-					'description'   => 'Fast and affordable with 1M context window',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0002,
-				),
-				// Standard option.
-				'gpt-4.1-2025-04-14'      => array(
-					'name'          => 'GPT-4.1',
-					'description'   => 'Excellent coding and instruction following',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.003,
-				),
-				// Premium option.
-				'o4-mini-2025-04-16'      => array(
-					'name'          => 'o4-mini',
-					'description'   => 'Advanced reasoning model for complex tasks',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.0004,
-				),
-			),
-		);
-	}
-
-	if ( ! empty( $claude_key ) ) {
-		$options['claude'] = array(
-			'group'   => 'Claude Models',
-			'options' => array(
-				// Economy option.
-				'claude-haiku-4-5-20251001'  => array(
-					'name'          => 'Claude Haiku 4.5',
-					'description'   => 'Fastest model with near-frontier intelligence',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0003,
-				),
-				// Standard option.
-				'claude-sonnet-4-5-20250929' => array(
-					'name'          => 'Claude Sonnet 4.5',
-					'description'   => 'Best for complex agents and coding tasks',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.004,
-				),
-				// Premium option.
-				'claude-opus-4-5-20251101'   => array(
-					'name'          => 'Claude Opus 4.5',
-					'description'   => 'Maximum intelligence with practical performance',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.015,
-				),
-			),
-		);
-	}
-
-	if ( ! empty( $gemini_key ) ) {
-		$options['gemini'] = array(
-			'group'   => 'Google Gemini Models',
-			'options' => array(
-				// Economy option.
-				'gemini-2.5-flash-lite' => array(
-					'name'          => 'Gemini 2.5 Flash-Lite',
-					'description'   => 'Fastest and most budget-friendly model',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0001,
-				),
-				// Standard option.
-				'gemini-2.5-flash'      => array(
-					'name'          => 'Gemini 2.5 Flash',
-					'description'   => 'Best price-performance with thinking capabilities',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.0002,
-				),
-				// Premium option.
-				'gemini-2.5-pro'        => array(
-					'name'          => 'Gemini 2.5 Pro',
-					'description'   => 'Most advanced reasoning model for complex problems',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.002,
-				),
-			),
-		);
-	}
-
-	if ( ! empty( $perplexity_key ) ) {
-		$options['perplexity'] = array(
-			'group'   => 'Perplexity Models',
-			'options' => array(
-				'sonar'               => array(
-					'name'          => 'Sonar',
-					'description'   => 'Fast web-grounded search with citations',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.001,
-				),
-				'sonar-pro'           => array(
-					'name'          => 'Sonar Pro',
-					'description'   => 'Deeper context with 2x more search results',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.005,
-				),
-				'sonar-reasoning-pro' => array(
-					'name'          => 'Sonar Reasoning Pro',
-					'description'   => 'Advanced multi-step reasoning with citations',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.01,
-				),
-			),
-		);
-	}
-
-	// Apply filter for advanced users to override estimates.
-	return apply_filters( 'abcc_model_cost_estimate', $options );
+	return abcc_get_available_text_model_options();
 }
 
 /**
@@ -268,12 +147,9 @@ function abcc_openai_text_settings_page() {
 				}
 				// Ensure default template always exists.
 				if ( ! isset( $content_templates['default'] ) ) {
-					$content_templates['default'] = array(
-						'name'   => 'Default Template',
-						'prompt' => "Write a {tone} blog post with the following title: {title}\n\nUsing these keywords: {keywords}",
-					);
+					$content_templates['default'] = abcc_get_default_content_template();
 				}
-				update_option( 'abcc_content_templates', $content_templates );
+				abcc_update_setting( 'abcc_content_templates', $content_templates );
 
 				$selected_post_types = isset( $_POST['abcc_selected_post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_selected_post_types'] ) ) : array( 'post' );
 
@@ -281,24 +157,24 @@ function abcc_openai_text_settings_page() {
 					$openai_tone = sanitize_text_field( wp_unslash( $_POST['openai_tone'] ) );
 					if ( 'custom' === $openai_tone ) {
 						$custom_tone = isset( $_POST['custom_tone'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_tone'] ) ) : '';
-						update_option( 'custom_tone', $custom_tone );
+						abcc_update_setting( 'custom_tone', $custom_tone );
 					} else {
-						update_option( 'custom_tone', '' );
+						abcc_update_setting( 'custom_tone', '' );
 					}
-					update_option( 'openai_tone', $openai_tone );
+					abcc_update_setting( 'openai_tone', $openai_tone );
 				}
 
 				$openai_generate_seo = isset( $_POST['openai_generate_seo'] );
 				$abcc_draft_first    = isset( $_POST['abcc_draft_first'] );
-				update_option( 'openai_generate_seo', $openai_generate_seo );
-				update_option( 'abcc_draft_first', $abcc_draft_first );
-				update_option( 'abcc_selected_post_types', $selected_post_types );
+				abcc_update_setting( 'openai_generate_seo', $openai_generate_seo );
+				abcc_update_setting( 'abcc_draft_first', $abcc_draft_first );
+				abcc_update_setting( 'abcc_selected_post_types', $selected_post_types );
 				break;
 
 			case 'model-settings':
 				$selected_model = isset( $_POST['selected_model'] ) ? sanitize_text_field( wp_unslash( $_POST['selected_model'] ) ) : '';
 				if ( ! empty( $selected_model ) ) {
-					update_option( 'prompt_select', $selected_model );
+					abcc_update_setting( 'prompt_select', $selected_model );
 					abcc_validate_selected_model();
 				}
 				break;
@@ -322,23 +198,23 @@ function abcc_openai_text_settings_page() {
 				$openai_image_quality       = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'standard';
 				$stability_image_size       = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';
 
-				update_option( 'openai_api_key', $api_key );
-				update_option( 'gemini_api_key', $gemini_api_key );
-				update_option( 'claude_api_key', $claude_api_key );
-				update_option( 'stability_api_key', $stability_api_key );
-				update_option( 'perplexity_api_key', $perplexity_api_key );
-				update_option( 'abcc_perplexity_citation_style', $perplexity_citation_style );
-				update_option( 'abcc_perplexity_recency_filter', $perplexity_recency_filter );
-				update_option( 'openai_auto_create', $auto_create );
-				update_option( 'openai_char_limit', $char_limit );
-				update_option( 'openai_email_notifications', $openai_email_notifications );
-				update_option( 'openai_generate_images', $openai_generate_images );
-				update_option( 'preferred_image_service', $preferred_image_service );
-				update_option( 'abcc_gemini_image_model', $gemini_image_model );
-				update_option( 'abcc_gemini_image_size', $gemini_image_size );
-				update_option( 'abcc_openai_image_size', $openai_image_size );
-				update_option( 'abcc_openai_image_quality', $openai_image_quality );
-				update_option( 'abcc_stability_image_size', $stability_image_size );
+				abcc_update_setting( 'openai_api_key', $api_key );
+				abcc_update_setting( 'gemini_api_key', $gemini_api_key );
+				abcc_update_setting( 'claude_api_key', $claude_api_key );
+				abcc_update_setting( 'stability_api_key', $stability_api_key );
+				abcc_update_setting( 'perplexity_api_key', $perplexity_api_key );
+				abcc_update_setting( 'abcc_perplexity_citation_style', $perplexity_citation_style );
+				abcc_update_setting( 'abcc_perplexity_recency_filter', $perplexity_recency_filter );
+				abcc_update_setting( 'openai_auto_create', $auto_create );
+				abcc_update_setting( 'openai_char_limit', $char_limit );
+				abcc_update_setting( 'openai_email_notifications', $openai_email_notifications );
+				abcc_update_setting( 'openai_generate_images', $openai_generate_images );
+				abcc_update_setting( 'preferred_image_service', $preferred_image_service );
+				abcc_update_setting( 'abcc_gemini_image_model', $gemini_image_model );
+				abcc_update_setting( 'abcc_gemini_image_size', $gemini_image_size );
+				abcc_update_setting( 'abcc_openai_image_size', $openai_image_size );
+				abcc_update_setting( 'abcc_openai_image_quality', $openai_image_quality );
+				abcc_update_setting( 'abcc_stability_image_size', $stability_image_size );
 
 				abcc_schedule_openai_event();
 
@@ -352,9 +228,9 @@ function abcc_openai_text_settings_page() {
 				$supported_formats      = isset( $_POST['abcc_supported_audio_formats'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_supported_audio_formats'] ) ) : array();
 				$transcription_language = isset( $_POST['abcc_transcription_language'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_transcription_language'] ) ) : 'en';
 
-				update_option( 'abcc_enable_audio_transcription', $enable_audio );
-				update_option( 'abcc_supported_audio_formats', $supported_formats );
-				update_option( 'abcc_transcription_language', $transcription_language );
+				abcc_update_setting( 'abcc_enable_audio_transcription', $enable_audio );
+				abcc_update_setting( 'abcc_supported_audio_formats', $supported_formats );
+				abcc_update_setting( 'abcc_transcription_language', $transcription_language );
 				break;
 		}
 
@@ -368,10 +244,10 @@ function abcc_openai_text_settings_page() {
 	}
 
 	$schedule_info     = abcc_get_openai_event_schedule();
-	$tone              = get_option( 'openai_tone', '' );
-	$custom_tone_value = get_option( 'custom_tone', '' );
-	$keyword_groups    = get_option( 'abcc_keyword_groups', array() );
-	$content_templates = get_option( 'abcc_content_templates', array() );
+	$tone              = abcc_get_setting( 'openai_tone', '' );
+	$custom_tone_value = abcc_get_setting( 'custom_tone', '' );
+	$keyword_groups    = abcc_get_setting( 'abcc_keyword_groups', array() );
+	$content_templates = abcc_get_setting( 'abcc_content_templates', array() );
 	$current_tab       = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
 
 	// Add admin styles.
@@ -437,7 +313,7 @@ function abcc_openai_text_settings_page() {
  * If the current model is no longer available, select a default from available options.
  */
 function abcc_validate_selected_model() {
-	$current_model    = get_option( 'prompt_select', '' );
+	$current_model    = abcc_get_setting( 'prompt_select', '' );
 	$available_models = abcc_get_ai_model_options();
 
 	// No API keys configured, nothing to validate.
@@ -449,7 +325,7 @@ function abcc_validate_selected_model() {
 	if ( empty( $current_model ) ) {
 		$first_provider = reset( $available_models );
 		$first_model    = key( $first_provider['options'] );
-		update_option( 'prompt_select', $first_model );
+		abcc_update_setting( 'prompt_select', $first_model );
 		return;
 	}
 
@@ -465,7 +341,7 @@ function abcc_validate_selected_model() {
 	if ( ! $model_available ) {
 		$first_provider = reset( $available_models );
 		$first_model    = key( $first_provider['options'] );
-		update_option( 'prompt_select', $first_model );
+		abcc_update_setting( 'prompt_select', $first_model );
 		add_action( 'admin_notices', 'abcc_model_changed_notice' );
 	}
 }

@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<div class="model-selector">
 				<?php
 				$model_options          = abcc_get_ai_model_options();
-				$current_selected_model = get_option( 'prompt_select', 'gpt-4.1-mini' );
+				$current_selected_model = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 				foreach ( $model_options as $provider => $provider_data ) :
 					?>
 				<div class="model-provider-section">

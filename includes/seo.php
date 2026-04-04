@@ -119,6 +119,20 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 		throw new Exception( 'Failed to generate title and SEO data' );
 	}
 
+	return abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select );
+}
+
+/**
+ * Extract title and SEO data from a model response.
+ *
+ * @param array|string $result        Response lines or raw string.
+ * @param array        $keywords      Keywords.
+ * @param string       $api_key       API key used for fallback title generation.
+ * @param string       $prompt_select Model identifier.
+ * @return array
+ */
+function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select ) {
+
 	// Join lines if result is an array.
 	$raw_response = is_array( $result ) ? implode( "\n", $result ) : $result;
 

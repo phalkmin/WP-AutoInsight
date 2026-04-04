@@ -137,6 +137,56 @@ function abcc_has_stale_queued_jobs( $older_than_seconds = 300 ) {
 }
 
 /**
+ * Fail running jobs that appear abandoned after a crash or timeout.
+ *
+ * @param int $older_than_seconds Age threshold.
+ * @return int Number of jobs recovered.
+ */
+function abcc_recover_stale_running_jobs( $older_than_seconds = 900 ) {
+	$jobs = get_posts(
+		array(
+			'post_type'      => ABCC_Job::POST_TYPE,
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'meta_query'     => array(
+				array(
+					'key'   => '_abcc_job_status',
+					'value' => ABCC_Job::STATUS_RUNNING,
+				),
+			),
+		)
+	);
+
+	if ( empty( $jobs ) ) {
+		return 0;
+	}
+
+	$recovered = 0;
+
+	foreach ( $jobs as $job ) {
+		$started_at = get_post_meta( $job->ID, '_abcc_job_started_at', true );
+		$reference  = $started_at ? $started_at : get_post_meta( $job->ID, '_abcc_job_created_at', true );
+
+		if ( empty( $reference ) ) {
+			continue;
+		}
+
+		$timestamp = strtotime( get_gmt_from_date( $reference ) );
+		if ( ! $timestamp || ( time() - $timestamp ) <= (int) $older_than_seconds ) {
+			continue;
+		}
+
+		abcc_mark_job_failed(
+			$job->ID,
+			__( 'Generation did not complete. The background process likely crashed or timed out.', 'automated-blog-content-creator' )
+		);
+		++$recovered;
+	}
+
+	return $recovered;
+}
+
+/**
  * Process a queued generation job.
  *
  * @param int $job_id Job ID.
@@ -144,6 +194,7 @@ function abcc_has_stale_queued_jobs( $older_than_seconds = 300 ) {
  */
 function abcc_process_generation_job( $job_id ) {
 	$job_id = absint( $job_id );
+	$started = false;
 
 	if ( ! $job_id || ABCC_Job::POST_TYPE !== get_post_type( $job_id ) ) {
 		return;
@@ -163,37 +214,48 @@ function abcc_process_generation_job( $job_id ) {
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_RUNNING );
 	update_post_meta( $job_id, '_abcc_job_started_at', current_time( 'mysql' ) );
 
-	$started = microtime( true );
-	$api_key = abcc_check_api_key( $payload['model'] ?? '' );
+	try {
+		$started = microtime( true );
+		$api_key = abcc_check_api_key( $payload['model'] ?? '' );
 
-	if ( empty( $api_key ) ) {
-		abcc_mark_job_failed( $job_id, __( 'API key not configured for the selected model.', 'automated-blog-content-creator' ), $started );
-		return;
+		if ( empty( $api_key ) ) {
+			abcc_mark_job_failed( $job_id, __( 'API key not configured for the selected model.', 'automated-blog-content-creator' ), $started );
+			return;
+		}
+
+		$result = abcc_openai_generate_post(
+			$api_key,
+			(array) ( $payload['keywords'] ?? array() ),
+			$payload['model'] ?? abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' ),
+			$payload['tone'] ?? abcc_get_setting( 'openai_tone', 'default' ),
+			'scheduled' === ( $payload['source'] ?? '' ),
+			(int) ( $payload['char_limit'] ?? abcc_get_setting( 'openai_char_limit', 200 ) ),
+			$payload['post_type'] ?? 'post',
+			$payload
+		);
+
+		if ( is_wp_error( $result ) ) {
+			abcc_mark_job_failed( $job_id, $result->get_error_message(), $started );
+			return;
+		}
+
+		$duration = microtime( true ) - $started;
+
+		update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_SUCCESS );
+		update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
+		update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
+		update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $result );
+		delete_post_meta( $job_id, '_abcc_job_error' );
+	} catch ( Throwable $throwable ) {
+		error_log(
+			sprintf(
+				'Generation job %d crashed: %s',
+				$job_id,
+				$throwable->getMessage()
+			)
+		);
+		abcc_mark_job_failed( $job_id, $throwable->getMessage(), $started );
 	}
-
-	$result = abcc_openai_generate_post(
-		$api_key,
-		(array) ( $payload['keywords'] ?? array() ),
-		$payload['model'] ?? get_option( 'prompt_select', 'gpt-4.1-mini' ),
-		$payload['tone'] ?? get_option( 'openai_tone', 'default' ),
-		'scheduled' === ( $payload['source'] ?? '' ),
-		(int) ( $payload['char_limit'] ?? get_option( 'openai_char_limit', 200 ) ),
-		$payload['post_type'] ?? 'post',
-		$payload
-	);
-
-	if ( is_wp_error( $result ) ) {
-		abcc_mark_job_failed( $job_id, $result->get_error_message(), $started );
-		return;
-	}
-
-	$duration = microtime( true ) - $started;
-
-	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_SUCCESS );
-	update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
-	update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
-	update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $result );
-	delete_post_meta( $job_id, '_abcc_job_error' );
 }
 add_action( 'abcc_process_generation_job', 'abcc_process_generation_job' );
 
@@ -269,6 +331,8 @@ function abcc_get_job_status_label( $status ) {
  * @return string
  */
 function abcc_render_job_log_rows( $args = array() ) {
+	abcc_recover_stale_running_jobs();
+
 	$defaults = array(
 		'posts_per_page' => 10,
 		'run_id'         => '',
@@ -492,6 +556,8 @@ function abcc_render_legacy_history_rows( $limit = 10 ) {
  * @return array|null
  */
 function abcc_get_job_data( $job_id ) {
+	abcc_recover_stale_running_jobs();
+
 	$job_id = absint( $job_id );
 
 	if ( ! $job_id || ABCC_Job::POST_TYPE !== get_post_type( $job_id ) ) {

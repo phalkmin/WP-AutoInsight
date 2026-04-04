@@ -33,7 +33,7 @@ function abcc_handle_create_infographic() {
 
 		// Get API settings.
 		$api_key = abcc_check_api_key();
-		$model   = get_option( 'prompt_select', 'gpt-4.1-mini' );
+		$model   = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 
 		if ( empty( $api_key ) ) {
 			throw new Exception( __( 'API key not configured', 'automated-blog-content-creator' ) );

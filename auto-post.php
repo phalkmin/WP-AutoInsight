@@ -3,7 +3,7 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/
  * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version:           3.7.0
+ * Version:           3.8.0
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '3.7.0' );
+define( 'ABCC_VERSION', '3.8.0' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
@@ -30,10 +30,12 @@ define(
 
 // Include required files.
 require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/includes/settings.php';
 require_once __DIR__ . '/includes/class-abcc-plugin.php';
 require_once __DIR__ . '/includes/class-abcc-job.php';
 require_once __DIR__ . '/includes/class-abcc-openai-client.php';
 require_once __DIR__ . '/includes/token-handling.php';
+require_once __DIR__ . '/includes/providers.php';
 require_once __DIR__ . '/includes/api-keys.php';
 require_once __DIR__ . '/includes/blocks.php';
 require_once __DIR__ . '/includes/seo.php';
@@ -71,13 +73,17 @@ function handle_api_request_error( $response, $api ) {
 
 	error_log( sprintf( '%s API Request Error: %s', $api, $error_message ) );
 
-	add_settings_error(
-		'openai-settings',
-		'api-request-error',
-		// Translators: %1$s is the API name, %2$s is the error message.
-		sprintf( esc_html__( 'Error in %1$s API request: %2$s', 'automated-blog-content-creator' ), $api, $error_message ),
-		'error'
-	);
+	// add_settings_error() is only loaded in wp-admin. Background jobs (cron/AJAX)
+	// still need to log provider failures without fatalling the whole request.
+	if ( function_exists( 'add_settings_error' ) ) {
+		add_settings_error(
+			'openai-settings',
+			'api-request-error',
+			// Translators: %1$s is the API name, %2$s is the error message.
+			sprintf( esc_html__( 'Error in %1$s API request: %2$s', 'automated-blog-content-creator' ), $api, $error_message ),
+			'error'
+		);
+	}
 }
 
 /**
