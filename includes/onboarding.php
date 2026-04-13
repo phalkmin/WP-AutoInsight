@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function abcc_show_onboarding_page() {
 	wp_enqueue_style( 'abcc-onboarding-styles', plugins_url( '/css/onboarding.css', __DIR__ ), array(), ABCC_VERSION );
-	wp_enqueue_script( 'abcc-onboarding-scripts', plugins_url( '/js/onboarding.js', __DIR__ ), array( 'jquery' ), ABCC_VERSION, true );
+	wp_enqueue_script( 'abcc-onboarding-scripts', plugins_url( '/js/onboarding.js', __DIR__ ), array( 'jquery', 'abcc-ui-script' ), ABCC_VERSION, true );
 
 		wp_localize_script(
 			'abcc-onboarding-scripts',
@@ -394,10 +394,12 @@ function abcc_show_onboarding_page() {
 									<span class="dashicons dashicons-yes-alt"></span>
 									<?php esc_html_e( 'SEO-optimized', 'automated-blog-content-creator' ); ?>
 								</span>
+								<?php if ( abcc_get_setting( 'openai_generate_images', true ) ) : ?>
 								<span class="abcc-feature">
 									<span class="dashicons dashicons-yes-alt"></span>
 									<?php esc_html_e( 'Featured image', 'automated-blog-content-creator' ); ?>
 								</span>
+							<?php endif; ?>
 							</div>
 						</div>
 					</div>
@@ -495,7 +497,7 @@ function abcc_get_onboarding_goals() {
 			'title'       => __( 'Creative/Entertainment', 'automated-blog-content-creator' ),
 			'description' => __( 'Fun, engaging content with personality', 'automated-blog-content-creator' ),
 			'settings'    => array(
-				'openai_tone'            => 'casual',
+				'openai_tone'            => 'friendly',
 				'openai_char_limit'      => 350,
 				'openai_generate_images' => true,
 				'openai_generate_seo'    => true,
@@ -597,7 +599,7 @@ function abcc_handle_onboarding_goal() {
 
 	// Apply goal-based settings.
 	foreach ( $goals[ $goal ]['settings'] as $option => $value ) {
-		update_option( $option, $value );
+		abcc_update_setting( $option, $value );
 	}
 
 	wp_send_json_success( array( 'message' => 'Goal configured successfully' ) );
@@ -636,8 +638,7 @@ function abcc_handle_onboarding_test_api() {
 
 	if ( $test_result['success'] ) {
 		// Save the API key only if it's not from wp-config and provider is a known valid value.
-		$valid_providers = array( 'openai', 'claude', 'gemini', 'perplexity' );
-		if ( ! $is_wp_config && in_array( $provider, $valid_providers, true ) ) {
+		if ( ! $is_wp_config && in_array( $provider, abcc_get_provider_ids(), true ) ) {
 			abcc_set_provider_saved_api_key( $provider, $api_key );
 		}
 

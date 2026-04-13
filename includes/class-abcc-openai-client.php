@@ -102,14 +102,14 @@ class ABCC_OpenAI_Client {
 	 */
 	private function verify_model( $model_name ) {
 		if ( true === $this->is_custom_endpoint ) {
-			error_log( 'Verifying model availability: ' . $model_name );
+			abcc_debug_log( 'Verifying model availability: ' . $model_name );
 			$models = $this->get_available_models();
 			if ( is_wp_error( $models ) ) {
-				error_log( 'Error fetching models: ' . $models->get_error_message() );
+				abcc_debug_log( 'Error fetching models: ' . $models->get_error_message() );
 				return false;
 			}
 			$available = in_array( $model_name, array_column( $models, 'id' ), true );
-			error_log(
+			abcc_debug_log(
 				sprintf(
 					'Model %s %s available',
 					$model_name,

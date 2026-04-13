@@ -154,7 +154,7 @@ function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key,
 		$seo_data['social_excerpt']     = $json_data['social_excerpt'] ?? '';
 	} else {
 		// Fallback to the old bracket-based parsing if JSON fails (for older models or unexpected output).
-		error_log( 'WP-AutoInsight: JSON SEO parsing failed, attempting legacy bracket parsing fallback.' );
+		abcc_debug_log( 'JSON SEO parsing failed, attempting legacy bracket parsing fallback.' );
 
 		$in_title = false;
 		$in_seo   = false;

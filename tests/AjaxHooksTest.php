@@ -11,5 +11,6 @@ abcc_test(
 		abcc_assert_array_has_key( 'wp_ajax_abcc_bulk_generate_single', $GLOBALS['abcc_test_actions'] );
 		abcc_assert_array_has_key( 'wp_ajax_abcc_regenerate_post', $GLOBALS['abcc_test_actions'] );
 		abcc_assert_array_has_key( 'wp_ajax_abcc_get_job_log', $GLOBALS['abcc_test_actions'] );
+		abcc_assert_array_has_key( 'wp_ajax_abcc_autosave_setting', $GLOBALS['abcc_test_actions'], 'wp_ajax_abcc_autosave_setting must be registered in ajax-handlers.php' );
 	}
 );

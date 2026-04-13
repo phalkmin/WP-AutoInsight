@@ -452,3 +452,453 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* =========================================================
+   Sub-tab navigation (WooCommerce pattern) — v4.0
+   ========================================================= */
+.abcc-subtab-nav {
+    margin: 8px 0 16px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    border-bottom: 1px solid #c3c4c7;
+    padding-bottom: 8px;
+}
+
+.abcc-subtab-nav li {
+    margin: 0;
+    list-style: none;
+}
+
+.abcc-subtab-nav li a {
+    padding: 4px 8px;
+    text-decoration: none;
+    color: #2271b1;
+    font-size: 13px;
+}
+
+.abcc-subtab-nav li a.current {
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.abcc-subtab-nav li.abcc-subtab-sep {
+    color: #c3c4c7;
+    font-size: 12px;
+    padding: 0 2px;
+}
+
+/* Auto-save toast indicator */
+@keyframes abcc-toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.abcc-autosave-indicator {
+    position: fixed;
+    bottom: 30px;
+    right: 20px;
+    min-width: 140px;
+    background: #1d2327;
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    z-index: 100000;
+    pointer-events: none;
+    display: none;
+}
+
+.abcc-autosave-indicator.abcc-saving,
+.abcc-autosave-indicator.abcc-saved,
+.abcc-autosave-indicator.abcc-error {
+    display: block;
+    animation: abcc-toast-in 0.2s ease-out forwards;
+}
+
+.abcc-autosave-indicator.abcc-saving {
+    background: #1d2327;
+    color: #fff;
+}
+
+.abcc-autosave-indicator.abcc-saved {
+    background: #00a32a;
+    color: #fff;
+}
+
+.abcc-autosave-indicator.abcc-error {
+    background: #d63638;
+    color: #fff;
+}
+
+/* =========================================================
+   Dashboard tab — v4.0
+   ========================================================= */
+.abcc-dashboard {
+    max-width: 1200px;
+    margin-top: 20px;
+}
+
+.abcc-dashboard-row {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.abcc-dashboard-row--top,
+.abcc-dashboard-row--bottom {
+    grid-template-columns: 1fr 1fr;
+}
+
+.abcc-dashboard-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 20px 24px;
+}
+
+.abcc-dashboard-card--activity {
+    margin-bottom: 20px;
+}
+
+.abcc-dashboard-card__title {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d2327;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 10px;
+}
+
+.abcc-dashboard-card__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+}
+
+.abcc-dashboard-card__header .abcc-dashboard-card__title {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+/* Status dots */
+.abcc-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.abcc-status-dot--active,
+.abcc-status-dot--connected { background: #00a32a; }
+.abcc-status-dot--inactive  { background: #c3c4c7; }
+.abcc-status-dot--stale     { background: #dba617; }
+.abcc-status-dot--failed    { background: #d63638; }
+.abcc-status-dot--no-key    { background: #c3c4c7; }
+
+/* Activity filter buttons */
+.abcc-activity-filters { display: inline-flex; gap: 4px; }
+.abcc-filter-btn {
+    background: none;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 8px;
+}
+.abcc-filter-btn--active {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+/* Quick actions */
+.abcc-quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.abcc-quick-action-btn {
+    text-align: center;
+    justify-content: center;
+}
+
+/* Activity list */
+.abcc-activity-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.abcc-activity-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 13px;
+}
+
+.abcc-activity-item:last-child { border-bottom: none; }
+.abcc-activity-icon { font-size: 14px; flex-shrink: 0; }
+.abcc-activity-item--succeeded .abcc-activity-icon { color: #00a32a; }
+.abcc-activity-item--failed    .abcc-activity-icon { color: #d63638; }
+.abcc-activity-title { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.abcc-activity-meta  { color: #646970; font-size: 12px; flex-shrink: 0; }
+.abcc-activity-link  { flex-shrink: 0; font-size: 12px; }
+
+/* Provider health list */
+.abcc-health-list { margin: 0; padding: 0; list-style: none; }
+.abcc-health-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.abcc-health-name { flex: 1; }
+.abcc-health-status { color: #646970; font-size: 12px; }
+
+/* About card */
+.abcc-about-version { color: #646970; font-size: 12px; margin-top: -8px; margin-bottom: 12px; }
+.abcc-about-links { margin: 0; padding: 0; list-style: none; }
+.abcc-about-links li { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 13px; }
+.abcc-about-links .dashicons { color: #646970; font-size: 16px; width: 16px; height: 16px; }
+
+@media screen and (max-width: 782px) {
+    .abcc-dashboard-row--top,
+    .abcc-dashboard-row--bottom {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =========================================================
+   How-it-works strip — Media sub-tabs
+   ========================================================= */
+.abcc-how-it-works {
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    max-width: 600px;
+}
+
+.abcc-how-it-works h3 {
+    margin-top: 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.abcc-how-it-works ol {
+    margin: 8px 0 0 20px;
+    padding: 0;
+}
+
+.abcc-how-it-works li {
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #3c434a;
+}
+
+/* =========================================================
+   Provider Cards — Connections tab
+   ========================================================= */
+.abcc-provider-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    max-width: 800px;
+}
+
+.abcc-provider-card__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.abcc-provider-name { font-size: 14px; }
+
+.abcc-provider-badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.abcc-provider-badge--connector { background: #edfaef; color: #00a32a; }
+.abcc-provider-badge--verified  { background: #edfaef; color: #00a32a; }
+.abcc-provider-badge--failed    { background: #fce8e8; color: #d63638; }
+.abcc-provider-badge--manual    { background: #f0f0f1; color: #3c434a; }
+.abcc-provider-badge--none      { background: #f0f0f1; color: #646970; }
+
+.abcc-provider-card__form { margin: 8px 0 0; }
+.abcc-provider-card__form .form-table th { padding-left: 0; }
+
+.abcc-manual-override summary {
+    cursor: pointer;
+    color: #2271b1;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.abcc-override-warning { color: #d63638; font-style: italic; margin: 4px 0; }
+
+/* Model radio group inside provider card */
+.abcc-provider-models { margin-top: 12px; border-top: 1px solid #f0f0f1; padding-top: 12px; }
+.abcc-model-radio-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.abcc-model-radio-label { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #c3c4c7; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.abcc-model-radio-label:has(input:checked) { border-color: #2271b1; background: #f0f6ff; }
+.abcc-model-radio-name { font-weight: 500; }
+.abcc-model-radio-cost { color: #646970; }
+
+/* ── Inline-style replacement utilities ───────────────────────────────────── */
+
+/* Labels stacked vertically with breathing room */
+.abcc-label-block        { display: block; margin-bottom: 6px; }
+.abcc-label-block--lg    { display: block; margin-bottom: 8px; }
+.abcc-label-inline       { display: inline-block; margin-right: 16px; margin-bottom: 6px; }
+
+/* Generic spacing helpers */
+.abcc-mt-8   { margin-top: 8px; }
+.abcc-mt-16  { margin-top: 16px; }
+.abcc-mt-20  { margin-top: 20px; }
+.abcc-mb-20  { margin-bottom: 20px; }
+.abcc-mx-12  { margin: 12px 0; }
+.abcc-ml-6   { margin-left: 6px; }
+
+/* Migration status section */
+.abcc-migration-status          { margin-top: 20px; }
+.abcc-migration-status .widefat { max-width: 400px; }
+
+/* Danger zone */
+.abcc-danger-zone h3 { color: #d63638; }
+
+/* Schedule status notice */
+.abcc-schedule-status { margin: 16px 0; }
+
+/* WP Connectors info banner */
+.abcc-connectors-banner { margin: 12px 0; }
+
+/* Export settings button row */
+.abcc-export-row { margin-top: 20px; }
+
+/* Description text with top margin (used below fieldsets) */
+.abcc-description-below { margin-top: 12px; }
+
+/* =========================================================
+   WP-AutoInsight Tools meta box — post edit screen
+   ========================================================= */
+.abcc-meta-box {
+    padding: 4px 0;
+}
+
+.abcc-meta-section {
+    padding: 8px 0;
+}
+
+.abcc-meta-section-title {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #646970;
+}
+
+.abcc-meta-section-divider {
+    border: none;
+    border-top: 1px solid #dcdcde;
+    margin: 8px 0;
+}
+
+.abcc-meta-btn {
+    width: 100%;
+    margin-bottom: 6px;
+}
+
+.abcc-meta-status {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: #f9f9f9;
+    border-radius: 3px;
+    font-size: 12px;
+    display: none;
+}
+
+.abcc-meta-section-note {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #646970;
+    font-style: italic;
+}
+
+.abcc-meta-last-gen {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.abcc-meta-last-gen-label {
+    display: block;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 6px;
+    color: #1d2327;
+}
+
+.abcc-meta-gen-table {
+    width: 100%;
+    font-size: 12px;
+    color: #646970;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+}
+
+.abcc-meta-gen-table th {
+    font-weight: 600;
+    width: 60px;
+    padding: 2px 0;
+    vertical-align: top;
+    text-align: left;
+}
+
+.abcc-meta-gen-table td {
+    padding: 2px 0;
+}
+
+.abcc-meta-social-excerpt {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.abcc-meta-social-label {
+    display: block;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 5px;
+    color: #1d2327;
+}
+
+.abcc-meta-social-textarea {
+    width: 100%;
+    background: #f9f9f9;
+    font-size: 12px;
+    color: #646970;
+    resize: vertical;
+}

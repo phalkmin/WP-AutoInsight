@@ -13,6 +13,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Add "Create Post" button to the posts list screen.
  */
 function abcc_add_create_post_button() {
+	if ( ! abcc_current_user_can_prompt() ) {
+		return;
+	}
+
 	$screen = get_current_screen();
 	if ( ! $screen || 'edit' !== $screen->base ) {
 		return;

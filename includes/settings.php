@@ -73,6 +73,11 @@ function abcc_get_settings_schema() {
 			'abcc_enable_audio_transcription' => array( 'default' => true ),
 			'abcc_supported_audio_formats'    => array( 'default' => array( 'mp3', 'wav', 'm4a', 'webm' ) ),
 			'abcc_transcription_language'     => array( 'default' => 'en' ),
+			'abcc_auto_alt_text'              => array( 'default' => true ),
+			'abcc_enable_infographics'        => array( 'default' => true ),
+			'abcc_infographic_provider'       => array( 'default' => 'auto' ),
+			'abcc_allowed_roles'              => array( 'default' => array( 'administrator', 'editor' ) ),
+			'abcc_debug_logging'              => array( 'default' => false ),
 		),
 	);
 }
@@ -256,6 +261,21 @@ function abcc_run_settings_migrations() {
 		}
 
 		$installed_version = '3.8.0';
+		abcc_update_setting( 'abcc_version', $installed_version );
+	}
+
+	if ( version_compare( $installed_version, '4.0.0', '<' ) ) {
+		// Seed allowed roles if not already set (new in 4.0).
+		if ( false === get_option( 'abcc_allowed_roles' ) ) {
+			abcc_update_setting( 'abcc_allowed_roles', abcc_get_setting_default( 'abcc_allowed_roles' ) );
+		}
+
+		// Seed debug logging flag if not already set (new in 4.0).
+		if ( false === get_option( 'abcc_debug_logging' ) ) {
+			abcc_update_setting( 'abcc_debug_logging', abcc_get_setting_default( 'abcc_debug_logging' ) );
+		}
+
+		$installed_version = '4.0.0';
 		abcc_update_setting( 'abcc_version', $installed_version );
 	}
 

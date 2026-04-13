@@ -11,6 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * AJAX handler for generating a post.
+ *
+ * @throws Exception On generation failure.
  */
 function abcc_handle_create_post() {
 	check_ajax_referer( 'abcc_admin_buttons', 'nonce' );
@@ -73,7 +75,7 @@ function abcc_handle_create_post() {
 				'source'    => 'manual',
 			)
 		);
-		$job_id = abcc_queue_generation_job( $payload );
+		$job_id  = abcc_queue_generation_job( $payload );
 
 		if ( is_wp_error( $job_id ) ) {
 			throw new Exception( $job_id->get_error_message() );
@@ -94,6 +96,8 @@ add_action( 'wp_ajax_abcc_create_post', 'abcc_handle_create_post' );
 
 /**
  * Handle the AJAX request for rewriting a post.
+ *
+ * @throws Exception On generation failure.
  */
 function abcc_handle_rewrite_post() {
 	// Verify nonce.
@@ -216,11 +220,6 @@ function abcc_handle_validate_api_key() {
 	$api_key  = abcc_get_provider_api_key( $provider );
 	$result   = abcc_test_provider_connection( $provider, $api_key );
 
-	if ( is_wp_error( $result ) ) {
-		wp_send_json_error( array( 'message' => $result->get_error_message() ) );
-		return;
-	}
-
 	if ( is_wp_error( $result ) || ( is_array( $result ) && empty( $result['success'] ) ) ) {
 		$error_message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['error'] ?? __( 'Validation failed', 'automated-blog-content-creator' ) );
 		set_transient(
@@ -260,6 +259,7 @@ add_action( 'wp_ajax_abcc_validate_api_key', 'abcc_handle_validate_api_key' );
  * AJAX handler for bulk generating a single post.
  *
  * @since 3.6.0
+ * @throws Exception On generation failure.
  */
 function abcc_handle_bulk_generate_single() {
 	check_ajax_referer( 'abcc_openai_generate_post', 'nonce' );
@@ -269,10 +269,11 @@ function abcc_handle_bulk_generate_single() {
 		return;
 	}
 
-	$keyword  = isset( $_POST['keyword'] ) ? sanitize_text_field( wp_unslash( $_POST['keyword'] ) ) : '';
-	$template = isset( $_POST['template'] ) ? sanitize_text_field( wp_unslash( $_POST['template'] ) ) : 'default';
-	$model    = isset( $_POST['model'] ) ? sanitize_text_field( wp_unslash( $_POST['model'] ) ) : '';
-	$run_id   = isset( $_POST['run_id'] ) ? sanitize_key( wp_unslash( $_POST['run_id'] ) ) : '';
+	$keyword    = isset( $_POST['keyword'] ) ? sanitize_text_field( wp_unslash( $_POST['keyword'] ) ) : '';
+	$template   = isset( $_POST['template'] ) ? sanitize_text_field( wp_unslash( $_POST['template'] ) ) : 'default';
+	$model      = isset( $_POST['model'] ) ? sanitize_text_field( wp_unslash( $_POST['model'] ) ) : '';
+	$run_id     = isset( $_POST['run_id'] ) ? sanitize_key( wp_unslash( $_POST['run_id'] ) ) : '';
+	$draft_only = isset( $_POST['draft'] ) && rest_sanitize_boolean( wp_unslash( $_POST['draft'] ) );
 
 	if ( empty( $keyword ) ) {
 		wp_send_json_error( array( 'message' => __( 'Empty keyword.', 'automated-blog-content-creator' ) ) );
@@ -282,13 +283,15 @@ function abcc_handle_bulk_generate_single() {
 	try {
 		$payload = abcc_build_generation_payload(
 			array(
-				'keywords' => array( $keyword ),
-				'model'    => $model,
-				'template' => $template,
-				'source'   => 'bulk',
+				'keywords'    => array( $keyword ),
+				'model'       => $model,
+				'template'    => $template,
+				'source'      => 'bulk',
+				'draft_only'  => $draft_only,
+				'post_author' => get_current_user_id(),
 			)
 		);
-		$job_id = abcc_queue_generation_job(
+		$job_id  = abcc_queue_generation_job(
 			$payload,
 			array(
 				'run_id' => $run_id,
@@ -299,14 +302,25 @@ function abcc_handle_bulk_generate_single() {
 			throw new Exception( $job_id->get_error_message() );
 		}
 
-		wp_send_json_success(
-			array(
-				'message' => __( 'Success', 'automated-blog-content-creator' ),
-				'job_id'  => $job_id,
-				'run_id'  => $run_id,
-			)
-		);
+		// Process the job inline so the UI reflects the real outcome.
+		abcc_process_generation_job( $job_id );
 
+		$job_status  = get_post_meta( $job_id, '_abcc_job_status', true );
+		$result_post = (int) get_post_meta( $job_id, '_abcc_job_result_post_id', true );
+
+		if ( ABCC_Job::STATUS_SUCCESS === $job_status && $result_post ) {
+			wp_send_json_success(
+				array(
+					'message'  => __( 'Success', 'automated-blog-content-creator' ),
+					'job_id'   => $job_id,
+					'run_id'   => $run_id,
+					'edit_url' => get_edit_post_link( $result_post, 'raw' ),
+				)
+			);
+		} else {
+			$error = get_post_meta( $job_id, '_abcc_job_error', true );
+			throw new Exception( $error ? $error : __( 'Generation failed.', 'automated-blog-content-creator' ) );
+		}
 	} catch ( Exception $e ) {
 		wp_send_json_error( array( 'message' => $e->getMessage() ) );
 	}
@@ -345,7 +359,7 @@ function abcc_handle_check_wp_connectors() {
 			'has_connectors' => $has_connectors,
 			'has_keys'       => $has_keys,
 			'providers'      => $providers,
-			'connectors_url' => admin_url( 'options-general.php?page=connectors' ),
+			'connectors_url' => admin_url( 'options-general.php?page=ai-connectors' ),
 		)
 	);
 }
@@ -353,6 +367,8 @@ add_action( 'wp_ajax_abcc_check_wp_connectors', 'abcc_handle_check_wp_connectors
 
 /**
  * AJAX handler for regenerating a post.
+ *
+ * @throws Exception On generation failure.
  */
 function abcc_handle_regenerate_post() {
 	check_ajax_referer( 'abcc_openai_generate_post', 'nonce' );
@@ -393,7 +409,7 @@ function abcc_handle_regenerate_post() {
 				'source'     => 'regenerate',
 			)
 		);
-		$job_id = abcc_queue_generation_job( $payload );
+		$job_id  = abcc_queue_generation_job( $payload );
 
 		if ( is_wp_error( $job_id ) ) {
 			throw new Exception( $job_id->get_error_message() );
@@ -465,3 +481,152 @@ function abcc_handle_get_job_log() {
 	);
 }
 add_action( 'wp_ajax_abcc_get_job_log', 'abcc_handle_get_job_log' );
+
+/**
+ * Auto-save a single scalar plugin setting via AJAX.
+ *
+ * API keys and array-type settings are excluded — those require form submit.
+ *
+ * @since 4.0.0
+ * @return void
+ */
+function abcc_handle_autosave_setting() {
+	check_ajax_referer( 'abcc_openai_generate_post', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$key = isset( $_POST['key'] ) ? sanitize_key( wp_unslash( $_POST['key'] ) ) : '';
+
+	if ( empty( $key ) ) {
+		wp_send_json_error( array( 'message' => __( 'No setting key provided.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	// Validate key exists in schema.
+	$definition = abcc_get_setting_definition( $key );
+	if ( null === $definition ) {
+		wp_send_json_error( array( 'message' => __( 'Unknown setting key.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	// Explicitly block sensitive or array-type keys.
+	$blocked_keys = array(
+		'openai_api_key',
+		'gemini_api_key',
+		'claude_api_key',
+		'perplexity_api_key',
+		'stability_api_key',
+		'abcc_keyword_groups',
+		'abcc_content_templates',
+		'abcc_selected_post_types',
+		'abcc_supported_audio_formats',
+	);
+	if ( in_array( $key, $blocked_keys, true ) ) {
+		wp_send_json_error( array( 'message' => __( 'This setting cannot be auto-saved.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	// Sanitize value based on the type of the schema default.
+	$default = $definition['default'];
+	$raw     = isset( $_POST['value'] ) ? wp_unslash( $_POST['value'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+	if ( is_bool( $default ) ) {
+		$value = ( '1' === $raw || 'true' === $raw );
+	} elseif ( is_int( $default ) ) {
+		$value = absint( $raw );
+	} else {
+		$value = sanitize_text_field( $raw );
+	}
+
+	abcc_update_setting( $key, $value );
+
+	wp_send_json_success( array( 'key' => $key ) );
+}
+add_action( 'wp_ajax_abcc_autosave_setting', 'abcc_handle_autosave_setting' );
+
+/**
+ * Run a provider health check for all text-capable providers and cache results.
+ *
+ * Stores results under option `abcc_provider_health` as an associative array:
+ *   [ provider_id => [ 'status' => 'connected|no_key|failed', 'timestamp' => int ] ]
+ *
+ * @return void
+ */
+function abcc_run_provider_health_check() {
+	if ( ! function_exists( 'abcc_get_provider_ids' ) || ! function_exists( 'abcc_provider_supports_text_generation' ) ) {
+		return;
+	}
+
+	$results = get_option( 'abcc_provider_health', array() );
+
+	foreach ( abcc_get_provider_ids() as $provider_id ) {
+		if ( ! abcc_provider_supports_text_generation( $provider_id ) ) {
+			continue;
+		}
+
+		$api_key = abcc_get_provider_api_key_for_health_check( $provider_id );
+
+		if ( empty( $api_key ) ) {
+			$results[ $provider_id ] = array(
+				'status'    => 'no_key',
+				'timestamp' => time(),
+			);
+			delete_transient( 'abcc_last_validation_' . $provider_id );
+			continue;
+		}
+
+		$valid = abcc_validate_provider_api_key_probe( $provider_id, $api_key );
+
+		$results[ $provider_id ] = array(
+			'status'    => $valid ? 'connected' : 'failed',
+			'timestamp' => time(),
+		);
+		set_transient(
+			'abcc_last_validation_' . $provider_id,
+			array(
+				'status'    => $valid ? 'verified' : 'failed',
+				'message'   => $valid
+					? __( 'Validated automatically', 'automated-blog-content-creator' )
+					: __( 'Connection failed', 'automated-blog-content-creator' ),
+				'timestamp' => time(),
+			),
+			2 * DAY_IN_SECONDS
+		);
+	}
+
+	update_option( 'abcc_provider_health', $results );
+}
+
+/**
+ * Get the stored API key option value for a provider (used by health check only).
+ *
+ * @param string $provider_id Provider ID from registry.
+ * @return string
+ */
+function abcc_get_provider_api_key_for_health_check( $provider_id ) {
+	return (string) abcc_get_provider_saved_api_key( $provider_id );
+}
+
+/**
+ * Validate a provider API key with an optimistic probe.
+ *
+ * @param string $provider_id Provider ID.
+ * @param string $api_key     API key to test.
+ * @return bool True if key appears valid.
+ */
+function abcc_validate_provider_api_key_probe( $provider_id, $api_key ) {
+	if ( empty( $api_key ) ) {
+		return false;
+	}
+
+	// Use the provider's existing check mechanism if available.
+	if ( function_exists( 'abcc_check_provider_api_key' ) ) {
+		$result = abcc_check_provider_api_key( $provider_id, $api_key );
+		return ! is_wp_error( $result ) && false !== $result;
+	}
+
+	return true; // Optimistic if no probe available.
+}

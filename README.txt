@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 3.8.0
+Stable tag: 4.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -116,12 +116,12 @@ For image generation fallback with Stability AI:
 
 = How do I select AI models? =
 
-WP-AutoInsight 3.0 features a visual model selection interface:
-1. Go to WP-AutoInsight > AI Models
+WP-AutoInsight 4.0 features a visual model selection interface inside the Connections tab:
+1. Go to WP-AutoInsight > Connections > API Keys
 2. Browse model cards organized by provider (OpenAI, Claude, Gemini)
-3. Click on your preferred model card to select it
-4. Each model shows cost tier (Economy/Standard/Premium) and capabilities
-5. Save your selection
+3. Click on your preferred model to select it
+4. Each model shows cost tier (Economy/Standard/Premium) and estimated cost per post
+5. Your selection saves automatically
 
 = How can I customize the generated content? =
 
@@ -170,7 +170,7 @@ Multiple ways to create posts manually:
 = Is it possible to schedule automatic content generation? =
 
 Yes, WP-AutoInsight offers flexible automation:
-1. Go to Advanced Settings
+1. Go to Connections > Scheduling
 2. Set "Schedule post creation" to Hourly, Daily, or Weekly
 3. Configure your keywords and preferences
 4. Posts will be automatically generated and saved as drafts
@@ -234,7 +234,7 @@ Multiple support channels available:
 - **WordPress Forum**: https://wordpress.org/support/plugin/automated-blog-content-creator/
 - **GitHub Issues**: https://github.com/phalkmin/wp-autoinsight
 - **Direct Contact**: phalkmin@protonmail.com
-- **Documentation**: Check the About tab for tutorials and guides
+- **Documentation**: Check the Dashboard tab for tutorials and quick actions
 
 == Screenshots ==
 
@@ -243,50 +243,48 @@ Multiple support channels available:
 
 == Changelog ==
 
-= 3.8.0 =
-* Added:
-  - **Provider Registry**: Centralized provider metadata for OpenAI, Claude, Gemini, Perplexity, and Stability AI. Model availability, credential mapping, and connection testing now come from one registry instead of scattered conditionals.
-  - **Versioned Settings Schema**: Settings now migrate through a schema-driven upgrade path. Existing API keys, keyword groups, templates, and selected models are preserved during upgrades, with a confirmation notice after migration.
-  - **Capability Helpers**: Text generation, image generation, citations, and audio transcription support are now resolved through explicit provider capabilities rather than model-name heuristics.
-  - **Regression Test Suite**: Added focused PHP regression coverage for provider routing, credential resolution, settings migration, generation payload persistence, SEO parsing, image alt text, and AJAX hook registration.
-* Updated:
-  - Credential resolution, provider selection, and image-service fallback logic now use the shared registry and settings layer.
-  - Admin and onboarding flows now save and validate provider settings through the schema-backed settings API.
-  - Upgrade messaging now confirms when settings have been migrated successfully.
-* Fixed:
-  - API key validation no longer reports false-positive success states when a provider test fails.
+= 4.0.0 — Decade =
+The biggest settings redesign since launch. Everything is easier to find, the dashboard tells you what's happening without digging, and settings that used to feel buried now live exactly where you'd look for them.
 
-= 3.7.0 =
-* Added:
-  - **Background Generation Jobs**: Manual, scheduled, bulk, and regenerate flows now create queued jobs that run through WordPress' default WP-Cron mechanism instead of blocking the admin request.
-  - **Live Generation Log**: Content History is now a full job log with status, source, model, keywords, template, created time, runtime, and result or error details.
-  - **Generation Log Controls**: Added a status filter, a "Refresh now" button, and an auto-refresh toggle so you can monitor jobs without reloading the page.
-  - **Faster Error Handling**: Failed jobs now include a "Copy error" action and a direct "Report this error" link for quick support requests.
-* Updated:
-  - **Manual and Bulk UX**: Manual generation, regenerate, and bulk generation now queue immediately and update their status live while jobs run in the background.
-  - **Generation Results**: Successful jobs now include direct Edit and View links from the log for faster follow-up actions.
+**A real dashboard, finally.**
+The plugin now opens to a dashboard instead of a blank settings form. You can see your scheduling status at a glance, check the last few generation jobs without leaving the page, and get to common actions in one click. Provider health is summarized right there — green/yellow/red, with timestamps so you know if a key was last verified today or a week ago.
 
-= 3.6.0 =
-* Added:
-  - **WordPress 7.0 Connectors Support**: Native integration with the new Settings → Connectors screen in WordPress 7.0. If your site already has API keys configured there, the plugin detects and uses them automatically — no re-entry needed. Advanced Settings now shows three states per provider: set in wp-config.php, managed by WordPress Connectors, or editable manually. On WordPress 6.x the plugin works identically to v3.5.
-  - **Bulk Generation**: Generate multiple posts at once from a keyword list. Paste keywords (one per line) or upload a .txt file, select a template and model, and the plugin generates each post sequentially as a draft. Progress is shown live as it runs. This replaces a workflow that SaaS autoblogging tools charge $99/month for.
-  - **User Permissions panel**: Advanced Settings now includes a read-only panel showing whether your account has AI generation permission, with an explanation of how WordPress 7.0's native `prompt_ai` capability works.
-* Updated:
-  - Admin panel rebuilt into modular tab partials. Each settings tab is now a separate file under `includes/admin/`. No visible change for users, *but* as the plugin keeps growing, I'm trying to make the structure easier to modify, for v4.0 interface redesign.
-* Fixed:
-  - Fixed minor bugs and improved overall stability.
+**Settings that make sense.**
+The old flat tab layout is gone. Settings are now split into five focused sections: Content (keywords, templates, writing style), Media (images, audio, infographics), Connections (API keys and scheduling), Settings (post types, permissions, advanced), and the Dashboard. Everything that previously required hunting through a long page now has its own tab.
+
+**Changes that save themselves.**
+Toggles and sliders across the settings pages now save automatically as you adjust them, with a small "Saved" confirmation. No more scrolling to the bottom to hit a save button after every change. Fields that affect scheduling still require an explicit save (and warn you if you leave without saving).
+
+**Per-role access control.**
+You can now control which WordPress roles can access AI generation tools. Authors, editors, or just administrators — your call. Administrators are always enabled and can't be unchecked.
+
+**Provider health checks run daily.**
+The plugin now runs a background health check on your connected providers once a day and caches the result. The dashboard shows the freshness of each check so you know whether a "connected" status is from this morning or three days ago.
+
+**Debug mode and settings export.**
+The Advanced tab now has a one-click debug logging toggle (no more editing wp-config.php for basic troubleshooting) and a JSON export button so you can back up or migrate your settings.
+
+= 3.8.0 — Kiva: Upgrade Without Fear =
+Upgrades used to feel like a gamble — would your API keys survive? Would your keyword groups vanish? Not anymore.
+
+Settings now follow a versioned migration path. When you update the plugin, it checks your current settings, upgrades what needs upgrading, and shows you a confirmation notice when it's done. Your API keys, keyword groups, content templates, and selected models all carry over cleanly.
+
+All five AI providers (OpenAI, Claude, Gemini, Perplexity, Stability AI) are now defined in a single registry. Adding or changing providers no longer requires touching five different parts of the code — everything cascades from one source of truth.
+
+= 3.7.0 — Den-O: Always Running. Always Accountable. =
+Generation used to freeze the browser while it ran. Now it queues in the background and you can watch it happen.
+
+Every content job — manual, bulk, scheduled, or regenerated — runs through a background queue. A live log shows status, the model used, keywords, how long it took, and a direct link to the post when it's done. If something fails, you get the error message and a one-click link to report it.
+
+= 3.6.0 — Kabuto: Built for What's Next =
+Two things that SaaS tools charge extra for, now built in.
+
+WordPress 7.0 Connectors support: if your site already has API keys set up through the new WordPress Connectors screen, the plugin finds and uses them automatically. No re-entry. On WordPress 6.x, everything works the same as before.
+
+Bulk generation: paste a list of keywords (or upload a .txt file), pick a template and model, and the plugin generates all the posts sequentially as drafts. Progress updates live. The kind of workflow most autoblogging SaaS platforms charge $99/month for.
+
 = 3.5.0 =
-* Added:
-  - **RankMath SEO Support**: Full integration with RankMath SEO. Automatically generates focus keywords (comma-separated list), meta descriptions, and social excerpts.
-  - **Keyword Groups**: Organize your content strategy with named groups. Each group can target a specific category and use a custom template. Scheduled generation now rotates through these groups.
-  - **Content Templates**: Create and manage multiple prompt templates. Use placeholders like `{keywords}`, `{title}`, `{tone}`, `{site_name}`, and `{category}` to customize how AI generates your content.
-  - **Advanced Generation Log**: Upgraded content history with "Regenerate" capability. Re-run any previous generation with its original parameters in one click.
-  - **Meta Box Consolidation**: Improved codebase health by consolidating all post-edit tools into a single, efficient registration system.
-* Updated:
-  - Improved RankMath detection and field mapping.
-  - Contextual tooltips now cover Content Length, Scheduling Frequency, and AI Model selection.
-  - Spinner and status feedback in Create AI Post and Regenerate Post now use the shared `abcc-ui.js` component instead of inline browser alerts.
-* Fixed some minor bugs and QoL updates
+RankMath SEO integration. Keyword groups with per-group categories and templates. A content template system with placeholders (`{keywords}`, `{title}`, `{tone}`, and more). One-click regeneration from the content history. All post-editor AI tools consolidated into a single meta box.
 
 For the full changelog of versions 3.4.0 and earlier, see CHANGELOG.txt.
 

@@ -6,7 +6,7 @@
  * for text and image generation.
  *
  * @package WP-AutoInsight
- * @version 3.8.0
+ * @version 4.0.0
  */
 
 use GeminiAPI\Client;
@@ -65,7 +65,7 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
 	);
 
 	if ( is_wp_error( $response ) ) {
-		error_log( 'Claude API Error: ' . $response->get_error_message() );
+		abcc_debug_log( 'Claude API Error: ' . $response->get_error_message() );
 		return false;
 	}
 
@@ -73,7 +73,7 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
 	$data = json_decode( $body, true );
 
 	if ( ! isset( $data['content'][0]['text'] ) ) {
-		error_log( 'Unexpected Claude response structure: ' . print_r( $data, true ) );
+		abcc_debug_log( 'Unexpected Claude response structure: ' . print_r( $data, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		return false;
 	}
 
@@ -126,7 +126,7 @@ function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model
 		$text_array = explode( PHP_EOL, $response->text() );
 		return $text_array;
 	} catch ( \Exception $e ) {
-		error_log( 'Gemini API Error: ' . $e->getMessage() );
+		abcc_debug_log( 'Gemini API Error: ' . $e->getMessage() );
 		handle_api_request_error( $e->getMessage(), 'Gemini' );
 		return false;
 	}
@@ -166,7 +166,7 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 	}
 
 	if ( ! isset( $response['choices'][0]['message']['content'] ) ) {
-		error_log( 'Unexpected OpenAI response structure: ' . print_r( $response, true ) );
+		abcc_debug_log( 'Unexpected OpenAI response structure: ' . print_r( $response, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		return false;
 	}
 
@@ -219,14 +219,14 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
 	);
 
 	if ( is_wp_error( $response ) ) {
-		error_log( 'Perplexity API Error: ' . $response->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		abcc_debug_log( 'Perplexity API Error: ' . $response->get_error_message() );
 		return false;
 	}
 
 	$response_code = wp_remote_retrieve_response_code( $response );
 	if ( 200 !== $response_code ) {
-		error_log( 'Perplexity API Error: Response code ' . $response_code ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		error_log( 'Response body: ' . wp_remote_retrieve_body( $response ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		abcc_debug_log( 'Perplexity API Error: Response code ' . $response_code );
+		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
 		return false;
 	}
 
@@ -234,7 +234,7 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
 	$data = json_decode( $body, true );
 
 	if ( ! isset( $data['choices'][0]['message']['content'] ) ) {
-		error_log( 'Unexpected Perplexity response structure: ' . print_r( $data, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log, WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		abcc_debug_log( 'Unexpected Perplexity response structure: ' . print_r( $data, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		return false;
 	}
 
@@ -270,7 +270,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 	$response = $client->create_image( wp_kses_post( $prompt ), $options );
 
 	if ( is_wp_error( $response ) ) {
-		error_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
+		abcc_debug_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
 
 		// Get Stability AI key for fallback.
 		$stability_key = abcc_get_provider_api_key( 'stability' );
@@ -278,7 +278,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 	}
 
 	if ( empty( $response['data'] ) ) {
-		error_log( 'OpenAI Image API: Missing expected data in response' );
+		abcc_debug_log( 'OpenAI Image API: Missing expected data in response' );
 
 		// Get Stability AI key for fallback.
 		$stability_key = abcc_get_provider_api_key( 'stability' );
@@ -306,7 +306,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
  */
 function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_size = '1024x1024' ) {
 	if ( empty( $stability_key ) ) {
-		error_log( 'Stability AI API key not provided' );
+		abcc_debug_log( 'Stability AI API key not provided' );
 		return false;
 	}
 
@@ -348,21 +348,21 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 	);
 
 	if ( is_wp_error( $response ) ) {
-		error_log( 'Stability AI API Error: ' . $response->get_error_message() );
+		abcc_debug_log( 'Stability AI API Error: ' . $response->get_error_message() );
 		return false;
 	}
 
 	$response_code = wp_remote_retrieve_response_code( $response );
 	if ( $response_code !== 200 ) {
-		error_log( 'Stability AI API Error: Response code ' . $response_code );
-		error_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
+		abcc_debug_log( 'Stability AI API Error: Response code ' . $response_code );
+		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
 		return false;
 	}
 
 	$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 	if ( empty( $body['artifacts'] ) || ! is_array( $body['artifacts'] ) ) {
-		error_log( 'Stability AI: Unexpected response format: ' . print_r( $body, true ) );
+		abcc_debug_log( 'Stability AI: Unexpected response format: ' . print_r( $body, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		return false;
 	}
 
@@ -377,13 +377,13 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 		// Decode and validate the image data before writing.
 		$image_data = base64_decode( $body['artifacts'][0]['base64'], true );
 		if ( false === $image_data ) {
-			error_log( 'Stability AI: Invalid base64 image data' );
+			abcc_debug_log( 'Stability AI: Invalid base64 image data' );
 			return false;
 		}
 
 		// Verify PNG magic bytes (89 50 4E 47) to confirm the content is actually a PNG.
 		if ( substr( $image_data, 0, 4 ) !== "\x89PNG" ) {
-			error_log( 'Stability AI: Decoded data does not appear to be a valid PNG image' );
+			abcc_debug_log( 'Stability AI: Decoded data does not appear to be a valid PNG image' );
 			return false;
 		}
 
@@ -394,12 +394,12 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 		if ( file_put_contents( $filepath, $image_data ) ) {
 			return $upload_dir['url'] . '/' . $filename;
 		} else {
-			error_log( 'Failed to save Stability AI image to filesystem' );
+			abcc_debug_log( 'Failed to save Stability AI image to filesystem' );
 			return false;
 		}
 	}
 
-	error_log( 'Stability AI: No valid image data in response' );
+	abcc_debug_log( 'Stability AI: No valid image data in response' );
 	return false;
 }
 
@@ -415,7 +415,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
  */
 function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-flash-image', $image_size = '2K' ) {
 	if ( empty( $api_key ) ) {
-		error_log( 'Gemini API key not provided for image generation' );
+		abcc_debug_log( 'Gemini API key not provided for image generation' );
 		return false;
 	}
 
@@ -467,14 +467,14 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	);
 
 	if ( is_wp_error( $response ) ) {
-		error_log( 'Gemini Image API Error: ' . $response->get_error_message() );
+		abcc_debug_log( 'Gemini Image API Error: ' . $response->get_error_message() );
 		return false;
 	}
 
 	$response_code = wp_remote_retrieve_response_code( $response );
 	if ( 200 !== $response_code ) {
-		error_log( 'Gemini Image API Error: Response code ' . $response_code );
-		error_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
+		abcc_debug_log( 'Gemini Image API Error: Response code ' . $response_code );
+		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
 		return false;
 	}
 
@@ -482,7 +482,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 
 	// Look for image data in response.
 	if ( empty( $body['candidates'][0]['content']['parts'] ) ) {
-		error_log( 'Gemini Image: Unexpected response format: ' . print_r( $body, true ) );
+		abcc_debug_log( 'Gemini Image: Unexpected response format: ' . print_r( $body, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
 		return false;
 	}
 
@@ -510,7 +510,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 			// Decode and validate the image data before writing.
 			$image_data = base64_decode( $part['inlineData']['data'], true );
 			if ( false === $image_data ) {
-				error_log( 'Gemini Image: Invalid base64 image data' );
+				abcc_debug_log( 'Gemini Image: Invalid base64 image data' );
 				return false;
 			}
 
@@ -526,19 +526,19 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 			}
 
 			if ( ! $is_valid ) {
-				error_log( 'Gemini Image: Decoded data does not match declared MIME type ' . $mime );
+				abcc_debug_log( 'Gemini Image: Decoded data does not match declared MIME type ' . $mime );
 				return false;
 			}
 
 			if ( file_put_contents( $filepath, $image_data ) ) {
 				return $upload_dir['url'] . '/' . $filename;
 			} else {
-				error_log( 'Failed to save Gemini image to filesystem' );
+				abcc_debug_log( 'Failed to save Gemini image to filesystem' );
 				return false;
 			}
 		}
 	}
 
-	error_log( 'Gemini Image: No valid image data in response' );
+	abcc_debug_log( 'Gemini Image: No valid image data in response' );
 	return false;
 }

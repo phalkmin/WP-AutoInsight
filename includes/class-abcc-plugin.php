@@ -54,26 +54,32 @@ class ABCC_Plugin {
 	 * Initialize hooks
 	 */
 	private function init_hooks() {
-		// Register activation hook
+		// Register activation hook.
 		register_activation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'activate_plugin' ) );
 
-		// Register deactivation hook
+		// Register deactivation hook.
 		register_deactivation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'deactivate_plugin' ) );
 
-		// Enqueue scripts and styles
+		// Enqueue scripts and styles.
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
-		// Admin notices
+		// Admin notices.
 		add_action( 'admin_notices', array( $this, 'display_settings_errors' ) );
 
-		// Onboarding
+		// Onboarding.
 		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
 
-		// Migrations
+		// Migrations.
 		add_action( 'admin_init', array( $this, 'run_migrations' ) );
 
-		// WP 7.0 Connectors registration
+		// WP 7.0 Connectors registration.
 		add_action( 'connections-wp-admin-init', array( $this, 'register_wp70_connector' ) );
+
+		// Daily provider health check cron.
+		add_action( 'abcc_daily_provider_health_check', 'abcc_run_provider_health_check' );
+		if ( ! wp_next_scheduled( 'abcc_daily_provider_health_check' ) ) {
+			wp_schedule_event( time(), 'daily', 'abcc_daily_provider_health_check' );
+		}
 	}
 
 	/**
@@ -166,6 +172,7 @@ class ABCC_Plugin {
 	 */
 	public function deactivate_plugin() {
 		wp_clear_scheduled_hook( 'abcc_openai_generate_post_hook' );
+		wp_clear_scheduled_hook( 'abcc_daily_provider_health_check' );
 	}
 
 	/**
@@ -177,6 +184,56 @@ class ABCC_Plugin {
 		// abcc-ui.js provides the shared status/spinner component used by meta boxes
 		// on post edit screens, so it loads on all admin pages.
 		wp_enqueue_script( 'abcc-ui-script', plugins_url( '/js/abcc-ui.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+
+		// Post edit screen: meta box scripts.
+		if ( in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
+			wp_enqueue_style(
+				'abcc-meta-box-styles',
+				plugins_url( '/css/admin.css', __DIR__ ),
+				array(),
+				$this->version
+			);
+			wp_enqueue_script(
+				'abcc-meta-boxes',
+				plugins_url( '/js/meta-boxes.js', __DIR__ ),
+				array( 'jquery', 'abcc-ui-script' ),
+				$this->version,
+				true
+			);
+			wp_localize_script(
+				'abcc-meta-boxes',
+				'abccMetaBox',
+				array(
+					'i18n' => array(
+						/* translators: confirmation dialog when rewriting a post with AI */
+						'confirmRewrite'        => __( 'Are you sure you want to rewrite this post? This will replace the current content.', 'automated-blog-content-creator' ),
+						/* translators: confirmation dialog when regenerating a post as a new draft */
+						'confirmRegenerate'     => __( 'Regenerate this post? A new draft will be created with the same parameters.', 'automated-blog-content-creator' ),
+						/* translators: confirmation dialog when creating an infographic */
+						'confirmInfographic'    => __( 'Create an infographic for this post?', 'automated-blog-content-creator' ),
+						/* translators: button label while AI rewrite is in progress */
+						'rewriting'             => __( 'Rewriting...', 'automated-blog-content-creator' ),
+						'analyzing'             => __( 'Analyzing content...', 'automated-blog-content-creator' ),
+						'rewriteSuccess'        => __( 'Success! Reloading page...', 'automated-blog-content-creator' ),
+						'rewriteBtn'            => __( 'Rewrite with AI', 'automated-blog-content-creator' ),
+						/* translators: button label while regenerating a post */
+						'regenerating'          => __( "Regenerating\u2026", 'automated-blog-content-creator' ),
+						'generatingDraft'       => __( "Generating new draft\u2026", 'automated-blog-content-creator' ),
+						'regenerateSuccess'     => __( "Done! Opening new draft\u2026", 'automated-blog-content-creator' ),
+						'regenerateBtn'         => __( 'Regenerate as New Draft', 'automated-blog-content-creator' ),
+						/* translators: button label while infographic is being created */
+						'creating'              => __( 'Creating...', 'automated-blog-content-creator' ),
+						'generatingInfographic' => __( 'Generating infographic...', 'automated-blog-content-creator' ),
+						'infographicSuccess'    => __( 'Success!', 'automated-blog-content-creator' ),
+						'infographicBtn'        => __( 'Create Infographic', 'automated-blog-content-creator' ),
+						'view'                  => __( 'View', 'automated-blog-content-creator' ),
+						'edit'                  => __( 'Edit', 'automated-blog-content-creator' ),
+						'networkError'          => __( 'Network error occurred', 'automated-blog-content-creator' ),
+						'unknownError'          => __( 'Unknown error', 'automated-blog-content-creator' ),
+					),
+				)
+			);
+		}
 
 		// Everything else is only needed on the plugin's own settings page.
 		if ( 'toplevel_page_automated-blog-content-creator-post' !== $hook ) {

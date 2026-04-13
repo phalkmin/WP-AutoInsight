@@ -76,6 +76,57 @@ function abcc_get_tooltip_html( $text ) {
 	);
 }
 
+/**
+ * Returns the current primary tab slug.
+ *
+ * @return string
+ */
+function abcc_get_current_tab() {
+	$allowed = array( 'dashboard', 'content', 'media', 'connections', 'settings' );
+	$tab     = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	return in_array( $tab, $allowed, true ) ? $tab : 'dashboard';
+}
+
+/**
+ * Returns the current sub-tab slug.
+ *
+ * @param array  $allowed Allowed sub-tab slugs for this primary tab.
+ * @param string $default Default sub-tab slug.
+ * @return string
+ */
+function abcc_get_current_subtab( $allowed, $default ) {
+	$subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : $default; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	return in_array( $subtab, $allowed, true ) ? $subtab : $default;
+}
+
+/**
+ * Renders the WooCommerce-style sub-tab navigation row.
+ *
+ * @param string $primary_tab The current primary tab slug.
+ * @param array  $subtabs     Array of [ 'slug' => 'Label' ].
+ * @param string $current     The active sub-tab slug.
+ * @return void
+ */
+function abcc_render_subtab_nav( $primary_tab, $subtabs, $current ) {
+	$page = 'automated-blog-content-creator-post';
+	echo '<ul class="abcc-subtab-nav">';
+	$items = array();
+	foreach ( $subtabs as $slug => $label ) {
+		$url     = esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page,
+					'tab'    => $primary_tab,
+					'subtab' => $slug,
+				)
+			)
+		);
+		$class   = $slug === $current ? ' class="current"' : '';
+		$items[] = '<li><a href="' . $url . '"' . $class . '>' . esc_html( $label ) . '</a></li>';
+	}
+	echo implode( ' <li class="abcc-subtab-sep">|</li> ', $items ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	echo '</ul>';
+}
 
 /**
  * Displays a single-select category dropdown.
@@ -109,11 +160,27 @@ function abcc_openai_text_settings_page() {
 		return;
 	}
 
+	// Handle settings export (GET request with nonce).
+	if ( isset( $_GET['abcc_export_settings'] ) && current_user_can( 'manage_options' ) ) {
+		$nonce_value = isset( $_GET['_wpnonce'] ) ? sanitize_key( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+		if ( wp_verify_nonce( $nonce_value, 'abcc_export_settings' ) ) {
+			$schema   = abcc_get_settings_schema();
+			$exported = array();
+			foreach ( $schema['settings'] as $key => $def ) {
+				$exported[ $key ] = abcc_get_setting( $key, $def['default'] );
+			}
+			header( 'Content-Type: application/json' );
+			header( 'Content-Disposition: attachment; filename="wp-autoinsight-settings-' . gmdate( 'Y-m-d' ) . '.json"' );
+			echo wp_json_encode( $exported, JSON_PRETTY_PRINT );
+			exit;
+		}
+	}
+
 	if ( isset( $_POST['abcc_openai_nonce'] ) && wp_verify_nonce( sanitize_key( $_POST['abcc_openai_nonce'] ), 'abcc_openai_generate_post' ) ) {
-		$current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
+		$current_tab = abcc_get_current_tab();
 
 		switch ( $current_tab ) {
-			case 'text-settings':
+			case 'content':
 				// Handle Keyword Groups.
 				$keyword_groups = array();
 				if ( isset( $_POST['abcc_group_name'] ) && is_array( $_POST['abcc_group_name'] ) ) {
@@ -151,8 +218,6 @@ function abcc_openai_text_settings_page() {
 				}
 				abcc_update_setting( 'abcc_content_templates', $content_templates );
 
-				$selected_post_types = isset( $_POST['abcc_selected_post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_selected_post_types'] ) ) : array( 'post' );
-
 				if ( isset( $_POST['openai_tone'] ) ) {
 					$openai_tone = sanitize_text_field( wp_unslash( $_POST['openai_tone'] ) );
 					if ( 'custom' === $openai_tone ) {
@@ -163,74 +228,124 @@ function abcc_openai_text_settings_page() {
 					}
 					abcc_update_setting( 'openai_tone', $openai_tone );
 				}
-
-				$openai_generate_seo = isset( $_POST['openai_generate_seo'] );
-				$abcc_draft_first    = isset( $_POST['abcc_draft_first'] );
-				abcc_update_setting( 'openai_generate_seo', $openai_generate_seo );
-				abcc_update_setting( 'abcc_draft_first', $abcc_draft_first );
-				abcc_update_setting( 'abcc_selected_post_types', $selected_post_types );
 				break;
 
-			case 'model-settings':
-				$selected_model = isset( $_POST['selected_model'] ) ? sanitize_text_field( wp_unslash( $_POST['selected_model'] ) ) : '';
-				if ( ! empty( $selected_model ) ) {
-					abcc_update_setting( 'prompt_select', $selected_model );
-					abcc_validate_selected_model();
+			case 'connections':
+				$subtab = isset( $_POST['abcc_subtab'] ) ? sanitize_key( wp_unslash( $_POST['abcc_subtab'] ) ) : 'api-keys';
+				if ( 'api-keys' === $subtab ) {
+					// Save API keys for all providers using the registry.
+					foreach ( abcc_get_provider_ids() as $provider_id ) {
+						$key_field = $provider_id . '_api_key';
+						if ( isset( $_POST[ $key_field ] ) ) {
+							$api_key = sanitize_text_field( wp_unslash( $_POST[ $key_field ] ) );
+							abcc_set_provider_saved_api_key( $provider_id, $api_key );
+						}
+					}
+
+					// Save selected model.
+					$selected_model = isset( $_POST['selected_model'] ) ? sanitize_text_field( wp_unslash( $_POST['selected_model'] ) ) : '';
+					if ( ! empty( $selected_model ) ) {
+						abcc_update_setting( 'prompt_select', $selected_model );
+						abcc_validate_selected_model();
+					}
+
+					// Perplexity options (also handled via auto-save, but accept form fallback).
+					if ( isset( $_POST['abcc_perplexity_citation_style'] ) ) {
+						abcc_update_setting( 'abcc_perplexity_citation_style', sanitize_text_field( wp_unslash( $_POST['abcc_perplexity_citation_style'] ) ) );
+					}
+					if ( isset( $_POST['abcc_perplexity_recency_filter'] ) ) {
+						abcc_update_setting( 'abcc_perplexity_recency_filter', sanitize_text_field( wp_unslash( $_POST['abcc_perplexity_recency_filter'] ) ) );
+					}
+
+					add_action( 'admin_footer', 'abcc_trigger_inline_api_validation' );
+				} elseif ( 'scheduling' === $subtab ) {
+					$auto_create  = isset( $_POST['openai_auto_create'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_auto_create'] ) ) : '';
+					$email_notifs = isset( $_POST['openai_email_notifications'] );
+
+					abcc_update_setting( 'openai_auto_create', $auto_create );
+					abcc_update_setting( 'openai_email_notifications', $email_notifs );
+					abcc_schedule_openai_event();
 				}
 				break;
 
-			case 'advanced-settings':
-				$api_key                    = isset( $_POST['openai_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_api_key'] ) ) : '';
-				$gemini_api_key             = isset( $_POST['gemini_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['gemini_api_key'] ) ) : '';
-				$claude_api_key             = isset( $_POST['claude_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['claude_api_key'] ) ) : '';
-				$stability_api_key          = isset( $_POST['stability_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['stability_api_key'] ) ) : '';
-				$perplexity_api_key         = isset( $_POST['perplexity_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['perplexity_api_key'] ) ) : '';
-				$perplexity_citation_style  = isset( $_POST['abcc_perplexity_citation_style'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_perplexity_citation_style'] ) ) : 'inline';
-				$perplexity_recency_filter  = isset( $_POST['abcc_perplexity_recency_filter'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_perplexity_recency_filter'] ) ) : '';
-				$auto_create                = isset( $_POST['openai_auto_create'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_auto_create'] ) ) : '';
-				$char_limit                 = isset( $_POST['openai_char_limit'] ) ? absint( $_POST['openai_char_limit'] ) : 200;
-				$openai_email_notifications = isset( $_POST['openai_email_notifications'] );
-				$openai_generate_images     = isset( $_POST['openai_generate_images'] );
-				$preferred_image_service    = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
-				$gemini_image_model         = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
-				$gemini_image_size          = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
-				$openai_image_size          = isset( $_POST['abcc_openai_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_size'] ) ) : '1024x1024';
-				$openai_image_quality       = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'standard';
-				$stability_image_size       = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';
+			case 'media':
+				$subtab = isset( $_POST['abcc_subtab'] ) ? sanitize_key( wp_unslash( $_POST['abcc_subtab'] ) ) : 'images';
+				if ( 'images' === $subtab ) {
+					$openai_generate_images  = isset( $_POST['openai_generate_images'] );
+					$preferred_image_service = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
+					$gemini_image_model      = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
+					$gemini_image_size       = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
+					$openai_image_size       = isset( $_POST['abcc_openai_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_size'] ) ) : '1024x1024';
+					$openai_image_quality    = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'standard';
+					$stability_image_size    = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';
+					$auto_alt_text           = isset( $_POST['abcc_auto_alt_text'] );
 
-				abcc_update_setting( 'openai_api_key', $api_key );
-				abcc_update_setting( 'gemini_api_key', $gemini_api_key );
-				abcc_update_setting( 'claude_api_key', $claude_api_key );
-				abcc_update_setting( 'stability_api_key', $stability_api_key );
-				abcc_update_setting( 'perplexity_api_key', $perplexity_api_key );
-				abcc_update_setting( 'abcc_perplexity_citation_style', $perplexity_citation_style );
-				abcc_update_setting( 'abcc_perplexity_recency_filter', $perplexity_recency_filter );
-				abcc_update_setting( 'openai_auto_create', $auto_create );
-				abcc_update_setting( 'openai_char_limit', $char_limit );
-				abcc_update_setting( 'openai_email_notifications', $openai_email_notifications );
-				abcc_update_setting( 'openai_generate_images', $openai_generate_images );
-				abcc_update_setting( 'preferred_image_service', $preferred_image_service );
-				abcc_update_setting( 'abcc_gemini_image_model', $gemini_image_model );
-				abcc_update_setting( 'abcc_gemini_image_size', $gemini_image_size );
-				abcc_update_setting( 'abcc_openai_image_size', $openai_image_size );
-				abcc_update_setting( 'abcc_openai_image_quality', $openai_image_quality );
-				abcc_update_setting( 'abcc_stability_image_size', $stability_image_size );
+					abcc_update_setting( 'openai_generate_images', $openai_generate_images );
+					abcc_update_setting( 'preferred_image_service', $preferred_image_service );
+					abcc_update_setting( 'abcc_gemini_image_model', $gemini_image_model );
+					abcc_update_setting( 'abcc_gemini_image_size', $gemini_image_size );
+					abcc_update_setting( 'abcc_openai_image_size', $openai_image_size );
+					abcc_update_setting( 'abcc_openai_image_quality', $openai_image_quality );
+					abcc_update_setting( 'abcc_stability_image_size', $stability_image_size );
+					abcc_update_setting( 'abcc_auto_alt_text', $auto_alt_text );
+				} elseif ( 'audio' === $subtab ) {
+					$enable_audio           = isset( $_POST['abcc_enable_audio_transcription'] );
+					$supported_formats      = isset( $_POST['abcc_supported_audio_formats'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_supported_audio_formats'] ) ) : array();
+					$transcription_language = isset( $_POST['abcc_transcription_language'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_transcription_language'] ) ) : 'en';
 
-				abcc_schedule_openai_event();
+					abcc_update_setting( 'abcc_enable_audio_transcription', $enable_audio );
+					abcc_update_setting( 'abcc_supported_audio_formats', $supported_formats );
+					abcc_update_setting( 'abcc_transcription_language', $transcription_language );
+				} elseif ( 'infographics' === $subtab ) {
+					$enable_infographics  = isset( $_POST['abcc_enable_infographics'] );
+					$infographic_provider = isset( $_POST['abcc_infographic_provider'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_infographic_provider'] ) ) : 'auto';
 
-				// Trigger inline validation on save.
-				add_action( 'admin_footer', 'abcc_trigger_inline_api_validation' );
-
+					abcc_update_setting( 'abcc_enable_infographics', $enable_infographics );
+					abcc_update_setting( 'abcc_infographic_provider', $infographic_provider );
+				}
 				break;
 
-			case 'audio-settings':
-				$enable_audio           = isset( $_POST['abcc_enable_audio_transcription'] );
-				$supported_formats      = isset( $_POST['abcc_supported_audio_formats'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_supported_audio_formats'] ) ) : array();
-				$transcription_language = isset( $_POST['abcc_transcription_language'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_transcription_language'] ) ) : 'en';
+			case 'settings':
+				$subtab = isset( $_POST['abcc_subtab'] ) ? sanitize_key( wp_unslash( $_POST['abcc_subtab'] ) ) : 'general';
 
-				abcc_update_setting( 'abcc_enable_audio_transcription', $enable_audio );
-				abcc_update_setting( 'abcc_supported_audio_formats', $supported_formats );
-				abcc_update_setting( 'abcc_transcription_language', $transcription_language );
+				if ( 'general' === $subtab ) {
+					$selected_post_types = isset( $_POST['abcc_selected_post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_selected_post_types'] ) ) : array( 'post' );
+					$char_limit          = isset( $_POST['openai_char_limit'] ) ? absint( $_POST['openai_char_limit'] ) : 200;
+					$draft_first         = isset( $_POST['abcc_draft_first'] );
+					$generate_seo        = isset( $_POST['openai_generate_seo'] );
+
+					abcc_update_setting( 'abcc_selected_post_types', $selected_post_types );
+					abcc_update_setting( 'openai_char_limit', $char_limit );
+					abcc_update_setting( 'abcc_draft_first', $draft_first );
+					abcc_update_setting( 'openai_generate_seo', $generate_seo );
+
+				} elseif ( 'permissions' === $subtab ) {
+					$allowed_roles   = isset( $_POST['abcc_allowed_roles'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_allowed_roles'] ) ) : array();
+					$allowed_roles[] = 'administrator';
+					abcc_update_setting( 'abcc_allowed_roles', array_unique( $allowed_roles ) );
+
+				} elseif ( 'advanced' === $subtab ) {
+					if ( isset( $_POST['abcc_action'] ) ) {
+						$action = sanitize_key( wp_unslash( $_POST['abcc_action'] ) );
+						if ( 'reset_settings' === $action ) {
+							$schema = abcc_get_settings_schema();
+							foreach ( $schema['settings'] as $key => $def ) {
+								abcc_update_setting( $key, $def['default'] );
+							}
+						} elseif ( 'delete_history' === $action ) {
+							$jobs = get_posts(
+								array(
+									'post_type'      => ABCC_Job::POST_TYPE,
+									'posts_per_page' => -1,
+									'fields'         => 'ids',
+								)
+							);
+							foreach ( $jobs as $id ) {
+								wp_delete_post( $id, true );
+							}
+						}
+					}
+				}
 				break;
 		}
 
@@ -248,7 +363,7 @@ function abcc_openai_text_settings_page() {
 	$custom_tone_value = abcc_get_setting( 'custom_tone', '' );
 	$keyword_groups    = abcc_get_setting( 'abcc_keyword_groups', array() );
 	$content_templates = abcc_get_setting( 'abcc_content_templates', array() );
-	$current_tab       = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'text-settings';
+	$current_tab       = abcc_get_current_tab();
 
 	// Add admin styles.
 	wp_enqueue_style( 'wpai-admin-styles', plugins_url( 'css/admin.css', __FILE__ ), array(), ABCC_VERSION );
@@ -260,49 +375,71 @@ function abcc_openai_text_settings_page() {
 		array(
 			'nonce'       => wp_create_nonce( 'abcc_openai_generate_post' ),
 			'buttonNonce' => wp_create_nonce( 'abcc_admin_buttons' ),
+			'adminUrl'    => admin_url( 'post.php?' ),
 			'i18n'        => array(
 				/* translators: %d: number of posts to generate */
 				'generateNPosts' => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
 				'copied'         => __( 'Copied', 'automated-blog-content-creator' ),
+				/* translators: shown in auto-save indicator while saving */
+				'saving'         => __( 'Saving\u2026', 'automated-blog-content-creator' ),
+				/* translators: shown in auto-save indicator after successful save */
+				'saved'          => __( 'Saved ✓', 'automated-blog-content-creator' ),
+				/* translators: shown in auto-save indicator when saving fails */
+				'saveFailed'     => __( 'Save failed ✗', 'automated-blog-content-creator' ),
+				'queued'         => __( 'Queued', 'automated-blog-content-creator' ),
+				/* translators: shown while a bulk post is being generated */
+				'generating'     => __( 'Generating…', 'automated-blog-content-creator' ),
+				'done'           => __( 'Done', 'automated-blog-content-creator' ),
+				'failed'         => __( 'Failed', 'automated-blog-content-creator' ),
+				'viewPost'       => __( 'View post', 'automated-blog-content-creator' ),
 			),
 		)
 	);
 
+	$page_slug = 'automated-blog-content-creator-post';
 	?>
 	<div class="wrap">
 		<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+		<div id="abcc-autosave-indicator" class="abcc-autosave-indicator" aria-live="polite"></div>
 
 		<nav class="nav-tab-wrapper">
-			<a href="?page=automated-blog-content-creator-post&tab=text-settings" class="nav-tab <?php echo $current_tab === 'text-settings' ? 'nav-tab-active' : ''; ?>">
-				<?php esc_html_e( 'Content Settings', 'automated-blog-content-creator' ); ?>
-			</a>
-			<a href="?page=automated-blog-content-creator-post&tab=advanced-settings" class="nav-tab <?php echo $current_tab === 'advanced-settings' ? 'nav-tab-active' : ''; ?>">
-				<?php esc_html_e( 'Advanced Settings', 'automated-blog-content-creator' ); ?>
-			</a>
-			<a href="?page=automated-blog-content-creator-post&tab=model-settings" class="nav-tab <?php echo $current_tab === 'model-settings' ? 'nav-tab-active' : ''; ?>">
-				<?php esc_html_e( 'AI Models', 'automated-blog-content-creator' ); ?>
-			</a>
-			<a href="?page=automated-blog-content-creator-post&tab=audio-settings" class="nav-tab <?php echo $current_tab === 'audio-settings' ? 'nav-tab-active' : ''; ?>">
-				<?php esc_html_e( 'Audio Transcription', 'automated-blog-content-creator' ); ?>
-			</a>
-			<a href="?page=automated-blog-content-creator-post&tab=about" class="nav-tab <?php echo $current_tab === 'about' ? 'nav-tab-active' : ''; ?>">
-				<?php esc_html_e( 'About', 'automated-blog-content-creator' ); ?>
-			</a>
+			<?php
+			$primary_tabs = array(
+				'dashboard'   => __( 'Dashboard', 'automated-blog-content-creator' ),
+				'content'     => __( 'Content', 'automated-blog-content-creator' ),
+				'media'       => __( 'Media', 'automated-blog-content-creator' ),
+				'connections' => __( 'Connections', 'automated-blog-content-creator' ),
+				'settings'    => __( 'Settings', 'automated-blog-content-creator' ),
+			);
+			foreach ( $primary_tabs as $slug => $label ) :
+				$url   = esc_url(
+					add_query_arg(
+						array(
+							'page' => $page_slug,
+							'tab'  => $slug,
+						)
+					)
+				);
+				$class = $current_tab === $slug ? 'nav-tab nav-tab-active' : 'nav-tab';
+				printf( '<a href="%s" class="%s">%s</a>', esc_url( $url ), esc_attr( $class ), esc_html( $label ) );
+			endforeach;
+			?>
 		</nav>
 
 		<div class="tab-content">
-			<?php if ( $current_tab === 'text-settings' ) : ?>
-				<?php include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-content.php'; ?>
-			<?php elseif ( $current_tab === 'model-settings' ) : ?>
-				<?php include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-models.php'; ?>
-			<?php elseif ( $current_tab === 'advanced-settings' ) : ?>
-				<?php include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-advanced.php'; ?>
-			<?php elseif ( $current_tab === 'about' ) : ?>
-				<?php include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-about.php'; ?>
-			<?php elseif ( $current_tab === 'audio-settings' ) : ?>
-				<?php include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-audio.php'; ?>
-			<?php endif; ?>
-
+			<?php
+			if ( 'dashboard' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-dashboard.php';
+			} elseif ( 'content' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-content.php';
+			} elseif ( 'media' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-media.php';
+			} elseif ( 'connections' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-connections.php';
+			} elseif ( 'settings' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-settings.php';
+			}
+			?>
 		</div>
 	</div>
 	<?php

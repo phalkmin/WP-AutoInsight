@@ -8,11 +8,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'ABCC_VERSION' ) ) {
-	define( 'ABCC_VERSION', '3.8.0' );
+	define( 'ABCC_VERSION', '4.0.0' );
 }
 
 if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
 	define( 'HOUR_IN_SECONDS', 3600 );
+}
+
+if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+	define( 'DAY_IN_SECONDS', 86400 );
 }
 
 if ( ! defined( 'ABCC_CONTENT_FORMAT_REQUIREMENTS' ) ) {
@@ -39,18 +43,73 @@ if ( ! class_exists( 'WP_Error' ) ) {
 $GLOBALS['abcc_test_options']    = array();
 $GLOBALS['abcc_test_transients'] = array();
 $GLOBALS['abcc_test_actions']    = array();
+$GLOBALS['abcc_test_meta_boxes'] = array();
 $GLOBALS['abcc_tests']           = array();
 $GLOBALS['abcc_test_connectors'] = array();
+$GLOBALS['abcc_test_current_user_caps']  = array();
+$GLOBALS['abcc_test_current_user_roles'] = array( 'administrator' );
+$GLOBALS['abcc_test_current_user_exists'] = true;
+$GLOBALS['abcc_test_last_json'] = null;
+$GLOBALS['abcc_test_schedule']   = array(
+	'timestamp' => false,
+	'schedule'  => false,
+);
+
+if ( ! class_exists( 'ABCC_Test_User' ) ) {
+	class ABCC_Test_User {
+		public $roles = array();
+		private $exists = true;
+
+		public function __construct( $roles = array(), $exists = true ) {
+			$this->roles  = $roles;
+			$this->exists = $exists;
+		}
+
+		public function exists() {
+			return $this->exists;
+		}
+	}
+}
+
+function add_meta_box( $id, $title, $callback, $screen, $context = 'advanced', $priority = 'default' ) {
+	$GLOBALS['abcc_test_meta_boxes'][] = array(
+		'id'       => $id,
+		'title'    => $title,
+		'callback' => $callback,
+		'screen'   => $screen,
+		'context'  => $context,
+		'priority' => $priority,
+	);
+}
 
 function __($text) { return $text; }
 function esc_html__($text) { return $text; }
 function esc_attr__($text) { return $text; }
 function apply_filters($hook, $value) { return $value; }
 function add_action($hook, $callback) { $GLOBALS['abcc_test_actions'][ $hook ][] = $callback; }
-function current_user_can($cap) { return true; }
+function current_user_can($cap) {
+	if ( array_key_exists( $cap, $GLOBALS['abcc_test_current_user_caps'] ) ) {
+		return (bool) $GLOBALS['abcc_test_current_user_caps'][ $cap ];
+	}
+
+	return true;
+}
 function check_ajax_referer() { return true; }
-function wp_send_json_error($data = array()) { return $data; }
-function wp_send_json_success($data = array()) { return $data; }
+function wp_verify_nonce() { return true; }
+function wp_send_json_error($data = array()) {
+	$GLOBALS['abcc_test_last_json'] = array(
+		'success' => false,
+		'data'    => $data,
+	);
+	return $data;
+}
+function wp_send_json_success($data = array()) {
+	$GLOBALS['abcc_test_last_json'] = array(
+		'success' => true,
+		'data'    => $data,
+	);
+	return $data;
+}
 function add_settings_error() { return true; }
 function wp_json_encode($value) { return json_encode($value); }
 function sanitize_text_field($value) { return is_string($value) ? trim($value) : $value; }
@@ -82,7 +141,18 @@ function wp_trim_words($text, $num_words = 55) {
 	return implode(' ', array_slice($words, 0, $num_words));
 }
 function wp_kses_post($text) { return $text; }
+function wp_get_current_user() {
+	return new ABCC_Test_User(
+		$GLOBALS['abcc_test_current_user_roles'],
+		$GLOBALS['abcc_test_current_user_exists']
+	);
+}
 function wp_is_connector_registered($connector_id) { return in_array($connector_id, $GLOBALS['abcc_test_connectors'], true); }
+function wp_next_scheduled($hook) { return 'abcc_openai_generate_post_hook' === $hook ? $GLOBALS['abcc_test_schedule']['timestamp'] : false; }
+function wp_get_schedule($hook) { return 'abcc_openai_generate_post_hook' === $hook ? $GLOBALS['abcc_test_schedule']['schedule'] : false; }
+function date_i18n($format, $timestamp) { return gmdate('Y-m-d H:i', (int) $timestamp); }
+function abcc_debug_log($message) { return null; }
+function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
 
 if ( ! defined( 'OPENAI_API' ) ) {
 	define( 'OPENAI_API', 'const-openai-key' );
@@ -91,6 +161,7 @@ if ( ! defined( 'OPENAI_API' ) ) {
 require_once dirname(__DIR__) . '/includes/settings.php';
 require_once dirname(__DIR__) . '/includes/providers.php';
 require_once dirname(__DIR__) . '/includes/api-keys.php';
+require_once dirname(__DIR__) . '/includes/scheduling.php';
 require_once dirname(__DIR__) . '/includes/images.php';
 require_once dirname(__DIR__) . '/includes/content-generation.php';
 require_once dirname(__DIR__) . '/includes/seo.php';

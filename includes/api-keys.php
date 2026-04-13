@@ -112,8 +112,15 @@ function abcc_current_user_can_prompt() {
 		return true;
 	}
 
-	// Priority 2: Standard admin/editor permissions for backward compatibility.
-	return current_user_can( 'manage_options' ) || current_user_can( 'edit_posts' );
+	// Priority 2: Check the configured allowed roles.
+	$allowed_roles = abcc_get_setting( 'abcc_allowed_roles', array( 'administrator', 'editor' ) );
+	$user          = wp_get_current_user();
+
+	if ( ! $user->exists() ) {
+		return false;
+	}
+
+	return ! empty( array_intersect( $user->roles, $allowed_roles ) );
 }
 
 /**

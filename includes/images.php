@@ -31,11 +31,11 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 		$image_service = abcc_determine_image_service( $text_model );
 
 		if ( empty( $image_service['service'] ) ) {
-			error_log( 'No available image generation service' );
+			abcc_debug_log( 'No available image generation service' );
 			return false;
 		}
 
-		error_log(
+		abcc_debug_log(
 			sprintf(
 				'Attempting to generate image using %s service with prompt: %s',
 				$image_service['service'],
@@ -72,11 +72,11 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 				break;
 		}
 
-		error_log( 'Image generation failed for selected service' );
+		abcc_debug_log( 'Image generation failed for selected service' );
 		return false;
 
 	} catch ( Exception $e ) {
-		error_log( 'Image Generation Error: ' . $e->getMessage() );
+		abcc_debug_log( 'Image Generation Error: ' . $e->getMessage() );
 		return false;
 	}
 }
@@ -132,7 +132,7 @@ function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 		return $attachment_id;
 
 	} catch ( Exception $e ) {
-		error_log( 'Featured Image Error: ' . $e->getMessage() );
+		abcc_debug_log( 'Featured Image Error: ' . $e->getMessage() );
 		return false;
 	}
 }

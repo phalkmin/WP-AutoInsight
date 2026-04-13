@@ -3,7 +3,7 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/
  * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version:           3.8.0
+ * Version:           4.0.0
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '3.8.0' );
+define( 'ABCC_VERSION', '4.0.0' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
@@ -52,6 +52,23 @@ require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/gpt.php';
 
 /**
+ * Log a debug message if debug logging is enabled.
+ *
+ * Checks the abcc_debug_logging setting before writing to the PHP error log.
+ * Always logs when WP_DEBUG is true regardless of the setting.
+ *
+ * @since 4.0.0
+ *
+ * @param string $message The message to log.
+ * @return void
+ */
+function abcc_debug_log( $message ) {
+	if ( abcc_get_setting( 'abcc_debug_logging', false ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
+		error_log( '[WP-AutoInsight] ' . $message ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	}
+}
+
+/**
  * Handle API request errors.
  *
  * @since 1.0.0
@@ -71,7 +88,7 @@ function handle_api_request_error( $response, $api ) {
 		$error_message = $response->get_error_message();
 	}
 
-	error_log( sprintf( '%s API Request Error: %s', $api, $error_message ) );
+	abcc_debug_log( sprintf( '%s API Request Error: %s', $api, $error_message ) );
 
 	// add_settings_error() is only loaded in wp-admin. Background jobs (cron/AJAX)
 	// still need to log provider failures without fatalling the whole request.

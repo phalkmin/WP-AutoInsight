@@ -16,12 +16,19 @@ function abcc_handle_create_infographic() {
 	// Verify nonce.
 	if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'abcc_infographic_post_nonce' ) ) {
 		wp_send_json_error( array( 'message' => __( 'Security check failed', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
 
 	if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Invalid post or permission denied', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	try {

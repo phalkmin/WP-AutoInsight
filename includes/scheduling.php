@@ -10,6 +10,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Resolve the author ID to use for scheduled posts.
+ *
+ * @return int
+ */
+function abcc_get_scheduled_post_author_id() {
+	$current_user_id = get_current_user_id();
+	if ( $current_user_id > 0 ) {
+		return (int) $current_user_id;
+	}
+
+	if ( function_exists( 'get_users' ) ) {
+		$admins = get_users(
+			array(
+				'role'    => 'administrator',
+				'fields'  => 'ID',
+				'number'  => 1,
+				'orderby' => 'ID',
+				'order'   => 'ASC',
+			)
+		);
+
+		if ( ! empty( $admins[0] ) ) {
+			return (int) $admins[0];
+		}
+	}
+
+	return 1;
+}
+
+/**
  * Check if the 'openai_generate_post_hook' event is scheduled and get schedule details.
  *
  * @return array|bool An array with schedule details if the event is scheduled, false otherwise.
@@ -22,12 +52,26 @@ function abcc_get_openai_event_schedule() {
 	}
 
 	$schedule = wp_get_schedule( 'abcc_openai_generate_post_hook' );
+	$groups   = abcc_get_setting( 'abcc_keyword_groups', array() );
+	$model    = abcc_get_setting( 'prompt_select', '' );
+	$next     = null;
+
+	if ( ! empty( $groups ) ) {
+		$last_index = (int) get_option( 'abcc_last_group_index', -1 );
+		$next_index = ( $last_index + 1 ) % count( $groups );
+
+		if ( ! empty( $groups[ $next_index ]['name'] ) ) {
+			$next = $groups[ $next_index ]['name'];
+		}
+	}
 
 	return array(
-		'scheduled' => true,
-		'schedule'  => $schedule,
-		'next_run'  => date_i18n( 'l, F j \a\t g:i A', $timestamp ),
-		'timestamp' => $timestamp,
+		'scheduled'  => true,
+		'schedule'   => $schedule,
+		'next_run'   => date_i18n( 'l, F j \a\t g:i A', $timestamp ),
+		'timestamp'  => $timestamp,
+		'group_name' => $next,
+		'model'      => $model,
 	);
 }
 
@@ -92,7 +136,7 @@ function abcc_openai_generate_post_scheduled() {
 		$job_id = abcc_queue_generation_job(
 			$payload,
 			array(
-				'created_by' => 0,
+				'created_by' => abcc_get_scheduled_post_author_id(),
 			)
 		);
 
@@ -117,9 +161,18 @@ function abcc_schedule_openai_event() {
 	wp_clear_scheduled_hook( 'abcc_openai_generate_post_hook' );
 
 	// Scheduling the event based on the selected option.
-	if ( 'none' !== $selected_option ) {
-		$schedule_interval = ( 'hourly' === $selected_option ) ? 'hourly' : ( ( 'weekly' === $selected_option ) ? 'weekly' : 'daily' );
-		wp_schedule_event( time(), $schedule_interval, 'abcc_openai_generate_post_hook' );
+	if ( ! empty( $selected_option ) && 'none' !== $selected_option ) {
+		if ( 'hourly' === $selected_option ) {
+			$schedule_interval  = 'hourly';
+			$first_run_delay    = HOUR_IN_SECONDS;
+		} elseif ( 'weekly' === $selected_option ) {
+			$schedule_interval  = 'weekly';
+			$first_run_delay    = WEEK_IN_SECONDS;
+		} else {
+			$schedule_interval  = 'daily';
+			$first_run_delay    = DAY_IN_SECONDS;
+		}
+		wp_schedule_event( time() + $first_run_delay, $schedule_interval, 'abcc_openai_generate_post_hook' );
 	}
 }
 
@@ -152,9 +205,6 @@ function abcc_send_post_notification( $post_id ) {
 
 	return wp_mail( $admin_email, $subject, $message );
 }
-
-// Schedule or unschedule the event when the option is updated.
-add_action( 'update_option_openai_auto_create', 'abcc_schedule_openai_event' );
 
 // Trigger the OpenAI post generation.
 add_action( 'abcc_openai_generate_post_hook', 'abcc_openai_generate_post_scheduled' );

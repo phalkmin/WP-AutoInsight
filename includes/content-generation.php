@@ -164,10 +164,10 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$post_data = array(
 			'post_title'    => $title,
 			'post_content'  => wp_kses_post( $post_content ),
-			'post_status'   => abcc_get_setting( 'abcc_draft_first', true ) ? 'draft' : 'publish',
-			'post_author'   => get_current_user_id(),
+			'post_status'   => ( ! empty( $options['draft_only'] ) || abcc_get_setting( 'abcc_draft_first', true ) ) ? 'draft' : 'publish',
+			'post_author'   => ! empty( $options['post_author'] ) ? (int) $options['post_author'] : get_current_user_id(),
 			'post_type'     => $post_type,
-			'post_category' => $category_id ? array( $category_id ) : get_option( 'openai_selected_categories', array() ),
+			'post_category' => $category_id ? array( $category_id ) : array( (int) get_option( 'default_category', 1 ) ),
 		);
 
 		// Add SEO data if Yoast is active.
@@ -189,7 +189,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 
 		if ( abcc_get_setting( 'openai_generate_images', true ) ) {
 			try {
-				$category_ids   = get_option( 'openai_selected_categories', array() );
+				$category_ids   = $category_id ? array( $category_id ) : array( (int) get_option( 'default_category', 1 ) );
 				$category_names = array();
 
 				if ( ! empty( $category_ids ) ) {

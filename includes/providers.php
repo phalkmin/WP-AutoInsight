@@ -449,6 +449,55 @@ function abcc_get_provider_credential_source( $provider ) {
 }
 
 /**
+ * Get the current provider health snapshot used by admin UI screens.
+ *
+ * @param string $provider Provider ID.
+ * @return array
+ */
+function abcc_get_provider_health_snapshot( $provider ) {
+	$source      = abcc_get_provider_credential_source( $provider );
+	$last_check  = get_transient( 'abcc_last_validation_' . $provider );
+	$health_rows = get_option( 'abcc_provider_health', array() );
+
+	if ( false === $last_check && ! empty( $health_rows[ $provider ] ) ) {
+		$row       = $health_rows[ $provider ];
+		$timestamp = isset( $row['timestamp'] ) ? (int) $row['timestamp'] : 0;
+
+		if ( 'connected' === ( $row['status'] ?? '' ) ) {
+			$last_check = array(
+				'status'    => 'verified',
+				'message'   => __( 'Validated automatically', 'automated-blog-content-creator' ),
+				'timestamp' => $timestamp,
+			);
+		} elseif ( 'failed' === ( $row['status'] ?? '' ) ) {
+			$last_check = array(
+				'status'    => 'failed',
+				'message'   => __( 'Connection failed', 'automated-blog-content-creator' ),
+				'timestamp' => $timestamp,
+			);
+		}
+	}
+
+	if ( 'none' === $source ) {
+		$health = 'no_key';
+	} elseif ( empty( $last_check ) ) {
+		$health = 'stale';
+	} elseif ( 'verified' !== ( $last_check['status'] ?? '' ) ) {
+		$health = 'failed';
+	} elseif ( ! empty( $last_check['timestamp'] ) && ( time() - (int) $last_check['timestamp'] ) > DAY_IN_SECONDS ) {
+		$health = 'stale';
+	} else {
+		$health = 'connected';
+	}
+
+	return array(
+		'source'     => $source,
+		'health'     => $health,
+		'last_check' => $last_check,
+	);
+}
+
+/**
  * Get a saved provider API key from wp_options only.
  *
  * @param string $provider Provider ID.

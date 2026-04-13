@@ -18,6 +18,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_add_transcribe_button_to_media() {
 	global $post;
 
+	if ( ! abcc_current_user_can_prompt() ) {
+		return;
+	}
+
 	// Check if audio transcription is enabled.
 	if ( ! abcc_get_setting( 'abcc_enable_audio_transcription', true ) ) {
 		return;
@@ -69,8 +73,9 @@ add_action( 'attachment_submitbox_misc_actions', 'abcc_add_transcribe_button_to_
 function abcc_handle_audio_transcription() {
 	check_ajax_referer( 'abcc_admin_buttons', 'nonce' );
 
-	if ( ! current_user_can( 'upload_files' ) ) {
+	if ( ! abcc_current_user_can_prompt() || ! current_user_can( 'upload_files' ) ) {
 		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	$attachment_id = isset( $_POST['attachment_id'] ) ? absint( $_POST['attachment_id'] ) : 0;
@@ -78,6 +83,7 @@ function abcc_handle_audio_transcription() {
 
 	if ( ! $attachment_id ) {
 		wp_send_json_error( array( 'message' => __( 'Invalid attachment ID', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	try {
@@ -152,8 +158,9 @@ add_action( 'wp_ajax_abcc_transcribe_audio', 'abcc_handle_audio_transcription' )
 function abcc_handle_create_post_from_transcript() {
 	check_ajax_referer( 'abcc_admin_buttons', 'nonce' );
 
-	if ( ! current_user_can( 'edit_posts' ) ) {
+	if ( ! abcc_current_user_can_prompt() || ! current_user_can( 'edit_posts' ) ) {
 		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	$attachment_id = isset( $_POST['attachment_id'] ) ? absint( $_POST['attachment_id'] ) : 0;
@@ -161,6 +168,7 @@ function abcc_handle_create_post_from_transcript() {
 
 	if ( ! $attachment_id || empty( $transcript ) ) {
 		wp_send_json_error( array( 'message' => __( 'Missing required data', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	try {
@@ -330,7 +338,7 @@ Format requirements:
 		'post_status'   => 'draft',
 		'post_author'   => get_current_user_id(),
 		'post_type'     => 'post',
-		'post_category' => get_option( 'openai_selected_categories', array() ),
+		'post_category' => array( (int) get_option( 'default_category', 1 ) ),
 	);
 
 	$post_id = wp_insert_post( $post_data, true );
@@ -353,7 +361,7 @@ Format requirements:
 				abcc_set_featured_image( $post_id, $image_url, $alt_text );
 			}
 		} catch ( Exception $e ) {
-			error_log( 'Featured image generation failed for audio post: ' . $e->getMessage() );
+			abcc_debug_log( 'Featured image generation failed for audio post: ' . $e->getMessage() );
 		}
 	}
 
@@ -378,7 +386,7 @@ function abcc_enqueue_audio_scripts( $hook ) {
 	}
 
 	global $post;
-	if ( ! $post || false === strpos( $post->post_mime_type, 'audio' ) ) {
+	if ( ! abcc_current_user_can_prompt() || ! $post || false === strpos( $post->post_mime_type, 'audio' ) ) {
 		return;
 	}
 

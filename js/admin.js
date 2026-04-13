@@ -1,4 +1,89 @@
 jQuery(document).ready(function ($) {
+  // ── Auto-save ──────────────────────────────────────────────────────────────
+  var abccAutosaveTimer = null;
+  var $abccIndicator = $('#abcc-autosave-indicator');
+
+  var abccHideTimer = null;
+
+  function abccToastShow(stateClass, text) {
+    clearTimeout(abccHideTimer);
+    $abccIndicator
+      .removeClass('abcc-saving abcc-saved abcc-error')
+      .text(text)
+      .addClass(stateClass);
+  }
+
+  function abccToastHide(delay) {
+    abccHideTimer = setTimeout(function () {
+      $abccIndicator.removeClass('abcc-saving abcc-saved abcc-error');
+    }, delay);
+  }
+
+  function abccShowSaving() {
+    abccToastShow('abcc-saving', abccAdmin.i18n.saving || 'Saving\u2026');
+  }
+
+  function abccShowSaved() {
+    abccToastShow('abcc-saved', abccAdmin.i18n.saved || 'Saved \u2713');
+    abccToastHide(2500);
+  }
+
+  function abccShowError() {
+    abccToastShow('abcc-error', abccAdmin.i18n.saveFailed || 'Save failed \u2717');
+    abccToastHide(4000);
+  }
+
+  function abccAutosaveSetting(key, value) {
+    abccShowSaving();
+    $.post(ajaxurl, {
+      action: 'abcc_autosave_setting',
+      nonce: abccAdmin.nonce,
+      key: key,
+      value: value
+    }).done(function (response) {
+      if (response.success) {
+        abccShowSaved();
+      } else {
+        abccShowError();
+      }
+    }).fail(function () {
+      abccShowError();
+    });
+  }
+
+  // Attach to any field with data-autosave-key attribute.
+  $(document).on('change', '[data-autosave-key]', function () {
+    var $field = $(this);
+    var key    = $field.data('autosave-key');
+    var value  = $field.is(':checkbox') ? ($field.is(':checked') ? '1' : '0') : $field.val();
+
+    clearTimeout(abccAutosaveTimer);
+    abccAutosaveTimer = setTimeout(function () {
+      abccAutosaveSetting(key, value);
+    }, 800);
+  });
+  // ── End Auto-save ──────────────────────────────────────────────────────────
+
+  // ── Unsaved-changes warning (scheduling fields only) ──────────────────────
+  // Fields with data-dirty-watch are submit-only (scheduling frequency, email
+  // notifications). JS watches them and fires beforeunload if user navigates away.
+  var abccDirty = false;
+
+  $(document).on('change', '[data-dirty-watch]', function () {
+    abccDirty = true;
+  });
+
+  $(document).on('submit', 'form', function () {
+    abccDirty = false;
+  });
+
+  $(window).on('beforeunload', function () {
+    if (abccDirty) {
+      return '';
+    }
+  });
+  // ── End Unsaved-changes warning ────────────────────────────────────────────
+
   let abccJobRefreshTimer = null;
   let abccActiveRunId = "";
 
@@ -130,12 +215,14 @@ jQuery(document).ready(function ($) {
 
   scheduleJobLogRefresh();
 
-  // Initialize Select2 for category dropdown
-  $(".wpai-category-select, .wpai-post-type-select").select2();
+  // Initialize Select2 where available for existing admin fields.
+  if ($.fn.select2) {
+    $(".wpai-category-select, .wpai-post-type-select, .abcc-category-select").select2();
+  }
 
   // Handle custom tone input visibility
   $("#openai_tone").on("change", function () {
-    var customContainer = $("#custom_tone_container");
+    var customContainer = $("#abcc-custom-tone-wrapper");
     if ($(this).val() === "custom") {
       customContainer.show();
     } else {
@@ -248,10 +335,11 @@ jQuery(document).ready(function ($) {
 
     $submitButton.prop("disabled", true);
 
+    var savingText = (abccAdmin.i18n && abccAdmin.i18n.saving) ? abccAdmin.i18n.saving : "Saving\u2026";
     if ($submitButton.is("input")) {
-      $submitButton.val("Saving...");
+      $submitButton.val(savingText);
     } else {
-      $submitButton.text("Saving...");
+      $submitButton.text(savingText);
     }
 
     // Reset button after 5 seconds as a fallback
@@ -329,6 +417,14 @@ jQuery(document).ready(function ($) {
     });
   };
 
+  // Validate button — explicit click handler.
+  $(document).on("click", ".abcc-validate-key", function () {
+    const provider = $(this).data("provider");
+    if (provider) {
+      abccValidateProvider(provider);
+    }
+  });
+
   // Validate a single provider when the user finishes typing in its key field.
   $('input[id$="_api_key"]').on("blur", function () {
     if ($(this).val().trim() === "") {
@@ -383,30 +479,17 @@ jQuery(document).ready(function ($) {
   // Content Templates Dynamic UI
   $("#abcc-add-template").on("click", function (e) {
     e.preventDefault();
-    const $container = $("#abcc-content-templates-container");
+    const $container = $("#abcc-templates-container");
     const slug = "custom_" + Math.random().toString(36).substr(2, 9);
 
     const newTemplate = `
       <div class="abcc-template-item" data-slug="${slug}">
-        <div class="abcc-template-header">
+        <div class="abcc-group-header">
           <input type="text" name="abcc_template_name[]" value="" class="abcc-template-name-input" placeholder="New Template Name">
           <input type="hidden" name="abcc_template_slug[]" value="${slug}">
           <span class="abcc-remove-item abcc-remove-template">&times; Remove</span>
         </div>
-        <div class="abcc-template-body" style="grid-template-columns: 1fr;">
-          <div class="abcc-template-prompt">
-            <label class="abcc-field-label">Prompt Pattern</label>
-            <textarea name="abcc_template_prompt[]" rows="6" class="large-text"></textarea>
-            <div class="abcc-placeholder-list">
-              Available Placeholders:
-              <span class="abcc-placeholder-tag">{keywords}</span>
-              <span class="abcc-placeholder-tag">{title}</span>
-              <span class="abcc-placeholder-tag">{tone}</span>
-              <span class="abcc-placeholder-tag">{site_name}</span>
-              <span class="abcc-placeholder-tag">{category}</span>
-            </div>
-          </div>
-        </div>
+        <textarea name="abcc_template_prompt[]" rows="3" class="large-text"></textarea>
       </div>
     `;
 
@@ -429,10 +512,14 @@ jQuery(document).ready(function ($) {
 
     $(".abcc-template-item").each(function () {
       const slug = $(this).data("slug");
-      const name =
-        $(this).find(".abcc-template-name-input").val().trim() ||
-        "Unnamed Template";
-      options.push({ value: slug, label: name });
+      if (!slug || slug === "default") {
+        return;
+      }
+      const $nameInput = $(this).find('input[name="abcc_template_name[]"]');
+      const name = $nameInput.length
+        ? ($nameInput.val() || "").trim()
+        : ($(this).find(".abcc-group-header strong").text() || "").trim();
+      options.push({ value: slug, label: name || "Unnamed Template" });
     });
 
     $('select[name^="abcc_group_template"]').each(function () {
@@ -509,6 +596,57 @@ jQuery(document).ready(function ($) {
     });
   });
 
+  // Dashboard "Generate Post Now" quick action
+  $("#abcc-dash-generate").on("click", function () {
+    var $btn = $(this);
+    var $status = $("#abcc-dash-generate-status");
+
+    $btn.prop("disabled", true);
+    abcc.showStatus($status, "Queueing generation job\u2026");
+
+    $.ajax({
+      url: ajaxurl,
+      method: "POST",
+      data: {
+        action: "abcc_create_post",
+        nonce: abccAdmin.buttonNonce,
+      },
+      success: function (response) {
+        if (response.success) {
+          abcc.showStatus($status, response.data.message);
+          pollJob(response.data.job_id, {
+            onUpdate: function (job) {
+              abcc.showStatus($status, "Status: " + job.statusLabel);
+            },
+            onSuccess: function (job) {
+              abcc.showStatus(
+                $status,
+                "Post created! <a href='" + abccAdmin.adminUrl + "post=" + job.post_id + "&action=edit'>Edit post</a>",
+                "success"
+              );
+              $btn.prop("disabled", false);
+            },
+            onFailed: function (message) {
+              abcc.setError($status, message);
+              $btn.prop("disabled", false);
+            },
+            onError: function (message) {
+              abcc.setError($status, message);
+              $btn.prop("disabled", false);
+            },
+          });
+        } else {
+          abcc.setError($status, response.data.message);
+          $btn.prop("disabled", false);
+        }
+      },
+      error: function (xhr) {
+        abcc.setError($status, "Error: " + xhr.statusText);
+        $btn.prop("disabled", false);
+      },
+    });
+  });
+
   // Bulk Generate Panel Toggle
   $(".abcc-panel-header").on("click", function () {
     const $panel = $(this).closest(".abcc-collapsible-panel");
@@ -521,171 +659,6 @@ jQuery(document).ready(function ($) {
     } else {
       $icon.removeClass("dashicons-arrow-up-alt2").addClass("dashicons-arrow-down-alt2");
     }
-  });
-
-  // Bulk Keywords Input Handler
-  $("#abcc-bulk-keywords-input").on("input", function () {
-    const keywords = $(this)
-      .val()
-      .split("\n")
-      .map((k) => k.trim())
-      .filter((k) => k !== "");
-    const count = keywords.length;
-    const $btn = $("#abcc-start-bulk");
-
-    $btn.text(abccAdmin.i18n.generateNPosts.replace("%d", count));
-    $btn.prop("disabled", count === 0);
-  });
-
-  $("#abcc-bulk-keywords-file").on("change", function (event) {
-    const file = event.target.files && event.target.files[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (!/\.txt$/i.test(file.name)) {
-      window.alert("Please upload a .txt file.");
-      $(this).val("");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function (loadEvent) {
-      const contents = String(loadEvent.target.result || "");
-      $("#abcc-bulk-keywords-input").val(contents).trigger("input");
-    };
-    reader.readAsText(file);
-  });
-
-  // Start Bulk Generation
-  $("#abcc-start-bulk").on("click", function () {
-    const $btn = $(this);
-    const keywords = $("#abcc-bulk-keywords-input")
-      .val()
-      .split("\n")
-      .map((k) => k.trim())
-      .filter((k) => k !== "");
-    const template = $("#abcc-bulk-template").val();
-    const model = $("#abcc-bulk-model").val();
-    const runId = `bulk-${Date.now()}`;
-    const $progress = $("#abcc-bulk-progress");
-    const $log = $("#abcc-bulk-log");
-
-    if (keywords.length === 0) return;
-
-    if (
-      !confirm(
-        `You are about to generate ${keywords.length} posts sequentially. This may take several minutes. Continue?`
-      )
-    ) {
-      return;
-    }
-
-    $btn.prop("disabled", true);
-    $("#abcc-bulk-keywords-input").prop("disabled", true);
-    $("#abcc-bulk-keywords-file").prop("disabled", true);
-    $progress.show();
-    $log.empty();
-    abccActiveRunId = runId;
-    refreshJobLog(runId);
-
-    processBulkSequential(keywords, template, model, runId, 0);
-  });
-
-  function processBulkSequential(keywords, template, model, runId, index) {
-    if (index >= keywords.length) {
-      $("#abcc-bulk-log").prepend(
-        '<div class="abcc-bulk-log-entry" style="color: #46b450; font-weight: bold;">\u2713 All jobs queued. The generation log will keep updating below.</div>'
-      );
-      $("#abcc-start-bulk").prop("disabled", false).text(abccAdmin.i18n.generateNPosts.replace("%d", keywords.length));
-      $("#abcc-bulk-keywords-input").prop("disabled", false);
-      $("#abcc-bulk-keywords-file").prop("disabled", false).val("");
-      return;
-    }
-
-    const keyword = keywords[index];
-    const $log = $("#abcc-bulk-log");
-    const $entry = $(
-      `<div class="abcc-bulk-log-entry" id="bulk-entry-${index}">` +
-        `[${index + 1}/${keywords.length}] Queueing: <strong>${abccEscapeHtml(keyword)}</strong>... ` +
-        `<span class="abcc-bulk-status--running">Submitting...</span>` +
-        `</div>`
-    );
-
-    $log.prepend($entry);
-
-    $.ajax({
-      url: ajaxurl,
-      method: "POST",
-      data: {
-        action: "abcc_bulk_generate_single",
-        nonce: abccAdmin.nonce,
-        keyword: keyword,
-        template: template,
-        model: model,
-        run_id: runId,
-      },
-      success: function (response) {
-        const $status = $entry.find("span");
-        if (response.success) {
-          $status.text(`Queued (Job ID: ${response.data.job_id})`);
-          refreshJobLog(runId);
-          pollJob(response.data.job_id, {
-            onUpdate: function (job) {
-              $status
-                .removeClass("abcc-bulk-status--success abcc-bulk-status--error")
-                .addClass("abcc-bulk-status--running")
-                .text(job.statusLabel);
-            },
-            onSuccess: function (job) {
-              $status
-                .removeClass("abcc-bulk-status--running abcc-bulk-status--error")
-                .addClass("abcc-bulk-status--success")
-                .html(`\u2713 Success (Post ID: ${job.post_id})`);
-              refreshJobLog(runId);
-            },
-            onFailed: function (message) {
-              $status
-                .removeClass("abcc-bulk-status--running")
-                .addClass("abcc-bulk-status--error")
-                .html(`\u2717 Error: ${abccEscapeHtml(message)}`);
-              refreshJobLog(runId);
-            },
-            onError: function (message) {
-              $status
-                .removeClass("abcc-bulk-status--running")
-                .addClass("abcc-bulk-status--error")
-                .html(`\u2717 Error: ${abccEscapeHtml(message)}`);
-              refreshJobLog(runId);
-            },
-          });
-        } else {
-          $status
-            .removeClass("abcc-bulk-status--running")
-            .addClass("abcc-bulk-status--error")
-            .html(`\u2717 Error: ${abccEscapeHtml(response.data.message)}`);
-        }
-      },
-      error: function (xhr) {
-        $entry
-          .find("span")
-          .removeClass("abcc-bulk-status--running")
-          .addClass("abcc-bulk-status--error")
-          .html(`\u2717 Network Error: ${abccEscapeHtml(xhr.statusText)}`);
-      },
-      complete: function () {
-        // Sequential delay to avoid rate limits
-        setTimeout(() => {
-          processBulkSequential(keywords, template, model, runId, index + 1);
-        }, 1000);
-      },
-    });
-  }
-
-  $("#preferred_image_service").on("change", function () {
-    const showGeminiFields = $(this).val() === "gemini";
-    $("#gemini-image-settings, #gemini-image-size-settings").toggle(showGeminiFields);
   });
 
   // Regenerate Post Logic
@@ -711,7 +684,7 @@ jQuery(document).ready(function ($) {
       {
         action: "abcc_regenerate_post",
         post_id: postId,
-        nonce: $("#abcc_openai_nonce").val(),
+        nonce: abccAdmin.nonce,
       },
       function (response) {
         if (response.success) {
@@ -748,4 +721,137 @@ jQuery(document).ready(function ($) {
       $link.css("pointer-events", "auto");
     });
   });
+
+  // ── Bulk Generate ─────────────────────────────────────────────────────────
+  var $bulkKeywords = $('#abcc-bulk-keywords-input');
+  var $bulkStart    = $('#abcc-bulk-start');
+
+  if ($bulkStart.length) {
+    function updateBulkCount() {
+      var keywords = $bulkKeywords.val().split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      var count = keywords.length;
+      $bulkStart.prop('disabled', count === 0);
+      $bulkStart.text(count === 0
+        ? (abccAdmin.i18n.generateNPosts || 'Generate 0 Posts').replace('%d', 0)
+        : (abccAdmin.i18n.generateNPosts || 'Generate %d Posts').replace('%d', count)
+      );
+    }
+
+    $bulkKeywords.on('input', updateBulkCount);
+
+    $('#abcc-bulk-file-upload').on('change', function () {
+      var file = this.files[0];
+      if (!file) { return; }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        $bulkKeywords.val(e.target.result.trim());
+        updateBulkCount();
+      };
+      reader.readAsText(file);
+    });
+
+    $bulkStart.on('click', function () {
+      var keywords = $bulkKeywords.val().split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!keywords.length) { return; }
+
+      var $progress = $('#abcc-bulk-progress');
+      var $body     = $('#abcc-bulk-log-body');
+      $progress.show();
+      $body.empty();
+      $bulkStart.prop('disabled', true);
+      $bulkKeywords.prop('disabled', true);
+      $('#abcc-bulk-file-upload').prop('disabled', true);
+
+      var template = $('#abcc-bulk-template').val();
+      var model    = $('#abcc-bulk-model').val();
+      var draft    = $('#abcc-bulk-draft').is(':checked') ? '1' : '0';
+
+      keywords.forEach(function (kw) {
+        $body.append(
+          '<tr data-kw="' + abccEscapeHtml(kw) + '">' +
+          '<td>' + abccEscapeHtml(kw) + '</td>' +
+          '<td class="abcc-bulk-status">' + abccEscapeHtml(abccAdmin.i18n.queued || 'Queued') + '</td>' +
+          '<td class="abcc-bulk-result"></td>' +
+          '</tr>'
+        );
+      });
+
+      function processNext(index) {
+        if (index >= keywords.length) {
+          $bulkStart.prop('disabled', false);
+          $bulkKeywords.prop('disabled', false);
+          $('#abcc-bulk-file-upload').prop('disabled', false).val('');
+          return;
+        }
+        var kw  = keywords[index];
+        var $tr = $body.find('tr[data-kw="' + abccEscapeHtml(kw) + '"]');
+        $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.generating || 'Generating\u2026');
+
+        $.post(ajaxurl, {
+          action:   'abcc_bulk_generate_single',
+          nonce:    abccAdmin.nonce,
+          keyword:  kw,
+          template: template,
+          model:    model,
+          draft:    draft
+        }).done(function (response) {
+          if (response.success) {
+            $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.done || 'Done');
+            if (response.data && response.data.edit_url) {
+              $tr.find('.abcc-bulk-result').html(
+                '<a href="' + abccEscapeHtml(response.data.edit_url) + '">' +
+                (abccAdmin.i18n.viewPost || 'View post') + '</a>'
+              );
+            }
+          } else {
+            var msg = response.data && response.data.message ? response.data.message : 'Error';
+            $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
+            $tr.find('.abcc-bulk-result').text(msg);
+          }
+        }).fail(function () {
+          $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
+        }).always(function () {
+          processNext(index + 1);
+        });
+      }
+
+      processNext(0);
+    });
+  }
+  // ── End Bulk Generate ─────────────────────────────────────────────────────
+
+  // ── Image provider options toggle ─────────────────────────────────────────
+  $('input[name="preferred_image_service"]').on('change', function () {
+    var selected = $(this).val();
+    $('.abcc-image-provider-options').hide();
+    if ('auto' === selected || 'openai' === selected) {
+      $('#abcc-provider-options-openai').show();
+    } else if ('gemini' === selected) {
+      $('#abcc-provider-options-gemini').show();
+    } else if ('stability' === selected) {
+      $('#abcc-provider-options-stability').show();
+    }
+  });
+  // ── End image provider toggle ──────────────────────────────────────────────
+
+  // ── Dashboard: Recent Activity filter ────────────────────────────────────
+  $(document).on('click', '.abcc-filter-btn', function () {
+    var $btn   = $(this);
+    var filter = $btn.data('filter');
+    var $list  = $('#abcc-dash-activity-list');
+    var $items = $list.find('.abcc-activity-item');
+    var $empty = $list.siblings('.abcc-activity-empty');
+
+    $btn.closest('.abcc-activity-filters').find('.abcc-filter-btn').removeClass('abcc-filter-btn--active');
+    $btn.addClass('abcc-filter-btn--active');
+
+    var visible = 0;
+    $items.each(function () {
+      var show = ('all' === filter) || ($(this).data('status') === filter);
+      $(this).toggle(show);
+      if (show) { visible++; }
+    });
+    $empty.toggle(visible === 0);
+  });
+  // ── End Dashboard filter ──────────────────────────────────────────────────
 });

@@ -211,6 +211,12 @@ function abcc_process_generation_job( $job_id ) {
 		return;
 	}
 
+	// Preserve the intended post author for background/cron execution.
+	$created_by = (int) get_post_meta( $job_id, '_abcc_job_created_by', true );
+	if ( $created_by ) {
+		$payload['post_author'] = $created_by;
+	}
+
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_RUNNING );
 	update_post_meta( $job_id, '_abcc_job_started_at', current_time( 'mysql' ) );
 
@@ -247,7 +253,7 @@ function abcc_process_generation_job( $job_id ) {
 		update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $result );
 		delete_post_meta( $job_id, '_abcc_job_error' );
 	} catch ( Throwable $throwable ) {
-		error_log(
+		abcc_debug_log(
 			sprintf(
 				'Generation job %d crashed: %s',
 				$job_id,
