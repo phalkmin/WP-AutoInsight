@@ -216,9 +216,10 @@ function abcc_handle_validate_api_key() {
 		return;
 	}
 
-	$provider = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
-	$api_key  = abcc_get_provider_api_key( $provider );
-	$result   = abcc_test_provider_connection( $provider, $api_key );
+	$provider        = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
+	$submitted_key   = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+	$api_key         = ! empty( $submitted_key ) ? $submitted_key : abcc_get_provider_api_key( $provider );
+	$result          = abcc_test_provider_connection( $provider, $api_key );
 
 	if ( is_wp_error( $result ) || ( is_array( $result ) && empty( $result['success'] ) ) ) {
 		$error_message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['error'] ?? __( 'Validation failed', 'automated-blog-content-creator' ) );

@@ -387,11 +387,15 @@ jQuery(document).ready(function ($) {
         '<span class="spinner is-active" style="float:none; margin:0 5px;"></span>',
       );
 
+    const $keyInput = $("#" + provider + "_api_key");
+    const apiKey = $keyInput.length ? $keyInput.val().trim() : "";
+
     $.post(
       ajaxurl,
       {
         action: "abcc_validate_api_key",
         provider: provider,
+        api_key: apiKey,
         nonce: $("#abcc_openai_nonce").val(),
       },
       function (response) {

@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 4.0.0
+Stable tag: 4.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -231,10 +231,10 @@ WP-AutoInsight includes robust error handling:
 = How do I get support? =
 
 Multiple support channels available:
+- **Documentation**: https://wpautoinsight.phalkmin.me/
 - **WordPress Forum**: https://wordpress.org/support/plugin/automated-blog-content-creator/
 - **GitHub Issues**: https://github.com/phalkmin/wp-autoinsight
 - **Direct Contact**: phalkmin@protonmail.com
-- **Documentation**: Check the Dashboard tab for tutorials and quick actions
 
 == Screenshots ==
 
@@ -243,7 +243,7 @@ Multiple support channels available:
 
 == Changelog ==
 
-= 4.0.0 — Decade =
+= 4.0.0 =
 The biggest settings redesign since launch. Everything is easier to find, the dashboard tells you what's happening without digging, and settings that used to feel buried now live exactly where you'd look for them.
 
 **A real dashboard, finally.**
@@ -264,19 +264,19 @@ The plugin now runs a background health check on your connected providers once a
 **Debug mode and settings export.**
 The Advanced tab now has a one-click debug logging toggle (no more editing wp-config.php for basic troubleshooting) and a JSON export button so you can back up or migrate your settings.
 
-= 3.8.0 — Kiva: Upgrade Without Fear =
+= 3.8.0 =
 Upgrades used to feel like a gamble — would your API keys survive? Would your keyword groups vanish? Not anymore.
 
 Settings now follow a versioned migration path. When you update the plugin, it checks your current settings, upgrades what needs upgrading, and shows you a confirmation notice when it's done. Your API keys, keyword groups, content templates, and selected models all carry over cleanly.
 
 All five AI providers (OpenAI, Claude, Gemini, Perplexity, Stability AI) are now defined in a single registry. Adding or changing providers no longer requires touching five different parts of the code — everything cascades from one source of truth.
 
-= 3.7.0 — Den-O: Always Running. Always Accountable. =
+= 3.7.0  =
 Generation used to freeze the browser while it ran. Now it queues in the background and you can watch it happen.
 
 Every content job — manual, bulk, scheduled, or regenerated — runs through a background queue. A live log shows status, the model used, keywords, how long it took, and a direct link to the post when it's done. If something fails, you get the error message and a one-click link to report it.
 
-= 3.6.0 — Kabuto: Built for What's Next =
+= 3.6.0  =
 Two things that SaaS tools charge extra for, now built in.
 
 WordPress 7.0 Connectors support: if your site already has API keys set up through the new WordPress Connectors screen, the plugin finds and uses them automatically. No re-entry. On WordPress 6.x, everything works the same as before.
@@ -292,6 +292,7 @@ For the full changelog of versions 3.4.0 and earlier, see CHANGELOG.txt.
 == Support ==
 
 For support, feature requests, or to contribute to development:
+* Read the [Documentation](https://wpautoinsight.phalkmin.me/)
 * Visit the [WordPress support forum](https://wordpress.org/support/plugin/automated-blog-content-creator/)
 * Submit issues on [GitHub](https://github.com/phalkmin/wp-autoinsight)
 * For custom integrations or consulting: phalkmin@protonmail.com

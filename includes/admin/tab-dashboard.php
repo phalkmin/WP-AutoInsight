@@ -312,6 +312,12 @@ $page_slug = 'automated-blog-content-creator-post';
 			</p>
 			<ul class="abcc-about-links">
 				<li>
+					<span class="dashicons dashicons-book"></span>
+					<a href="https://wpautoinsight.phalkmin.me/" target="_blank" rel="noopener">
+						<?php esc_html_e( 'Documentation', 'automated-blog-content-creator' ); ?>
+					</a>
+				</li>
+				<li>
 					<span class="dashicons dashicons-sos"></span>
 					<a href="https://wordpress.org/support/plugin/wp-autoinsight/" target="_blank" rel="noopener">
 						<?php esc_html_e( 'Support Forum', 'automated-blog-content-creator' ); ?>

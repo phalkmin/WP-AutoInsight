@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'ABCC_VERSION' ) ) {
-	define( 'ABCC_VERSION', '4.0.0' );
+	define( 'ABCC_VERSION', '4.0.1' );
 }
 
 if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
