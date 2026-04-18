@@ -7,7 +7,7 @@ jobs:
     name: HENSHIN
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Fix Git safe directory
         run: git config --global --add safe.directory /github/workspace
