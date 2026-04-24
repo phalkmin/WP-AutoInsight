@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
+}
 require __DIR__ . '/bootstrap.php';
 
 foreach ( glob( __DIR__ . '/*Test.php' ) as $test_file ) {

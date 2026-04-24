@@ -28,13 +28,16 @@ function abcc_get_model_context_window( $model ) {
 		// OpenAI o-series reasoning models.
 		'o4-mini'                 => 200000,
 		'o4-mini-2025-04-16'      => 200000,
-		// Claude 4.5 models (current).
+		// Claude 4.5 models (legacy — kept for stored-model fallback).
 		'claude-haiku-4-5'           => 200000,
 		'claude-haiku-4-5-20251001'  => 200000,
 		'claude-sonnet-4-5'          => 200000,
 		'claude-sonnet-4-5-20250929' => 200000,
 		'claude-opus-4-5'            => 200000,
 		'claude-opus-4-5-20251101'   => 200000,
+		// Claude 4.6/4.7 models (current).
+		'claude-sonnet-4-6'          => 1000000,
+		'claude-opus-4-7'            => 1000000,
 		// Gemini 2.5 models (current).
 		'gemini-2.5-flash-lite' => 1048576, // 1M tokens.
 		'gemini-2.5-flash'      => 1048576, // 1M tokens.

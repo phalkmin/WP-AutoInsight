@@ -3,11 +3,13 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/
  * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version:           4.0.1
+ * Version:           4.1.0
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
  * Domain Path:       /languages
+ * License:           GPLv2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 6.8
  * Requires PHP:      7.4
  *
@@ -19,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '4.0.1' );
+define( 'ABCC_VERSION', '4.1.0' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
@@ -29,7 +31,6 @@ define(
 );
 
 // Include required files.
-require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/includes/settings.php';
 require_once __DIR__ . '/includes/class-abcc-plugin.php';
 require_once __DIR__ . '/includes/class-abcc-job.php';
@@ -77,7 +78,7 @@ function abcc_debug_log( $message ) {
  * @param string $api      The API name.
  * @return void
  */
-function handle_api_request_error( $response, $api ) {
+function abcc_handle_api_request_error( $response, $api ) {
 	if ( ! ( $response instanceof WP_Error ) && ! empty( $response ) ) {
 		$response = new WP_Error( 'api_error', $response );
 	}

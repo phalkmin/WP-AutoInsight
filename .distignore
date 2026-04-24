@@ -1,0 +1,28 @@
+# Directories
+.github
+.vscode
+.git
+.idea
+node_modules
+vendor
+tests
+
+# Files
+.gitignore
+.gitattributes
+.distignore
+.editorconfig
+.eslintrc
+.prettierrc
+.DS_Store
+Thumbs.db
+package.json
+package-lock.json
+composer.json
+composer.lock
+phpunit.xml
+phpunit.xml.dist
+phpcs.xml
+phpcs.xml.dist
+.env
+.env.example

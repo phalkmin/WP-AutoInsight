@@ -9,8 +9,10 @@
  * @version 4.0.1
  */
 
-use GeminiAPI\Client;
-use GeminiAPI\Resources\Parts\TextPart;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 
 /**
  * Generates text using Claude API.
@@ -23,19 +25,6 @@ use GeminiAPI\Resources\Parts\TextPart;
  * @return array|false An array containing lines of generated text, or false on failure.
  */
 function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model ) {
-
-	$model_mapping = array(
-		// Claude 4.5 models — map alias to dated version.
-		'claude-haiku-4-5'  => 'claude-haiku-4-5-20251001',
-		'claude-sonnet-4-5' => 'claude-sonnet-4-5-20250929',
-		'claude-opus-4-5'   => 'claude-opus-4-5-20251101',
-	);
-
-		// For backward compatibility.
-	if ( isset( $model_mapping[ $model ] ) ) {
-		$model = $model_mapping[ $model ];
-	}
-
 	$headers = array(
 		'Content-Type'      => 'application/json',
 		'x-api-key'         => $api_key,
@@ -92,44 +81,45 @@ function abcc_claude_generate_text( $api_key, $prompt, $requested_tokens, $model
  * @return array|false An array containing lines of generated text, or false on failure.
  */
 function abcc_gemini_generate_text( $api_key, $prompt, $requested_tokens, $model = 'gemini-2.5-flash' ) {
-	// Map plugin model names to current Gemini API model names.
-	$model_mapping = array(
-		// Gemini 2.5 models (current).
-		'gemini-2.5-flash-lite' => 'gemini-2.5-flash-lite',
-		'gemini-2.5-flash'      => 'gemini-2.5-flash',
-		'gemini-2.5-pro'        => 'gemini-2.5-pro',
-	);
-
-	// Calculate available tokens for response.
 	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
 
-	// Initialize Gemini client.
-	$gemini = new \GeminiAPI\Client( $api_key );
+	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . rawurlencode( $api_key );
+	$response = wp_remote_post(
+		$url,
+		array(
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode(
+				array(
+					'contents'         => array(
+						array( 'parts' => array( array( 'text' => wp_kses_post( $prompt ) ) ) ),
+					),
+					'generationConfig' => array( 'maxOutputTokens' => $available_tokens ),
+				)
+			),
+			'timeout' => 60,
+		)
+	);
 
-	// Use the model mapping to get the correct model name.
-	$model_id = isset( $model_mapping[ $model ] ) ? $model_mapping[ $model ] : $model;
-
-	// Create a text part from the prompt.
-	$text_part = new \GeminiAPI\Resources\Parts\TextPart( $prompt );
-
-	try {
-		// Gemini 2.0+ and 2.5+ models require the v1beta API.
-		if ( strpos( $model_id, '2.0' ) !== false || strpos( $model_id, '2.5' ) !== false || strpos( $model_id, 'exp' ) !== false ) {
-			$gemini = $gemini->withV1BetaVersion();
-		}
-
-		// Generate content using the specified model.
-		$response = $gemini->generativeModel( $model_id )
-			->generateContent( $text_part );
-
-		// Return the response text split by newlines.
-		$text_array = explode( PHP_EOL, $response->text() );
-		return $text_array;
-	} catch ( \Exception $e ) {
-		abcc_debug_log( 'Gemini API Error: ' . $e->getMessage() );
-		handle_api_request_error( $e->getMessage(), 'Gemini' );
+	if ( is_wp_error( $response ) ) {
+		abcc_debug_log( 'Gemini API Error: ' . $response->get_error_message() );
 		return false;
 	}
+
+	$code = wp_remote_retrieve_response_code( $response );
+	if ( $code < 200 || $code >= 300 ) {
+		abcc_debug_log( 'Gemini API HTTP ' . $code );
+		return false;
+	}
+
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	$text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+	if ( null === $text ) {
+		abcc_debug_log( 'Gemini API unexpected response structure' );
+		return false;
+	}
+
+	return explode( PHP_EOL, $text );
 }
 
 /**
@@ -152,7 +142,7 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 			'content' => wp_kses_post( $prompt ),
 		),
 	);
-	$options = array(
+	$options  = array(
 		'model'       => $model,
 		'max_tokens'  => $available_tokens,
 		'temperature' => 0.8,
@@ -161,7 +151,7 @@ function abcc_openai_generate_text( $api_key, $prompt, $requested_tokens, $model
 	$response = $client->create_chat_completion( $messages, $options );
 
 	if ( is_wp_error( $response ) ) {
-		handle_api_request_error( $response, 'OpenAI' );
+		abcc_handle_api_request_error( $response, 'OpenAI' );
 		return false;
 	}
 
@@ -204,7 +194,7 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
 	);
 
 	// Add search recency filter if configured.
-	$recency = get_option( 'abcc_perplexity_recency_filter', '' );
+	$recency = abcc_get_setting( 'abcc_perplexity_recency_filter', '' );
 	if ( ! empty( $recency ) ) {
 		$body['search_recency_filter'] = $recency;
 	}
@@ -515,8 +505,8 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 			}
 
 			// Validate magic bytes against the declared MIME type.
-			$mime      = $part['inlineData']['mimeType'];
-			$is_valid  = false;
+			$mime     = $part['inlineData']['mimeType'];
+			$is_valid = false;
 			if ( 'image/png' === $mime && substr( $image_data, 0, 4 ) === "\x89PNG" ) {
 				$is_valid = true;
 			} elseif ( 'image/jpeg' === $mime && substr( $image_data, 0, 2 ) === "\xFF\xD8" ) {

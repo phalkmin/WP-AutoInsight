@@ -40,7 +40,12 @@ $image_providers = array_filter(
 			</div>
 		<?php endif; ?>
 
-		<h2><?php esc_html_e( 'Text Generation Providers', 'automated-blog-content-creator' ); ?></h2>
+		<h2>
+			<?php esc_html_e( 'Text Generation Providers', 'automated-blog-content-creator' ); ?>
+			<a href="https://wpautoinsight.phalkmin.me/setup/api-keys/" target="_blank" rel="noopener" class="abcc-docs-link">
+				<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
+			</a>
+		</h2>
 
 		<?php
 		foreach ( $text_providers as $provider_id ) :
@@ -102,16 +107,19 @@ $image_providers = array_filter(
 						}
 						?>
 					</p>
+					<?php if ( ! empty( $saved_key ) ) : ?>
 					<details class="abcc-manual-override">
 						<summary>
 							<?php esc_html_e( 'Use a manual key instead', 'automated-blog-content-creator' ); ?>
-							<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'The Connector key always takes priority. This manual key is only used if the Connector is later removed.', 'automated-blog-content-creator' ) ) ); ?>
+							<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'WordPress manages this provider via Connectors. The value stored by an earlier plugin version is shown for reference only.', 'automated-blog-content-creator' ) ) ); ?>
 						</summary>
-						<p class="description abcc-override-warning"><?php esc_html_e( 'Not recommended — Connector key takes priority.', 'automated-blog-content-creator' ); ?></p>
-						<input type="password" name="<?php echo esc_attr( $provider_id ); ?>_api_key"
-							value="<?php echo esc_attr( $saved_key ); ?>" class="regular-text"
-							placeholder="<?php esc_attr_e( 'Override key (optional)', 'automated-blog-content-creator' ); ?>">
+						<p class="description abcc-override-warning">
+							<?php esc_html_e( 'WordPress manages this provider via Connectors. A value stored by an earlier plugin version is shown for reference only.', 'automated-blog-content-creator' ); ?>
+						</p>
+						<input type="password" value="<?php echo esc_attr( $saved_key ); ?>"
+							class="regular-text" disabled readonly aria-readonly="true">
 					</details>
+					<?php endif; ?>
 				<?php elseif ( defined( $const ) ) : ?>
 					<p><strong><?php esc_html_e( 'API key set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong></p>
 				<?php else : ?>

@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
+}
 
 /**
  * Tests for abcc_handle_autosave_setting() schema validation and sanitization logic.

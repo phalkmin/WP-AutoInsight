@@ -204,41 +204,56 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 		throw new Exception( esc_html__( 'File too large. Maximum size is 25MB.', 'automated-blog-content-creator' ) );
 	}
 
-	// Use cURL for file upload to Whisper API.
-	$curl = curl_init();
-	curl_setopt_array(
-		$curl,
+	// Build multipart/form-data body manually (wp_remote_post does not support file uploads natively).
+	$boundary  = wp_generate_password( 24, false );
+	$language  = abcc_get_setting( 'abcc_transcription_language', 'en' );
+	$file_name = basename( $file_path );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+	$file_data = file_get_contents( $file_path );
+
+	if ( false === $file_data ) {
+		throw new Exception( esc_html__( 'Could not read audio file.', 'automated-blog-content-creator' ) );
+	}
+
+	$body  = '--' . $boundary . "\r\n";
+	$body .= 'Content-Disposition: form-data; name="model"' . "\r\n\r\n";
+	$body .= 'whisper-1' . "\r\n";
+	$body .= '--' . $boundary . "\r\n";
+	$body .= 'Content-Disposition: form-data; name="response_format"' . "\r\n\r\n";
+	$body .= 'text' . "\r\n";
+	$body .= '--' . $boundary . "\r\n";
+	$body .= 'Content-Disposition: form-data; name="language"' . "\r\n\r\n";
+	$body .= $language . "\r\n";
+	$body .= '--' . $boundary . "\r\n";
+	$body .= 'Content-Disposition: form-data; name="file"; filename="' . $file_name . '"' . "\r\n";
+	$body .= 'Content-Type: application/octet-stream' . "\r\n\r\n";
+	$body .= $file_data . "\r\n";
+	$body .= '--' . $boundary . '--';
+
+	$wp_response = wp_remote_post(
+		'https://api.openai.com/v1/audio/transcriptions',
 		array(
-			CURLOPT_URL            => 'https://api.openai.com/v1/audio/transcriptions',
-			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_POST           => true,
-			CURLOPT_HTTPHEADER     => array(
-				'Authorization: Bearer ' . $api_key,
+			'headers' => array(
+				'Authorization' => 'Bearer ' . $api_key,
+				'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
 			),
-			CURLOPT_POSTFIELDS     => array(
-				'file'            => new CURLFile( $file_path ),
-				'model'           => 'whisper-1',
-				'response_format' => 'text',
-				'language'        => abcc_get_setting( 'abcc_transcription_language', 'en' ),
-			),
-			CURLOPT_TIMEOUT        => 300, // 5 minutes for large files.
+			'body'    => $body,
+			'timeout' => 300,
 		)
 	);
 
-	$response  = curl_exec( $curl );
-	$http_code = curl_getinfo( $curl, CURLINFO_HTTP_CODE );
-	$error     = curl_error( $curl );
-	curl_close( $curl );
-
-	if ( ! empty( $error ) ) {
+	if ( is_wp_error( $wp_response ) ) {
 		throw new Exception(
 			sprintf(
-				/* translators: %s: cURL error message */
+				/* translators: %s: error message */
 				esc_html__( 'Network error: %s', 'automated-blog-content-creator' ),
-				esc_html( $error )
+				esc_html( $wp_response->get_error_message() )
 			)
 		);
 	}
+
+	$http_code   = wp_remote_retrieve_response_code( $wp_response );
+	$response    = wp_remote_retrieve_body( $wp_response );
 
 	if ( 200 !== $http_code ) {
 		$error_data = json_decode( $response, true );

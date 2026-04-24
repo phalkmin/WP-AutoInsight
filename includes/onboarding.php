@@ -590,7 +590,7 @@ function abcc_handle_onboarding_goal() {
 		return;
 	}
 
-	$goal  = sanitize_text_field( wp_unslash( $_POST['goal'] ) );
+	$goal  = isset( $_POST['goal'] ) ? sanitize_text_field( wp_unslash( $_POST['goal'] ) ) : '';
 	$goals = abcc_get_onboarding_goals();
 
 	if ( ! isset( $goals[ $goal ] ) ) {
@@ -615,7 +615,7 @@ add_action( 'wp_ajax_abcc_onboarding_goal', 'abcc_handle_onboarding_goal' );
 function abcc_handle_onboarding_test_api() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
 
-	$provider     = sanitize_text_field( wp_unslash( $_POST['provider'] ) );
+	$provider     = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
 	$api_key      = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$is_wp_config = isset( $_POST['wp_config'] ) && $_POST['wp_config'] === 'true';
 
@@ -875,47 +875,54 @@ function abcc_test_claude_connection( $api_key ) {
  * @return mixed Whether the connection test succeeded.
  */
 function abcc_test_gemini_connection( $api_key ) {
-	try {
-		$gemini = new \GeminiAPI\Client( $api_key );
-
-		// Use stable 2.5 model for testing.
-		$response = $gemini
-			->generativeModel( 'gemini-2.5-flash' )
-			->generateContent( new \GeminiAPI\Resources\Parts\TextPart( 'Hello' ) );
-
-		if ( empty( $response->text() ) ) {
-			return array(
-				'success' => false,
-				'error'   => __( 'Gemini API returned empty response', 'automated-blog-content-creator' ),
-			);
-		}
-
-		return array( 'success' => true );
-
-	} catch ( \GeminiAPI\Exceptions\InvalidApiKeyException $e ) {
-		return array(
-			'success' => false,
-			'error'   => __( 'Invalid Gemini API key', 'automated-blog-content-creator' ),
-		);
-	} catch ( \GeminiAPI\Exceptions\ApiException $e ) {
-		return array(
-			'success' => false,
-			'error'   => sprintf(
-				/* translators: %s: Error message */
-				__( 'Gemini API error: %s', 'automated-blog-content-creator' ),
-				$e->getMessage()
+	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . rawurlencode( $api_key );
+	$response = wp_remote_post(
+		$url,
+		array(
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode(
+				array(
+					'contents' => array(
+						array( 'parts' => array( array( 'text' => 'Hello' ) ) ),
+					),
+				)
 			),
-		);
-	} catch ( Exception $e ) {
+			'timeout' => 15,
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
 		return array(
 			'success' => false,
-			'error'   => sprintf(
-				/* translators: %s: Error message */
-				__( 'Gemini connection failed: %s', 'automated-blog-content-creator' ),
-				$e->getMessage()
-			),
+			'error'   => $response->get_error_message(),
 		);
 	}
+
+	$code = wp_remote_retrieve_response_code( $response );
+	if ( $code < 200 || $code >= 300 ) {
+		$data    = json_decode( wp_remote_retrieve_body( $response ), true );
+		$message = $data['error']['message'] ?? sprintf(
+			/* translators: %d: HTTP status code */
+			__( 'Gemini API returned HTTP %d', 'automated-blog-content-creator' ),
+			$code
+		);
+		return array(
+			'success' => false,
+			'error'   => $message,
+		);
+	}
+
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	$text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+	if ( null === $text ) {
+		return array(
+			'success' => false,
+			'error'   => __( 'Gemini API returned empty response', 'automated-blog-content-creator' ),
+		);
+	}
+
+	return array( 'success' => true );
 }
 
 /**

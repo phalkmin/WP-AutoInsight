@@ -11,9 +11,11 @@
         <exclude name="Squiz.Commenting.FunctionComment.ParamCommentFullStop" />
         <exclude name="Squiz.Commenting.FunctionComment.Missing" />
         <exclude name="Squiz.Commenting.FunctionComment.MissingParamTag" />
-		<exclude name="Squiz.Commenting.FileComment.Missing" />
-		<exclude name="Squiz.Commenting.FunctionComment.MissingParamName" />
-		<exclude name="Generic.Files.EndFileNewline.NotFound" />
+        <exclude name="Squiz.Commenting.FileComment.Missing" />
+        <exclude name="Squiz.Commenting.FunctionComment.MissingParamName" />
+        <exclude name="Generic.Files.EndFileNewline.NotFound" />
         <exclude name="Generic.Commenting.DocComment.LongNotCapital" />
+        <!-- Not available in PHPCS 3.x / older WPCS builds -->
+        <exclude name="Generic.Strings.UnnecessaryHeredoc" />
     </rule>
 </ruleset>

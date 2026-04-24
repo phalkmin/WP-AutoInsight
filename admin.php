@@ -8,6 +8,10 @@
  * @package WP-AutoInsight
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Triggers inline API key validation via JavaScript.
  *
@@ -184,7 +188,7 @@ function abcc_openai_text_settings_page() {
 				// Handle Keyword Groups.
 				$keyword_groups = array();
 				if ( isset( $_POST['abcc_group_name'] ) && is_array( $_POST['abcc_group_name'] ) ) {
-					foreach ( $_POST['abcc_group_name'] as $index => $name ) {
+					foreach ( wp_unslash( $_POST['abcc_group_name'] ) as $index => $name ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 						$keywords_raw     = isset( $_POST['abcc_group_keywords'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_group_keywords'][ $index ] ) ) : '';
 						$keywords_array   = array_filter( array_map( 'trim', explode( "\n", $keywords_raw ) ) );
 						$keyword_groups[] = array(
@@ -200,7 +204,7 @@ function abcc_openai_text_settings_page() {
 				// Handle Content Templates.
 				$content_templates = array();
 				if ( isset( $_POST['abcc_template_slug'] ) && is_array( $_POST['abcc_template_slug'] ) ) {
-					foreach ( $_POST['abcc_template_slug'] as $index => $slug ) {
+					foreach ( wp_unslash( $_POST['abcc_template_slug'] ) as $index => $slug ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 						$template_slug = sanitize_key( wp_unslash( $slug ) );
 						// Default template is read-only — never overwrite it from POST data.
 						if ( empty( $template_slug ) || 'default' === $template_slug ) {

@@ -15,8 +15,12 @@ $current_model = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 $templates     = abcc_get_setting( 'abcc_content_templates', array() );
 ?>
 <div class="tab-pane active">
-	<h2><?php esc_html_e( 'Bulk Generate', 'automated-blog-content-creator' ); ?>
+	<h2>
+		<?php esc_html_e( 'Bulk Generate', 'automated-blog-content-creator' ); ?>
 		<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Generate one post per keyword. Posts are created sequentially to respect API rate limits. Using draft mode is strongly recommended for bulk runs.', 'automated-blog-content-creator' ) ) ); ?>
+		<a href="https://wpautoinsight.phalkmin.me/usage/bulk-generation/" target="_blank" rel="noopener" class="abcc-docs-link">
+			<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
+		</a>
 	</h2>
 
 	<div class="abcc-bulk-form">

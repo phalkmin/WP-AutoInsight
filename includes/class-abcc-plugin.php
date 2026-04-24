@@ -65,15 +65,13 @@ class ABCC_Plugin {
 
 		// Admin notices.
 		add_action( 'admin_notices', array( $this, 'display_settings_errors' ) );
+		add_action( 'admin_notices', array( $this, 'maybe_render_ai_disabled_notice' ) );
 
 		// Onboarding.
 		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
 
 		// Migrations.
 		add_action( 'admin_init', array( $this, 'run_migrations' ) );
-
-		// WP 7.0 Connectors registration.
-		add_action( 'connections-wp-admin-init', array( $this, 'register_wp70_connector' ) );
 
 		// Daily provider health check cron.
 		add_action( 'abcc_daily_provider_health_check', 'abcc_run_provider_health_check' );
@@ -103,27 +101,6 @@ class ABCC_Plugin {
 				$role->add_cap( 'prompt_ai' );
 			}
 		}
-	}
-
-	/**
-	 * Register the plugin on the WordPress 7.0 Connectors page.
-	 *
-	 * @since 3.6.0
-	 */
-	public function register_wp70_connector() {
-		if ( ! function_exists( 'wp_ai_register_connector' ) ) {
-			return;
-		}
-
-		wp_ai_register_connector(
-			array(
-				'id'           => 'wp-autoinsight',
-				'name'         => __( 'WP-AutoInsight', 'automated-blog-content-creator' ),
-				'description'  => __( 'Automated AI content generation for posts, SEO, images, and scheduling.', 'automated-blog-content-creator' ),
-				'settings_url' => admin_url( 'admin.php?page=automated-blog-content-creator-post' ),
-				'version'      => defined( 'ABCC_VERSION' ) ? ABCC_VERSION : $this->version,
-			)
-		);
 	}
 
 	/**
@@ -240,8 +217,8 @@ class ABCC_Plugin {
 			return;
 		}
 
-		wp_enqueue_style( 'select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css', array(), '4.1.0-rc.0' );
-		wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array( 'jquery' ), '4.1.0-rc.0', true );
+		wp_enqueue_style( 'select2-css', plugins_url( '/css/select2.min.css', __DIR__ ), array(), '4.1.0-rc.0' );
+		wp_enqueue_script( 'select2-js', plugins_url( '/js/select2.min.js', __DIR__ ), array( 'jquery' ), '4.1.0-rc.0', true );
 		wp_enqueue_style( 'abcc-admin-style', plugins_url( '/css/admin-style.css', __DIR__ ), array(), $this->version );
 	}
 
@@ -250,5 +227,31 @@ class ABCC_Plugin {
 	 */
 	public function display_settings_errors() {
 		settings_errors( 'openai-settings' );
+	}
+
+	/**
+	 * Render a dismissible notice when WP 7.0 reports AI is disabled at
+	 * the site level. Shown only on WP-AutoInsight admin pages so it
+	 * does not follow the user around the dashboard.
+	 *
+	 * @since 4.1.0
+	 */
+	public function maybe_render_ai_disabled_notice() {
+		if ( ! function_exists( 'wp_supports_ai' ) ) {
+			return;
+		}
+		if ( wp_supports_ai() ) {
+			return;
+		}
+
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || false === strpos( (string) $screen->id, 'automated-blog-content-creator' ) ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning is-dismissible"><p>%s</p></div>',
+			esc_html__( 'AI features are currently disabled at the WordPress level. WP-AutoInsight will not generate content until a site administrator enables AI support in WordPress Settings.', 'automated-blog-content-creator' )
+		);
 	}
 }

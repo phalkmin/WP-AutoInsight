@@ -1,5 +1,60 @@
 == Full Changelog ==
 
+= 4.1.0 =
+* WP 7.0 Connectors API integration now works correctly (previously broken hook and registry calls removed)
+* Admin notice shown when WordPress has AI disabled at site level (WP 7.0)
+* Claude models refreshed: Sonnet 4.6 and Opus 4.7 (1M token context window each)
+* Connections tab shows read-only legacy key reference when WP Connector is active for a provider
+* Contextual "Learn more" links added to API Keys, Scheduling, and Bulk Generate sections
+* ~1.9 MB runtime reduction: Gemini SDK replaced with direct wp_remote_post() calls, Composer vendor removed from runtime
+
+= 4.0.1 =
+* Fixes to "Validate" button for API keys
+* Adding documentation URL to the dashboard
+
+= 4.0.0 =
+The biggest settings redesign since launch. Everything is easier to find, the dashboard tells you what's happening without digging, and settings that used to feel buried now live exactly where you'd look for them.
+
+**A real dashboard, finally.**
+The plugin now opens to a dashboard instead of a blank settings form. You can see your scheduling status at a glance, check the last few generation jobs without leaving the page, and get to common actions in one click. Provider health is summarized right there — green/yellow/red, with timestamps so you know if a key was last verified today or a week ago.
+
+**Settings that make sense.**
+The old flat tab layout is gone. Settings are now split into five focused sections: Content (keywords, templates, writing style), Media (images, audio, infographics), Connections (API keys and scheduling), Settings (post types, permissions, advanced), and the Dashboard. Everything that previously required hunting through a long page now has its own tab.
+
+**Changes that save themselves.**
+Toggles and sliders across the settings pages now save automatically as you adjust them, with a small "Saved" confirmation. No more scrolling to the bottom to hit a save button after every change. Fields that affect scheduling still require an explicit save (and warn you if you leave without saving).
+
+**Per-role access control.**
+You can now control which WordPress roles can access AI generation tools. Authors, editors, or just administrators — your call. Administrators are always enabled and can't be unchecked.
+
+**Provider health checks run daily.**
+The plugin now runs a background health check on your connected providers once a day and caches the result. The dashboard shows the freshness of each check so you know whether a "connected" status is from this morning or three days ago.
+
+**Debug mode and settings export.**
+The Advanced tab now has a one-click debug logging toggle (no more editing wp-config.php for basic troubleshooting) and a JSON export button so you can back up or migrate your settings.
+
+= 3.8.0 =
+Upgrades used to feel like a gamble — would your API keys survive? Would your keyword groups vanish? Not anymore.
+
+Settings now follow a versioned migration path. When you update the plugin, it checks your current settings, upgrades what needs upgrading, and shows you a confirmation notice when it's done. Your API keys, keyword groups, content templates, and selected models all carry over cleanly.
+
+All five AI providers (OpenAI, Claude, Gemini, Perplexity, Stability AI) are now defined in a single registry. Adding or changing providers no longer requires touching five different parts of the code — everything cascades from one source of truth.
+
+= 3.7.0 =
+Generation used to freeze the browser while it ran. Now it queues in the background and you can watch it happen.
+
+Every content job — manual, bulk, scheduled, or regenerated — runs through a background queue. A live log shows status, the model used, keywords, how long it took, and a direct link to the post when it's done. If something fails, you get the error message and a one-click link to report it.
+
+= 3.6.0 =
+Two things that SaaS tools charge extra for, now built in.
+
+WordPress 7.0 Connectors support: if your site already has API keys set up through the new WordPress Connectors screen, the plugin finds and uses them automatically. No re-entry. On WordPress 6.x, everything works the same as before.
+
+Bulk generation: paste a list of keywords (or upload a .txt file), pick a template and model, and the plugin generates all the posts sequentially as drafts. Progress updates live. The kind of workflow most autoblogging SaaS platforms charge $99/month for.
+
+= 3.5.0 =
+RankMath SEO integration. Keyword groups with per-group categories and templates. A content template system with placeholders (`{keywords}`, `{title}`, `{tone}`, and more). One-click regeneration from the content history. All post-editor AI tools consolidated into a single meta box.
+
 = 3.4.0 =
 * Added:
   - **Inline API Key Validation**: Real-time verification for all AI providers directly from Advanced Settings. Displays "Verified" or "Failed" status and stores last validation result.

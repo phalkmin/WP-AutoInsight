@@ -76,21 +76,21 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => false,
 			),
 			'text_models'              => array(
-				'claude-haiku-4-5-20251001'  => array(
+				'claude-haiku-4-5-20251001' => array(
 					'name'          => 'Claude Haiku 4.5',
 					'description'   => 'Fastest model with near-frontier intelligence',
 					'cost_tier'     => '1',
 					'cost_per_post' => 0.0003,
 				),
-				'claude-sonnet-4-5-20250929' => array(
-					'name'          => 'Claude Sonnet 4.5',
-					'description'   => 'Best for complex agents and coding tasks',
+				'claude-sonnet-4-6'         => array(
+					'name'          => 'Claude Sonnet 4.6',
+					'description'   => 'Best combination of speed and intelligence',
 					'cost_tier'     => '2',
 					'cost_per_post' => 0.004,
 				),
-				'claude-opus-4-5-20251101'   => array(
-					'name'          => 'Claude Opus 4.5',
-					'description'   => 'Maximum intelligence with practical performance',
+				'claude-opus-4-7'           => array(
+					'name'          => 'Claude Opus 4.7',
+					'description'   => 'Most capable model for complex reasoning',
 					'cost_tier'     => '3',
 					'cost_per_post' => 0.015,
 				),

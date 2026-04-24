@@ -54,6 +54,8 @@ $GLOBALS['abcc_test_schedule']   = array(
 	'timestamp' => false,
 	'schedule'  => false,
 );
+$GLOBALS['abcc_http_queue']        = array();
+$GLOBALS['abcc_http_last_request'] = null;
 
 if ( ! class_exists( 'ABCC_Test_User' ) ) {
 	class ABCC_Test_User {
@@ -154,6 +156,37 @@ function date_i18n($format, $timestamp) { return gmdate('Y-m-d H:i', (int) $time
 function abcc_debug_log($message) { return null; }
 function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
 
+if ( ! function_exists( 'wp_remote_post' ) ) {
+	function wp_remote_post( $url, $args = array() ) {
+		$GLOBALS['abcc_http_last_request'] = array(
+			'url'  => $url,
+			'args' => $args,
+		);
+		if ( empty( $GLOBALS['abcc_http_queue'] ) ) {
+			return new WP_Error( 'no_canned_response', 'Test queue empty — did you forget to push a canned response?' );
+		}
+		return array_shift( $GLOBALS['abcc_http_queue'] );
+	}
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+	function wp_remote_retrieve_body( $response ) {
+		if ( is_wp_error( $response ) ) {
+			return '';
+		}
+		return $response['body'] ?? '';
+	}
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+	function wp_remote_retrieve_response_code( $response ) {
+		if ( is_wp_error( $response ) ) {
+			return 0;
+		}
+		return $response['response']['code'] ?? 0;
+	}
+}
+
 if ( ! defined( 'OPENAI_API' ) ) {
 	define( 'OPENAI_API', 'const-openai-key' );
 }
@@ -161,10 +194,13 @@ if ( ! defined( 'OPENAI_API' ) ) {
 require_once dirname(__DIR__) . '/includes/settings.php';
 require_once dirname(__DIR__) . '/includes/providers.php';
 require_once dirname(__DIR__) . '/includes/api-keys.php';
+require_once dirname(__DIR__) . '/includes/token-handling.php';
 require_once dirname(__DIR__) . '/includes/scheduling.php';
 require_once dirname(__DIR__) . '/includes/images.php';
 require_once dirname(__DIR__) . '/includes/content-generation.php';
 require_once dirname(__DIR__) . '/includes/seo.php';
+require_once dirname(__DIR__) . '/gpt.php';
+require_once dirname(__DIR__) . '/includes/onboarding.php';
 
 function abcc_test($name, callable $callback) {
 	$GLOBALS['abcc_tests'][] = array(
@@ -175,30 +211,30 @@ function abcc_test($name, callable $callback) {
 
 function abcc_assert_true($condition, $message = 'Expected condition to be true.') {
 	if ( ! $condition ) {
-		throw new Exception($message);
+		throw new Exception($message); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 }
 
 function abcc_assert_false($condition, $message = 'Expected condition to be false.') {
 	if ( $condition ) {
-		throw new Exception($message);
+		throw new Exception($message); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 }
 
 function abcc_assert_same($expected, $actual, $message = '') {
 	if ( $expected !== $actual ) {
-		throw new Exception($message ?: 'Failed asserting that values are identical.');
+		throw new Exception($message ?: 'Failed asserting that values are identical.'); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 }
 
 function abcc_assert_equals($expected, $actual, $message = '') {
 	if ( $expected != $actual ) {
-		throw new Exception($message ?: 'Failed asserting that values are equal.');
+		throw new Exception($message ?: 'Failed asserting that values are equal.'); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 }
 
 function abcc_assert_array_has_key($key, $array, $message = '') {
 	if ( ! is_array($array) || ! array_key_exists($key, $array) ) {
-		throw new Exception($message ?: 'Failed asserting that array has expected key.');
+		throw new Exception($message ?: 'Failed asserting that array has expected key.'); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 }

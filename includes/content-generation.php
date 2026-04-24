@@ -152,7 +152,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
 			$citations     = get_transient( $generation_id );
 			if ( ! empty( $citations ) ) {
-				$citation_style = get_option( 'abcc_perplexity_citation_style', 'inline' );
+				$citation_style = abcc_get_setting( 'abcc_perplexity_citation_style', 'inline' );
 				$content_array  = abcc_process_perplexity_citations( $content_array, $citations, $citation_style );
 				delete_transient( $generation_id );
 			}

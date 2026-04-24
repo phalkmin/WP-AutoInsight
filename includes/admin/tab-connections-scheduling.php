@@ -19,7 +19,12 @@ $schedule_info = abcc_get_openai_event_schedule();
 		<?php wp_nonce_field( 'abcc_openai_generate_post', 'abcc_openai_nonce' ); ?>
 		<input type="hidden" name="abcc_subtab" value="scheduling">
 
-		<h2><?php esc_html_e( 'Automated Post Generation', 'automated-blog-content-creator' ); ?></h2>
+		<h2>
+			<?php esc_html_e( 'Automated Post Generation', 'automated-blog-content-creator' ); ?>
+			<a href="https://wpautoinsight.phalkmin.me/usage/scheduling/" target="_blank" rel="noopener" class="abcc-docs-link">
+				<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
+			</a>
+		</h2>
 		<table class="form-table">
 			<tr>
 				<th scope="row">

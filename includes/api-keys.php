@@ -106,8 +106,18 @@ function abcc_get_provider_api_key( $provider ) {
  * @return bool
  */
 function abcc_current_user_can_prompt() {
-	// Priority 1: Native WP 7.0 capability.
-	// phpcs:ignore WordPress.WP.Capabilities.Unknown -- Added during plugin activation for WP 7.0 compatibility.
+	// WP 7.0+ site-level AI toggle. If the site admin has disabled AI at
+	// the WordPress level, plugin features are inactive. On WP 6.9 the
+	// function does not exist, so this check is a no-op.
+	if ( function_exists( 'wp_supports_ai' ) && ! wp_supports_ai() ) {
+		return false;
+	}
+
+	// Priority 1: The plugin-defined 'prompt_ai' capability, granted to
+	// administrator and editor roles on activation (see
+	// ABCC_Plugin::setup_prompt_ai_capability). Third-party role managers
+	// can extend this to other roles.
+	// phpcs:ignore WordPress.WP.Capabilities.Unknown -- Plugin-defined capability registered at activation.
 	if ( current_user_can( 'prompt_ai' ) ) {
 		return true;
 	}
