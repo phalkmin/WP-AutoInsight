@@ -34,6 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							<div class="abcc-group-keywords">
 								<label class="abcc-field-label"><?php esc_html_e( 'Keywords (one per line)', 'automated-blog-content-creator' ); ?></label>
 								<textarea name="abcc_group_keywords[<?php echo esc_attr( $index ); ?>]" rows="4" class="large-text"><?php echo esc_textarea( implode( "\n", (array) $group['keywords'] ) ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'One keyword from this group is picked at random for each generated post. Use {keyword} in your template to insert the chosen keyword, or {keywords} for the full comma-separated list.', 'automated-blog-content-creator' ); ?></p>
 							</div>
 							<div class="abcc-group-category">
 								<label class="abcc-field-label"><?php esc_html_e( 'Target Category', 'automated-blog-content-creator' ); ?></label>
@@ -62,7 +63,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<hr>
 
 		<h2><?php esc_html_e( 'Content Templates', 'automated-blog-content-creator' ); ?>
-			<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Templates define the prompt pattern sent to the AI. Use {keywords}, {tone}, {site_name}, {category}, {word_count} as placeholders.', 'automated-blog-content-creator' ) ) ); ?>
+			<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Templates define the prompt pattern sent to the AI. Available placeholders: {keyword} (one keyword randomly picked from the group for this post), {keywords} (full comma-separated list), {title}, {tone}, {site_name}, {category}, {word_count}.', 'automated-blog-content-creator' ) ) ); ?>
 		</h2>
 
 		<div id="abcc-templates-container" class="abcc-groups-container">
@@ -80,6 +81,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<?php if ( 'default' !== $tpl_slug ) : ?>
 						<input type="text" name="abcc_template_name[]" value="<?php echo esc_attr( $tpl['name'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'Template name', 'automated-blog-content-creator' ); ?>">
 						<textarea name="abcc_template_prompt[]" rows="3" class="large-text"><?php echo esc_textarea( $tpl['prompt'] ); ?></textarea>
+					<?php else : ?>
+						<textarea rows="3" class="large-text" readonly><?php echo esc_textarea( $tpl['prompt'] ); ?></textarea>
 					<?php endif; ?>
 				</div>
 			<?php endforeach; ?>

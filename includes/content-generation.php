@@ -18,14 +18,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function abcc_build_generation_payload( $args = array() ) {
 	$defaults = array(
-		'keywords'   => array(),
-		'model'      => abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' ),
-		'tone'       => abcc_get_setting( 'openai_tone', 'default' ),
-		'char_limit' => (int) abcc_get_setting( 'openai_char_limit', 200 ),
-		'post_type'  => 'post',
-		'category'   => 0,
-		'template'   => 'default',
-		'source'     => 'manual', // manual, scheduled, bulk, regenerate
+		'keywords'      => array(),
+		'focus_keyword' => '',
+		'model'         => abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' ),
+		'tone'          => abcc_get_setting( 'openai_tone', 'default' ),
+		'char_limit'    => (int) abcc_get_setting( 'openai_char_limit', 200 ),
+		'post_type'     => 'post',
+		'category'      => 0,
+		'template'      => 'default',
+		'source'        => 'manual', // manual, scheduled, bulk, regenerate
 	);
 
 	return wp_parse_args( $args, $defaults );
@@ -43,14 +44,15 @@ function abcc_build_generation_tracking_meta( $payload ) {
 		'_abcc_model'             => $payload['model'],
 		'_abcc_generation_params' => wp_json_encode(
 			array(
-				'keywords'   => (array) $payload['keywords'],
-				'model'      => $payload['model'],
-				'tone'       => $payload['tone'],
-				'char_limit' => (int) $payload['char_limit'],
-				'post_type'  => $payload['post_type'],
-				'category'   => (int) $payload['category'],
-				'template'   => $payload['template'],
-				'source'     => $payload['source'],
+				'keywords'      => (array) $payload['keywords'],
+				'focus_keyword' => isset( $payload['focus_keyword'] ) ? (string) $payload['focus_keyword'] : '',
+				'model'         => $payload['model'],
+				'tone'          => $payload['tone'],
+				'char_limit'    => (int) $payload['char_limit'],
+				'post_type'     => $payload['post_type'],
+				'category'      => (int) $payload['category'],
+				'template'      => $payload['template'],
+				'source'        => $payload['source'],
 			)
 		),
 	);
@@ -73,16 +75,22 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 	try {
 		$generate_seo = abcc_get_setting( 'openai_generate_seo', true ) && 'none' !== abcc_get_active_seo_plugin();
 
+		// Pick one keyword from the group to keep the post focused. The full
+		// list remains available to templates via {keywords}.
+		$focus_keyword  = abcc_pick_focus_keyword( (array) $keywords );
+		$focus_keywords = '' !== $focus_keyword ? array( $focus_keyword ) : (array) $keywords;
+
 		$payload     = abcc_build_generation_payload(
 			array(
-				'keywords'   => $keywords,
-				'model'      => $prompt_select,
-				'tone'       => $tone,
-				'char_limit' => $char_limit,
-				'post_type'  => $post_type,
-				'category'   => isset( $options['category'] ) ? (int) $options['category'] : 0,
-				'template'   => isset( $options['template'] ) ? $options['template'] : 'default',
-				'source'     => isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' ),
+				'keywords'      => $keywords,
+				'focus_keyword' => $focus_keyword,
+				'model'         => $prompt_select,
+				'tone'          => $tone,
+				'char_limit'    => $char_limit,
+				'post_type'     => $post_type,
+				'category'      => isset( $options['category'] ) ? (int) $options['category'] : 0,
+				'template'      => isset( $options['template'] ) ? $options['template'] : 'default',
+				'source'        => isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' ),
 			)
 		);
 		$category_id = (int) $payload['category'];
@@ -93,7 +101,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			// Generate title and SEO data.
 			$title_and_seo = abcc_generate_title_and_seo(
 				$api_key,
-				$keywords,
+				$focus_keywords,
 				$prompt_select,
 				array(
 					'site_name'        => get_bloginfo( 'name' ),
@@ -104,21 +112,22 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$seo_data      = $title_and_seo['seo_data'];
 		} else {
 			// Just generate a title.
-			$title    = abcc_generate_title( $api_key, $keywords, $prompt_select );
+			$title    = abcc_generate_title( $api_key, $focus_keywords, $prompt_select );
 			$seo_data = array();
 		}
 
 		// Then, generate the content.
 		$content_array = abcc_generate_post_content_with_template(
 			$api_key,
-			$keywords,
+			$focus_keywords,
 			$prompt_select,
 			$title,
 			$char_limit,
 			array(
-				'template' => $template,
-				'tone'     => $tone,
-				'category' => $category_id,
+				'template'     => $template,
+				'tone'         => $tone,
+				'category'     => $category_id,
+				'keywords_all' => (array) $keywords,
 			)
 		);
 
@@ -201,7 +210,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 					}
 				}
 
-				$image_url = abcc_generate_featured_image( $prompt_select, $keywords, $category_names );
+				$image_url = abcc_generate_featured_image( $prompt_select, $focus_keywords, $category_names );
 
 				if ( $image_url ) {
 					$alt_text = abcc_build_featured_image_alt_text( $title, $seo_data['primary_keyword'] ?? '' );
@@ -345,25 +354,8 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
 		return abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit );
 	}
 
-	$prompt = $template['prompt'];
-
-	// Replace placeholders.
-	$category_id   = $args['category'] ?? 0;
-	$category_name = $category_id ? get_cat_name( $category_id ) : 'General';
-
-	$replacements = array(
-		'{keywords}'   => implode( ', ', $keywords ),
-		'{title}'      => $title,
-		'{tone}'       => $args['tone'] ?? 'professional',
-		'{site_name}'  => get_bloginfo( 'name' ),
-		'{category}'   => $category_name,
-		'{word_count}' => round( $char_limit * 0.75 ), // Rough estimate of words from tokens.
-	);
-
-	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $prompt );
-
-	// Always enforce HTML structure rules regardless of what the template says.
-	$prompt .= ABCC_CONTENT_FORMAT_REQUIREMENTS;
+	$args['char_limit'] = $char_limit;
+	$prompt             = abcc_build_content_template_prompt( $template_slug, $title, $keywords, $args );
 
 	// Perplexity needs a minimum token floor to complete a structured HTML post without truncation.
 	if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
@@ -371,6 +363,93 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
 	}
 
 	return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+}
+
+/**
+ * Builds the full content-generation prompt for a given template.
+ *
+ * Pure helper extracted from abcc_generate_post_content_with_template so the
+ * substitution logic can be unit-tested without hitting an AI provider.
+ *
+ * @since 4.2.0
+ * @param string $template_slug Template slug to look up in abcc_content_templates.
+ * @param string $title         Post title.
+ * @param array  $keywords      Keywords passed to the prompt. Typically a single-element
+ *                              array containing the focus keyword chosen by
+ *                              abcc_pick_focus_keyword().
+ * @param array  $args          Additional substitution data:
+ *                              - tone          string  Tone keyword.
+ *                              - category      int     Category ID (0 = General).
+ *                              - char_limit    int     Char/token limit (drives {word_count}).
+ *                              - keywords_all  array   Full keyword group, used for {keywords}.
+ *                                                      Falls back to $keywords if absent.
+ * @return string The fully expanded prompt with format requirements appended.
+ */
+function abcc_build_content_template_prompt( $template_slug, $title, $keywords, $args = array() ) {
+	$templates = get_option( 'abcc_content_templates', array() );
+	$template  = $templates[ $template_slug ] ?? ( $templates['default'] ?? array() );
+
+	if ( empty( $template ) || empty( $template['prompt'] ) ) {
+		return '';
+	}
+
+	$category_id   = isset( $args['category'] ) ? (int) $args['category'] : 0;
+	$category_name = $category_id ? get_cat_name( $category_id ) : 'General';
+	$char_limit    = isset( $args['char_limit'] ) ? (int) $args['char_limit'] : 200;
+	$focus_keyword = isset( $keywords[0] ) ? (string) $keywords[0] : '';
+	$keywords_all  = ! empty( $args['keywords_all'] ) ? (array) $args['keywords_all'] : (array) $keywords;
+
+	$replacements = array(
+		'{keyword}'    => $focus_keyword,
+		'{keywords}'   => implode( ', ', $keywords_all ),
+		'{title}'      => $title,
+		'{tone}'       => $args['tone'] ?? 'professional',
+		'{site_name}'  => get_bloginfo( 'name' ),
+		'{category}'   => $category_name,
+		'{word_count}' => round( $char_limit * 0.75 ),
+	);
+
+	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $template['prompt'] );
+
+	return $prompt . ABCC_CONTENT_FORMAT_REQUIREMENTS;
+}
+
+/**
+ * Picks one keyword from a keyword group at random.
+ *
+ * Keyword groups are pools of related topics (one per line in the UI). To keep
+ * generated articles focused, a single keyword is drawn for each post; the
+ * full list remains available for templates that explicitly want it via
+ * {keywords}.
+ *
+ * @since 4.2.0
+ * @param array $keywords Keyword group entries.
+ * @return string The picked keyword, or '' when no usable entry exists.
+ */
+function abcc_pick_focus_keyword( $keywords ) {
+	if ( ! is_array( $keywords ) ) {
+		return '';
+	}
+
+	$candidates = array_values(
+		array_filter(
+			array_map(
+				static function ( $keyword ) {
+					return is_string( $keyword ) ? trim( $keyword ) : '';
+				},
+				$keywords
+			),
+			static function ( $keyword ) {
+				return '' !== $keyword;
+			}
+		)
+	);
+
+	if ( empty( $candidates ) ) {
+		return '';
+	}
+
+	return $candidates[ array_rand( $candidates ) ];
 }
 
 /**

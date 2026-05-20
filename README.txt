@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 4.1.0
+Stable tag: 4.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -242,6 +242,12 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.1.1 =
+* Keyword Groups now pick **one** keyword at random per generated post instead of mashing every keyword into a single article. A "Chemistry" group with ten keywords becomes a queue of ten focused topics rather than one over-broad post.
+* New `{keyword}` template placeholder holds the keyword chosen for the current post; `{keywords}` still renders the full comma-separated group for templates that want it. The default template now uses `{keyword}` so existing setups get the focused behavior automatically.
+* Generation tracking meta records which keyword was selected; the post-editor meta box now shows the focus keyword alongside the source group.
+* Fixed: the Default Template now displays its prompt body in a read-only textarea on the Content settings page instead of an empty placeholder.
 
 = 4.1.0 =
 * WP 7.0 Connectors API integration now works correctly (previously broken hook and registry calls removed)

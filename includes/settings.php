@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_get_default_content_template() {
 	return array(
 		'name'   => 'Default Template',
-		'prompt' => "Write a {tone} blog post with the following title: {title}\n\nUsing these keywords: {keywords}",
+		'prompt' => "Write a {tone} blog post with the following title: {title}\n\nFocus the article on: {keyword}",
 	);
 }
 

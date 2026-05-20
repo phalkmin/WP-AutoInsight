@@ -59,9 +59,10 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 
 			<?php
 			if ( is_array( $gen_params ) ) :
-				$keywords_display = ! empty( $gen_params['keywords'] ) ? implode( ', ', (array) $gen_params['keywords'] ) : '—';
-				$model_display    = ! empty( $gen_params['model'] ) ? $gen_params['model'] : '—';
-				$template_display = ! empty( $gen_params['template'] ) ? $gen_params['template'] : 'default';
+				$keywords_display      = ! empty( $gen_params['keywords'] ) ? implode( ', ', (array) $gen_params['keywords'] ) : '—';
+				$model_display         = ! empty( $gen_params['model'] ) ? $gen_params['model'] : '—';
+				$template_display      = ! empty( $gen_params['template'] ) ? $gen_params['template'] : 'default';
+				$focus_keyword_display = ! empty( $gen_params['focus_keyword'] ) ? $gen_params['focus_keyword'] : '';
 				?>
 				<div class="abcc-meta-last-gen">
 					<span class="abcc-meta-last-gen-label"><?php esc_html_e( 'Last Generation', 'automated-blog-content-creator' ); ?></span>
@@ -74,8 +75,14 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 							<th><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></th>
 							<td><?php echo esc_html( $template_display ); ?></td>
 						</tr>
+						<?php if ( '' !== $focus_keyword_display ) : ?>
+							<tr>
+								<th><?php esc_html_e( 'Focus Keyword', 'automated-blog-content-creator' ); ?></th>
+								<td><?php echo esc_html( $focus_keyword_display ); ?></td>
+							</tr>
+						<?php endif; ?>
 						<tr>
-							<th><?php esc_html_e( 'Keywords', 'automated-blog-content-creator' ); ?></th>
+							<th><?php esc_html_e( 'Keyword Group', 'automated-blog-content-creator' ); ?></th>
 							<td><?php echo esc_html( $keywords_display ); ?></td>
 						</tr>
 					</table>
