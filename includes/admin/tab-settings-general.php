@@ -52,15 +52,23 @@ $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 			</tr>
 			<tr>
 				<th scope="row">
-					<?php esc_html_e( 'Draft First', 'automated-blog-content-creator' ); ?>
-					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Save all generated posts as drafts. Recommended — lets you review content before it goes live.', 'automated-blog-content-creator' ) ) ); ?>
+					<?php esc_html_e( 'New Post Status', 'automated-blog-content-creator' ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'How generated posts are saved. Draft is recommended — it lets you review content before it goes live.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
 				<td>
+					<?php $abcc_post_status = abcc_sanitize_post_status( abcc_get_setting( 'abcc_default_post_status', 'draft' ) ); ?>
 					<label>
-						<input type="checkbox" name="abcc_draft_first"
-							data-autosave-key="abcc_draft_first"
-							<?php checked( abcc_get_setting( 'abcc_draft_first', true ) ); ?>>
-						<?php esc_html_e( 'Always save generated content as draft', 'automated-blog-content-creator' ); ?>
+						<input type="radio" name="abcc_default_post_status" value="draft"
+							data-autosave-key="abcc_default_post_status"
+							<?php checked( 'draft', $abcc_post_status ); ?>>
+						<?php esc_html_e( 'Save as draft for review', 'automated-blog-content-creator' ); ?>
+					</label>
+					<br>
+					<label>
+						<input type="radio" name="abcc_default_post_status" value="publish"
+							data-autosave-key="abcc_default_post_status"
+							<?php checked( 'publish', $abcc_post_status ); ?>>
+						<?php esc_html_e( 'Publish immediately', 'automated-blog-content-creator' ); ?>
 					</label>
 				</td>
 			</tr>

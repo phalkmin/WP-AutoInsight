@@ -23,8 +23,8 @@ function abcc_handle_create_post() {
 	}
 
 	try {
-		$groups              = get_option( 'abcc_keyword_groups', array() );
-		$selected_post_types = get_option( 'abcc_selected_post_types', array( 'post' ) );
+		$groups              = abcc_get_setting( 'abcc_keyword_groups', array() );
+		$selected_post_types = abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
 		$post_type           = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
 
 		if ( empty( $post_type ) ) {
@@ -216,10 +216,10 @@ function abcc_handle_validate_api_key() {
 		return;
 	}
 
-	$provider        = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
-	$submitted_key   = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
-	$api_key         = ! empty( $submitted_key ) ? $submitted_key : abcc_get_provider_api_key( $provider );
-	$result          = abcc_test_provider_connection( $provider, $api_key );
+	$provider      = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
+	$submitted_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+	$api_key       = ! empty( $submitted_key ) ? $submitted_key : abcc_get_provider_api_key( $provider );
+	$result        = abcc_test_provider_connection( $provider, $api_key );
 
 	if ( is_wp_error( $result ) || ( is_array( $result ) && empty( $result['success'] ) ) ) {
 		$error_message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['error'] ?? __( 'Validation failed', 'automated-blog-content-creator' ) );
@@ -295,16 +295,15 @@ function abcc_handle_bulk_generate_single() {
 		$job_id  = abcc_queue_generation_job(
 			$payload,
 			array(
-				'run_id' => $run_id,
+				'run_id'         => $run_id,
+				'process_inline' => true,
 			)
 		);
+		// Job is processed inline inside abcc_queue_generation_job() via process_inline; no separate dispatch needed.
 
 		if ( is_wp_error( $job_id ) ) {
 			throw new Exception( $job_id->get_error_message() );
 		}
-
-		// Process the job inline so the UI reflects the real outcome.
-		abcc_process_generation_job( $job_id );
 
 		$job_status  = get_post_meta( $job_id, '_abcc_job_status', true );
 		$result_post = (int) get_post_meta( $job_id, '_abcc_job_result_post_id', true );
@@ -542,6 +541,11 @@ function abcc_handle_autosave_setting() {
 		$value = sanitize_text_field( $raw );
 	}
 
+	// Schema-declared sanitizer wins over the type-based fallback.
+	if ( ! empty( $definition['sanitize'] ) && is_callable( $definition['sanitize'] ) ) {
+		$value = call_user_func( $definition['sanitize'], $value );
+	}
+
 	abcc_update_setting( $key, $value );
 
 	wp_send_json_success( array( 'key' => $key ) );
@@ -612,22 +616,197 @@ function abcc_get_provider_api_key_for_health_check( $provider_id ) {
 }
 
 /**
- * Validate a provider API key with an optimistic probe.
+ * Validate a provider API key with a real connection test.
  *
  * @param string $provider_id Provider ID.
  * @param string $api_key     API key to test.
- * @return bool True if key appears valid.
+ * @return bool True if the key passes the provider connection test.
  */
 function abcc_validate_provider_api_key_probe( $provider_id, $api_key ) {
 	if ( empty( $api_key ) ) {
 		return false;
 	}
 
-	// Use the provider's existing check mechanism if available.
-	if ( function_exists( 'abcc_check_provider_api_key' ) ) {
-		$result = abcc_check_provider_api_key( $provider_id, $api_key );
-		return ! is_wp_error( $result ) && false !== $result;
+	$result = abcc_test_provider_connection( $provider_id, $api_key );
+
+	return ! is_wp_error( $result ) && ! empty( $result['success'] );
+}
+
+/**
+ * Shared guard for topic AJAX handlers: nonce + capability.
+ *
+ * @since 4.2.0
+ * @return bool True when the request may proceed (error already sent otherwise).
+ */
+function abcc_topic_ajax_guard() {
+	check_ajax_referer( 'abcc_topic_nonce', 'nonce' );
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return false;
 	}
 
-	return true; // Optimistic if no probe available.
+	return true;
 }
+
+/**
+ * Read the common topic fields from $_POST.
+ *
+ * Nonce verification happens in abcc_topic_ajax_guard() before this runs.
+ *
+ * @since 4.2.0
+ * @return array
+ */
+function abcc_topic_args_from_request() {
+	// phpcs:disable WordPress.Security.NonceVerification.Missing -- Verified in abcc_topic_ajax_guard().
+	$args = array();
+
+	if ( isset( $_POST['title'] ) ) {
+		$args['title'] = sanitize_text_field( wp_unslash( $_POST['title'] ) );
+	}
+	if ( isset( $_POST['prompt'] ) ) {
+		$args['prompt'] = sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) );
+	}
+	if ( isset( $_POST['frequency'] ) ) {
+		$args['frequency'] = sanitize_key( wp_unslash( $_POST['frequency'] ) );
+	}
+	if ( isset( $_POST['post_status_override'] ) ) {
+		$args['post_status_override'] = sanitize_key( wp_unslash( $_POST['post_status_override'] ) );
+	}
+	if ( isset( $_POST['provider_override'] ) ) {
+		$args['provider_override'] = sanitize_text_field( wp_unslash( $_POST['provider_override'] ) );
+	}
+	if ( isset( $_POST['target_post_type'] ) ) {
+		$args['target_post_type'] = sanitize_key( wp_unslash( $_POST['target_post_type'] ) );
+	}
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+	return $args;
+}
+
+/**
+ * AJAX: create a topic.
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_topic_create() {
+	if ( ! abcc_topic_ajax_guard() ) {
+		return;
+	}
+
+	$args              = abcc_topic_args_from_request();
+	$args['author_id'] = get_current_user_id();
+
+	$topic_id = abcc_create_topic( $args );
+
+	if ( is_wp_error( $topic_id ) ) {
+		wp_send_json_error( array( 'message' => $topic_id->get_error_message() ) );
+		return;
+	}
+
+	wp_send_json_success( array( 'topic' => abcc_get_topic( $topic_id ) ) );
+}
+add_action( 'wp_ajax_abcc_topic_create', 'abcc_handle_topic_create' );
+
+/**
+ * AJAX: update a topic.
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_topic_update() {
+	if ( ! abcc_topic_ajax_guard() ) {
+		return;
+	}
+
+	$topic_id = isset( $_POST['topic_id'] ) ? absint( $_POST['topic_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Verified in abcc_topic_ajax_guard().
+	$result   = abcc_update_topic( $topic_id, abcc_topic_args_from_request() );
+
+	if ( is_wp_error( $result ) ) {
+		wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		return;
+	}
+
+	wp_send_json_success( array( 'topic' => abcc_get_topic( $topic_id ) ) );
+}
+add_action( 'wp_ajax_abcc_topic_update', 'abcc_handle_topic_update' );
+
+/**
+ * AJAX: delete a topic (generated posts are never touched).
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_topic_delete() {
+	if ( ! abcc_topic_ajax_guard() ) {
+		return;
+	}
+
+	$topic_id = isset( $_POST['topic_id'] ) ? absint( $_POST['topic_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Verified in abcc_topic_ajax_guard().
+
+	if ( ! abcc_delete_topic( $topic_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Topic not found.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	wp_send_json_success();
+}
+add_action( 'wp_ajax_abcc_topic_delete', 'abcc_handle_topic_delete' );
+
+/**
+ * AJAX: pause or resume a topic.
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_topic_toggle() {
+	if ( ! abcc_topic_ajax_guard() ) {
+		return;
+	}
+
+	$topic_id = isset( $_POST['topic_id'] ) ? absint( $_POST['topic_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Verified in abcc_topic_ajax_guard().
+	$topic    = abcc_get_topic( $topic_id );
+
+	if ( null === $topic ) {
+		wp_send_json_error( array( 'message' => __( 'Topic not found.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$success = $topic['active'] ? abcc_pause_topic( $topic_id ) : abcc_resume_topic( $topic_id );
+
+	if ( ! $success ) {
+		wp_send_json_error( array( 'message' => __( 'Could not change the topic status.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	wp_send_json_success( array( 'topic' => abcc_get_topic( $topic_id ) ) );
+}
+add_action( 'wp_ajax_abcc_topic_toggle', 'abcc_handle_topic_toggle' );
+
+/**
+ * AJAX: queue a topic generation immediately (out-of-band; next_run untouched).
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_topic_run_now() {
+	if ( ! abcc_topic_ajax_guard() ) {
+		return;
+	}
+
+	$topic_id = isset( $_POST['topic_id'] ) ? absint( $_POST['topic_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Verified in abcc_topic_ajax_guard().
+	$job_id   = abcc_queue_topic_generation( $topic_id );
+
+	if ( is_wp_error( $job_id ) ) {
+		wp_send_json_error( array( 'message' => $job_id->get_error_message() ) );
+		return;
+	}
+
+	update_post_meta( $topic_id, '_abcc_topic_last_job_id', (int) $job_id );
+	// A successful manual run is proof the topic works — clear the auto-pause counter.
+	update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', 0 );
+
+	wp_send_json_success( array( 'job_id' => (int) $job_id ) );
+}
+add_action( 'wp_ajax_abcc_topic_run_now', 'abcc_handle_topic_run_now' );

@@ -252,8 +252,8 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 		);
 	}
 
-	$http_code   = wp_remote_retrieve_response_code( $wp_response );
-	$response    = wp_remote_retrieve_body( $wp_response );
+	$http_code = wp_remote_retrieve_response_code( $wp_response );
+	$response  = wp_remote_retrieve_body( $wp_response );
 
 	if ( 200 !== $http_code ) {
 		$error_data = json_decode( $response, true );
@@ -346,11 +346,16 @@ Format requirements:
 
 	$final_content = $audio_block . "\n\n" . $post_content;
 
+	// Resolve post status via the shared choke point (honours draft-first and
+	// the global default-status setting). The 'audio' source allows v4.5+
+	// hooks to differentiate audio-sourced posts if needed.
+	$post_status = abcc_resolve_post_status( array( 'source' => 'audio' ) );
+
 	// Create the post.
 	$post_data = array(
 		'post_title'    => sanitize_text_field( $title ),
 		'post_content'  => wp_kses_post( $final_content ),
-		'post_status'   => 'draft',
+		'post_status'   => $post_status,
 		'post_author'   => get_current_user_id(),
 		'post_type'     => 'post',
 		'post_category' => array( (int) get_option( 'default_category', 1 ) ),
@@ -367,7 +372,7 @@ Format requirements:
 	update_post_meta( $post_id, '_abcc_original_transcript', $transcript );
 
 	// Generate featured image if enabled.
-	if ( get_option( 'openai_generate_images', true ) ) {
+	if ( abcc_get_setting( 'openai_generate_images', true ) ) {
 		try {
 			$keywords  = explode( ' ', wp_trim_words( $transcript, 10 ) );
 			$image_url = abcc_generate_featured_image( $prompt_select, $keywords );
@@ -381,7 +386,7 @@ Format requirements:
 	}
 
 	// Send notification if enabled.
-	if ( true === get_option( 'openai_email_notifications', false ) ) {
+	if ( abcc_get_setting( 'openai_email_notifications', false ) ) {
 		abcc_send_post_notification( $post_id );
 	}
 

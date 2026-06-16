@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_generate_featured_image( $text_model, $keywords, $category_names = array() ) {
 	try {
 		// Check if image generation is enabled.
-		if ( ! get_option( 'openai_generate_images', true ) ) {
+		if ( ! abcc_get_setting( 'openai_generate_images', true ) ) {
 			return false;
 		}
 
@@ -46,16 +46,17 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 		// Generate image using determined service.
 		switch ( $image_service['service'] ) {
 			case 'openai':
-				$openai_size    = get_option( 'abcc_openai_image_size', '1024x1024' );
-				$openai_quality = get_option( 'abcc_openai_image_quality', 'standard' );
-				$images         = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1, $openai_size, $openai_quality );
+				$openai_model   = abcc_get_setting( 'abcc_openai_image_model', 'gpt-image-1' );
+				$openai_size    = abcc_get_setting( 'abcc_openai_image_size', '1024x1024' );
+				$openai_quality = abcc_get_setting( 'abcc_openai_image_quality', 'medium' );
+				$images         = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1, $openai_size, $openai_quality, $openai_model );
 				if ( ! empty( $images ) && is_array( $images ) ) {
 					return $images[0];
 				}
 				break;
 
 			case 'stability':
-				$stability_size = get_option( 'abcc_stability_image_size', '1024x1024' );
+				$stability_size = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' );
 				$result         = abcc_stability_generate_images( $prompt, 1, $image_service['api_key'], $stability_size );
 				if ( false !== $result ) {
 					return $result;
@@ -63,8 +64,8 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 				break;
 
 			case 'gemini':
-				$gemini_image_model = get_option( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
-				$gemini_image_size  = get_option( 'abcc_gemini_image_size', '2K' );
+				$gemini_image_model = abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
+				$gemini_image_size  = abcc_get_setting( 'abcc_gemini_image_size', '2K' );
 				$result             = abcc_gemini_generate_images( $image_service['api_key'], $prompt, $gemini_image_model, $gemini_image_size );
 				if ( false !== $result ) {
 					return $result;

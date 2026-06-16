@@ -104,6 +104,7 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 			<?php endif; ?>
 		</div>
 
+		<?php if ( abcc_get_setting( 'abcc_enable_infographics', true ) ) : ?>
 		<hr class="abcc-meta-section-divider">
 
 		<div class="abcc-meta-section">
@@ -123,6 +124,7 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 			<?php endif; ?>
 			<div id="abcc-infographic-status" class="abcc-meta-status"></div>
 		</div>
+		<?php endif; ?>
 
 	</div>
 	<?php

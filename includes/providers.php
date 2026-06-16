@@ -389,18 +389,6 @@ function abcc_get_provider_wp_connector_id( $provider ) {
 }
 
 /**
- * Get a provider help URL.
- *
- * @param string $provider Provider ID.
- * @return string
- */
-function abcc_get_provider_help_url( $provider ) {
-	$provider_config = abcc_get_provider( $provider );
-
-	return $provider_config['help_url'] ?? '';
-}
-
-/**
  * Get a provider connection test callback.
  *
  * @param string $provider Provider ID.

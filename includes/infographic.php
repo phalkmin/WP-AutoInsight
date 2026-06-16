@@ -81,16 +81,35 @@ function abcc_handle_create_infographic() {
 			throw new Exception( __( 'No image generation service available', 'automated-blog-content-creator' ) );
 		}
 
+		// Honor the infographic-specific provider override (review #4).
+		$infographic_pref = abcc_get_setting( 'abcc_infographic_provider', 'auto' );
+		if ( 'openai' === $infographic_pref ) {
+			$override_key = abcc_get_provider_api_key( 'openai' );
+			if ( ! empty( $override_key ) ) {
+				$image_service['service'] = 'openai';
+				$image_service['api_key'] = $override_key;
+			}
+		} elseif ( 'stability' === $infographic_pref ) {
+			$override_key = abcc_get_provider_api_key( 'stability' );
+			if ( ! empty( $override_key ) ) {
+				$image_service['service'] = 'stability';
+				$image_service['api_key'] = $override_key;
+			}
+		}
+		// 'auto' = leave abcc_determine_image_service()'s choice untouched.
+
 		$image_url = false;
 
 		// Generate image using determined service.
 		if ( 'openai' === $image_service['service'] ) {
-			$images = abcc_openai_generate_images( $image_service['api_key'], $image_prompt, 1, '1792x1024' );
+			$images = abcc_openai_generate_images( $image_service['api_key'], $image_prompt, 1, '1536x1024' );
 			if ( ! empty( $images ) && is_array( $images ) ) {
 				$image_url = $images[0];
 			}
 		} elseif ( 'stability' === $image_service['service'] ) {
 			$image_url = abcc_stability_generate_images( $image_prompt, 1, $image_service['api_key'] );
+		} elseif ( 'gemini' === $image_service['service'] ) {
+			$image_url = abcc_gemini_generate_images( $image_service['api_key'], $image_prompt, 'gemini-2.5-flash-image', '2K' );
 		}
 
 		if ( ! $image_url ) {

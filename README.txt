@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 4.1.1
+Stable tag: 4.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -19,6 +19,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
 
 * **Generate content in more ways than you'd expect**
   - Write full blog posts from a keyword list, automatically or on demand
+  - Build a Topic Library: reusable topics that generate posts on their own schedule, from hourly to weekly, each with its own prompt and model
   - Turn voice notes or meeting recordings into draft posts. Upload audio, get a structured article
   - Create infographics from any existing post, saved directly to your Media Library
   - Pull research-backed content through Perplexity Sonar, complete with clickable source citations
@@ -36,7 +37,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
 * **Works with everything already on your site**
   - Native Gutenberg block output. Not an HTML blob in a classic editor
   - Yoast SEO and RankMath: focus keywords, meta descriptions, and social excerpts generated automatically
-  - Featured images via DALL-E 3, Stability AI, or Gemini image generation
+  - Featured images via OpenAI GPT Image, Stability AI, or Gemini image generation
 
 * **For developers**
   - Store API keys in wp-config.php for maximum security, or use WordPress 7.0's native Connectors API
@@ -54,7 +55,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
 
 = API Keys =
 You'll need at least one of the following API keys:
-* OpenAI API key (for GPT models and DALL-E)
+* OpenAI API key (for GPT models and GPT Image)
 * Claude API key (for Claude 4.5 models)
 * Gemini API key (for Google's AI)
 * Perplexity API key (for web-grounded content with citations)
@@ -242,6 +243,13 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.2.0 (OOO) =
+* New Topic Library tab: reusable topics with per-topic schedule (hourly to weekly), draft/publish override, and model override. Pause, resume, edit, or run any topic on demand; topics that fail repeatedly pause themselves and tell you why.
+* Generated posts now save as drafts by default, with a new Draft/Publish setting. Existing installs keep their current behavior automatically and see a one-time notice.
+* Fixed: duplicate posts from one generation job, provider health false "connected" status, Claude API error handling, stray `<title>`/`[SEO]` lines in content, Gemini image API key encoding.
+* Fixed: OpenAI image generation failing after DALL-E 3's deprecation. Now uses the GPT Image models (gpt-image-1, Mini, 1.5), selectable on the Images tab; existing installs recover automatically.
+* Internal: unified API call layer for all text providers with consistent error handling and truncation detection; onboarding wizard split into step partials.
 
 = 4.1.1 =
 * Keyword Groups now pick **one** keyword at random per generated post instead of mashing every keyword into a single article. A "Chemistry" group with ten keywords becomes a queue of ten focused topics rather than one over-broad post.

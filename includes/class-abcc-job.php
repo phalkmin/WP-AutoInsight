@@ -79,7 +79,13 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 		update_post_meta( $job_id, '_abcc_job_run_id', $run_id );
 	}
 
-	if ( abcc_is_wp_cron_available() ) {
+	$process_inline = ! empty( $args['process_inline'] );
+
+	if ( $process_inline ) {
+		// Caller (e.g. bulk-generate AJAX) processes the job itself; do not
+		// also schedule a cron worker that could claim it first (review #12).
+		abcc_process_generation_job( $job_id );
+	} elseif ( abcc_is_wp_cron_available() ) {
 		wp_schedule_single_event( time(), 'abcc_process_generation_job', array( $job_id ) );
 		spawn_cron();
 	} else {
@@ -98,42 +104,6 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
  */
 function abcc_is_wp_cron_available() {
 	return ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON );
-}
-
-/**
- * Check whether there are stale queued jobs.
- *
- * @param int $older_than_seconds Age threshold.
- * @return bool
- */
-function abcc_has_stale_queued_jobs( $older_than_seconds = 300 ) {
-	$jobs = get_posts(
-		array(
-			'post_type'      => ABCC_Job::POST_TYPE,
-			'post_status'    => 'publish',
-			'posts_per_page' => 1,
-			'orderby'        => 'date',
-			'order'          => 'ASC',
-			'meta_query'     => array(
-				array(
-					'key'   => '_abcc_job_status',
-					'value' => ABCC_Job::STATUS_QUEUED,
-				),
-			),
-		)
-	);
-
-	if ( empty( $jobs ) ) {
-		return false;
-	}
-
-	$created_at = get_post_meta( $jobs[0]->ID, '_abcc_job_created_at', true );
-	if ( empty( $created_at ) ) {
-		return false;
-	}
-
-	$created_timestamp = strtotime( get_gmt_from_date( $created_at ) );
-	return $created_timestamp && ( time() - $created_timestamp ) > (int) $older_than_seconds;
 }
 
 /**
@@ -193,7 +163,7 @@ function abcc_recover_stale_running_jobs( $older_than_seconds = 900 ) {
  * @return void
  */
 function abcc_process_generation_job( $job_id ) {
-	$job_id = absint( $job_id );
+	$job_id  = absint( $job_id );
 	$started = false;
 
 	if ( ! $job_id || ABCC_Job::POST_TYPE !== get_post_type( $job_id ) ) {
@@ -204,6 +174,25 @@ function abcc_process_generation_job( $job_id ) {
 	if ( ABCC_Job::STATUS_RUNNING === $status || ABCC_Job::STATUS_SUCCESS === $status ) {
 		return;
 	}
+
+	// Claim the job atomically: cron worker and inline bulk handler can both reach
+	// this point with STATUS_QUEUED, so the status flip must be a conditional UPDATE.
+	global $wpdb;
+	$claimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic claim requires a conditional UPDATE; meta cache flushed below.
+		$wpdb->prepare(
+			"UPDATE {$wpdb->postmeta} SET meta_value = %s
+			 WHERE post_id = %d AND meta_key = '_abcc_job_status' AND meta_value = %s",
+			ABCC_Job::STATUS_RUNNING,
+			$job_id,
+			ABCC_Job::STATUS_QUEUED
+		)
+	);
+
+	if ( ! $claimed ) {
+		return; // Another worker already claimed it.
+	}
+
+	wp_cache_delete( $job_id, 'post_meta' );
 
 	$payload = get_post_meta( $job_id, '_abcc_job_payload', true );
 	if ( empty( $payload ) || ! is_array( $payload ) ) {
@@ -217,7 +206,6 @@ function abcc_process_generation_job( $job_id ) {
 		$payload['post_author'] = $created_by;
 	}
 
-	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_RUNNING );
 	update_post_meta( $job_id, '_abcc_job_started_at', current_time( 'mysql' ) );
 
 	try {
@@ -282,7 +270,7 @@ function abcc_mark_job_failed( $job_id, $message, $started = false ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( microtime( true ) - $started, 2 ) );
 	}
 
-	if ( 'scheduled' === get_post_meta( $job_id, '_abcc_job_source', true ) && true === get_option( 'openai_email_notifications', false ) ) {
+	if ( 'scheduled' === get_post_meta( $job_id, '_abcc_job_source', true ) && abcc_get_setting( 'openai_email_notifications', false ) ) {
 		wp_mail(
 			get_option( 'admin_email' ),
 			__( 'Scheduled Post Generation Failed', 'automated-blog-content-creator' ),

@@ -86,6 +86,12 @@ function abcc_calculate_available_tokens( $prompt, $requested_tokens, $model ) {
 	// Calculate maximum possible output tokens within context window
 	$max_possible_output = $model_max - $prompt_tokens;
 
+	// Prompt alone exceeds (or nearly fills) the model context. Return 0 so
+	// callers receive a clean WP_Error instead of a doomed 100-token request.
+	if ( $max_possible_output < 100 ) {
+		return 0;
+	}
+
 	// Use the smaller of: user's request OR what the model can actually handle
 	$available_tokens = min( $requested_tokens, $max_possible_output );
 

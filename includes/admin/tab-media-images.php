@@ -11,8 +11,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $preferred_service = abcc_get_setting( 'preferred_image_service', 'auto' );
+$openai_model      = abcc_get_setting( 'abcc_openai_image_model', 'gpt-image-1' );
 $openai_size       = abcc_get_setting( 'abcc_openai_image_size', '1024x1024' );
-$openai_quality    = abcc_get_setting( 'abcc_openai_image_quality', 'standard' );
+$openai_quality    = abcc_get_setting( 'abcc_openai_image_quality', 'medium' );
 $gemini_model      = abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
 $gemini_size       = abcc_get_setting( 'abcc_gemini_image_size', '2K' );
 $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' );
@@ -74,25 +75,39 @@ $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' 
 			<table class="form-table">
 				<tr>
 					<th scope="row">
-						<label for="abcc_openai_image_size"><?php esc_html_e( 'DALL-E Image Size', 'automated-blog-content-creator' ); ?></label>
-						<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'DALL-E 3 supported resolutions.', 'automated-blog-content-creator' ) ) ); ?>
+						<label for="abcc_openai_image_model"><?php esc_html_e( 'OpenAI Image Model', 'automated-blog-content-creator' ); ?></label>
+						<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'GPT Image models replaced DALL-E 3 (deprecated by OpenAI in May 2026). Using a GPT Image model requires API organization verification on your OpenAI account.', 'automated-blog-content-creator' ) ) ); ?>
 					</th>
 					<td>
-						<select id="abcc_openai_image_size" name="abcc_openai_image_size" data-autosave-key="abcc_openai_image_size">
-							<option value="1024x1024" <?php selected( $openai_size, '1024x1024' ); ?>><?php esc_html_e( '1024×1024 (Square)', 'automated-blog-content-creator' ); ?></option>
-							<option value="1792x1024" <?php selected( $openai_size, '1792x1024' ); ?>><?php esc_html_e( '1792×1024 (Wide)', 'automated-blog-content-creator' ); ?></option>
-							<option value="1024x1792" <?php selected( $openai_size, '1024x1792' ); ?>><?php esc_html_e( '1024×1792 (Tall)', 'automated-blog-content-creator' ); ?></option>
+						<select id="abcc_openai_image_model" name="abcc_openai_image_model" data-autosave-key="abcc_openai_image_model">
+							<option value="gpt-image-1" <?php selected( $openai_model, 'gpt-image-1' ); ?>><?php esc_html_e( 'GPT Image 1', 'automated-blog-content-creator' ); ?></option>
+							<option value="gpt-image-1-mini" <?php selected( $openai_model, 'gpt-image-1-mini' ); ?>><?php esc_html_e( 'GPT Image 1 Mini (faster, cheaper)', 'automated-blog-content-creator' ); ?></option>
+							<option value="gpt-image-1.5" <?php selected( $openai_model, 'gpt-image-1.5' ); ?>><?php esc_html_e( 'GPT Image 1.5 (higher quality)', 'automated-blog-content-creator' ); ?></option>
 						</select>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="abcc_openai_image_quality"><?php esc_html_e( 'DALL-E Image Quality', 'automated-blog-content-creator' ); ?></label>
+						<label for="abcc_openai_image_size"><?php esc_html_e( 'OpenAI Image Size', 'automated-blog-content-creator' ); ?></label>
+						<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'GPT Image supported resolutions.', 'automated-blog-content-creator' ) ) ); ?>
+					</th>
+					<td>
+						<select id="abcc_openai_image_size" name="abcc_openai_image_size" data-autosave-key="abcc_openai_image_size">
+							<option value="1024x1024" <?php selected( $openai_size, '1024x1024' ); ?>><?php esc_html_e( '1024×1024 (Square)', 'automated-blog-content-creator' ); ?></option>
+							<option value="1536x1024" <?php selected( $openai_size, '1536x1024' ); ?>><?php esc_html_e( '1536×1024 (Wide)', 'automated-blog-content-creator' ); ?></option>
+							<option value="1024x1536" <?php selected( $openai_size, '1024x1536' ); ?>><?php esc_html_e( '1024×1536 (Tall)', 'automated-blog-content-creator' ); ?></option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="abcc_openai_image_quality"><?php esc_html_e( 'OpenAI Image Quality', 'automated-blog-content-creator' ); ?></label>
 					</th>
 					<td>
 						<select id="abcc_openai_image_quality" name="abcc_openai_image_quality" data-autosave-key="abcc_openai_image_quality">
-							<option value="standard" <?php selected( $openai_quality, 'standard' ); ?>><?php esc_html_e( 'Standard', 'automated-blog-content-creator' ); ?></option>
-							<option value="hd" <?php selected( $openai_quality, 'hd' ); ?>><?php esc_html_e( 'HD', 'automated-blog-content-creator' ); ?></option>
+							<option value="low" <?php selected( $openai_quality, 'low' ); ?>><?php esc_html_e( 'Low', 'automated-blog-content-creator' ); ?></option>
+							<option value="medium" <?php selected( $openai_quality, 'medium' ); ?>><?php esc_html_e( 'Medium', 'automated-blog-content-creator' ); ?></option>
+							<option value="high" <?php selected( $openai_quality, 'high' ); ?>><?php esc_html_e( 'High', 'automated-blog-content-creator' ); ?></option>
 						</select>
 					</td>
 				</tr>
@@ -108,7 +123,7 @@ $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' 
 					<td>
 						<select id="abcc_gemini_image_model" name="abcc_gemini_image_model" data-autosave-key="abcc_gemini_image_model">
 							<option value="gemini-2.5-flash-image" <?php selected( $gemini_model, 'gemini-2.5-flash-image' ); ?>><?php esc_html_e( 'Flash (faster)', 'automated-blog-content-creator' ); ?></option>
-							<option value="gemini-2.5-pro-image" <?php selected( $gemini_model, 'gemini-2.5-pro-image' ); ?>><?php esc_html_e( 'Pro (higher quality)', 'automated-blog-content-creator' ); ?></option>
+							<option value="gemini-3-pro-image-preview" <?php selected( $gemini_model, 'gemini-3-pro-image-preview' ); ?>><?php esc_html_e( 'Pro (higher quality)', 'automated-blog-content-creator' ); ?></option>
 						</select>
 					</td>
 				</tr>

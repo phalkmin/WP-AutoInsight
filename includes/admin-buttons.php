@@ -22,7 +22,7 @@ function abcc_add_create_post_button() {
 		return;
 	}
 
-	$selected_post_types = get_option( 'abcc_selected_post_types', array( 'post' ) );
+	$selected_post_types = abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
 	if ( ! in_array( $screen->post_type, $selected_post_types, true ) ) {
 		return;
 	}
@@ -50,7 +50,7 @@ function abcc_add_create_post_button() {
 			}
 
 			$button.css('pointer-events', 'none');
-			abcc.showStatus($status, '<?php echo esc_js( __( 'Queueing generation job\u2026', 'automated-blog-content-creator' ) ); ?>');
+			abcc.showStatus($status, '<?php echo esc_js( __( 'Queueing generation job…', 'automated-blog-content-creator' ) ); ?>');
 
 			$.ajax({
 				url: ajaxurl,
@@ -102,7 +102,7 @@ function abcc_add_create_post_button() {
 						}
 
 						if ('succeeded' === job.status && job.post_id) {
-							abcc.showStatus($status, '<?php echo esc_js( __( 'Done! Redirecting\u2026', 'automated-blog-content-creator' ) ); ?>', 'success');
+							abcc.showStatus($status, '<?php echo esc_js( __( 'Done! Redirecting…', 'automated-blog-content-creator' ) ); ?>', 'success');
 							window.location.href = '<?php echo esc_url( admin_url( 'post.php?action=edit&post=' ) ); ?>' + job.post_id;
 							return;
 						}

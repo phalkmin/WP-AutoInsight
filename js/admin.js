@@ -396,7 +396,7 @@ jQuery(document).ready(function ($) {
         action: "abcc_validate_api_key",
         provider: provider,
         api_key: apiKey,
-        nonce: $("#abcc_openai_nonce").val(),
+        nonce: abccAdmin.nonce,
       },
       function (response) {
         $status.removeClass("loading");

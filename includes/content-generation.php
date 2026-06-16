@@ -10,6 +10,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Resolve the post status for a generated post.
+ *
+ * The single choke point for post-status decisions. Precedence:
+ * 1. force_draft  — per-request flag (e.g. bulk handler's draft checkbox).
+ * 2. topic_id     — per-topic override meta (Topic Library, v4.2 Unit D;
+ *                   read defensively so it is inert until topics exist).
+ * 3. global       — abcc_default_post_status setting.
+ *
+ * @since 4.2.0
+ * @param array $context Optional resolution context: force_draft (bool),
+ *                       topic_id (int), source (string).
+ * @return string 'draft' or 'publish'.
+ */
+function abcc_resolve_post_status( $context = array() ) {
+	if ( ! empty( $context['force_draft'] ) ) {
+		return apply_filters( 'abcc_resolve_post_status', 'draft', $context );
+	}
+
+	if ( ! empty( $context['topic_id'] ) ) {
+		$override = get_post_meta( (int) $context['topic_id'], '_abcc_topic_post_status_override', true );
+		if ( ! empty( $override ) ) {
+			return apply_filters( 'abcc_resolve_post_status', abcc_sanitize_post_status( $override ), $context );
+		}
+	}
+
+	$value = abcc_sanitize_post_status( abcc_get_setting( 'abcc_default_post_status', 'draft' ) );
+
+	return apply_filters( 'abcc_resolve_post_status', $value, $context );
+}
+
+/**
  * Builds a normalized generation payload with defaults.
  *
  * @since 3.6.0
@@ -29,7 +60,15 @@ function abcc_build_generation_payload( $args = array() ) {
 		'source'        => 'manual', // manual, scheduled, bulk, regenerate
 	);
 
-	return wp_parse_args( $args, $defaults );
+	$payload = wp_parse_args( $args, $defaults );
+
+	// Resolve the 'custom' tone keyword to the user's description (review #3).
+	if ( 'custom' === $payload['tone'] ) {
+		$custom          = trim( (string) abcc_get_setting( 'custom_tone', '' ) );
+		$payload['tone'] = '' !== $custom ? $custom : 'professional';
+	}
+
+	return $payload;
 }
 
 /**
@@ -124,10 +163,12 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$title,
 			$char_limit,
 			array(
-				'template'     => $template,
-				'tone'         => $tone,
-				'category'     => $category_id,
-				'keywords_all' => (array) $keywords,
+				'template'      => $template,
+				'tone'          => $tone,
+				'category'      => $category_id,
+				'keywords_all'  => (array) $keywords,
+				// Topic Library: a topic's own prompt replaces the stored template.
+				'custom_prompt' => isset( $options['prompt'] ) ? (string) $options['prompt'] : '',
 			)
 		);
 
@@ -135,29 +176,11 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			throw new Exception( 'Content generation failed - no content returned from AI service' );
 		}
 
-		$content_array = array_filter(
-			$content_array,
-			function ( $line ) {
-				return ! strpos( $line, '<title>' ) && '' !== trim( $line );
-			}
-		);
-
-		if ( empty( $content_array ) ) {
-			throw new Exception( 'Content generation failed' );
-		}
-
-		$content_array = array_map( 'trim', $content_array );
-		$content_array = array_filter(
-			$content_array,
-			function ( $line ) {
-				return ! empty( $line ) &&
-						! strpos( $line, '<title>' ) &&
-						! strpos( $line, '[SEO]' );
-			}
-		);
+		$content_array = abcc_filter_generated_content_lines( $content_array );
 
 		// Process Perplexity citations if applicable.
-		if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
+		$citation_provider = abcc_get_provider_for_model( $prompt_select );
+		if ( abcc_provider_supports_citations( $citation_provider ) ) {
 			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
 			$citations     = get_transient( $generation_id );
 			if ( ! empty( $citations ) ) {
@@ -173,7 +196,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$post_data = array(
 			'post_title'    => $title,
 			'post_content'  => wp_kses_post( $post_content ),
-			'post_status'   => ( ! empty( $options['draft_only'] ) || abcc_get_setting( 'abcc_draft_first', true ) ) ? 'draft' : 'publish',
+			'post_status'   => abcc_resolve_post_status(
+				array(
+					'force_draft' => ! empty( $options['draft_only'] ),
+					'topic_id'    => isset( $options['topic_id'] ) ? (int) $options['topic_id'] : 0,
+					'source'      => $source,
+				)
+			),
 			'post_author'   => ! empty( $options['post_author'] ) ? (int) $options['post_author'] : get_current_user_id(),
 			'post_type'     => $post_type,
 			'post_category' => $category_id ? array( $category_id ) : array( (int) get_option( 'default_category', 1 ) ),
@@ -213,7 +242,9 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				$image_url = abcc_generate_featured_image( $prompt_select, $focus_keywords, $category_names );
 
 				if ( $image_url ) {
-					$alt_text = abcc_build_featured_image_alt_text( $title, $seo_data['primary_keyword'] ?? '' );
+					$alt_text = abcc_get_setting( 'abcc_auto_alt_text', true )
+						? abcc_build_featured_image_alt_text( $title, $seo_data['primary_keyword'] ?? '' )
+						: '';
 
 					abcc_set_featured_image( $post_id, $image_url, $alt_text );
 				}
@@ -223,7 +254,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			}
 		}
 
-		if ( true === abcc_get_setting( 'openai_email_notifications', false ) ) {
+		if ( abcc_get_setting( 'openai_email_notifications', false ) ) {
 			abcc_send_post_notification( $post_id );
 		}
 
@@ -234,6 +265,31 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 	}
 }
 
+
+/**
+ * Filters generated content lines, dropping title/SEO markers and blanks.
+ *
+ * @since 4.2.0
+ * @param array $content_array Raw content lines from the AI service.
+ * @return array Filtered content lines.
+ * @throws Exception When no content lines survive filtering.
+ */
+function abcc_filter_generated_content_lines( array $content_array ) {
+	$content_array = array_filter(
+		array_map( 'trim', $content_array ),
+		static function ( $line ) {
+			return '' !== $line
+				&& false === strpos( $line, '<title>' )
+				&& false === strpos( $line, '[SEO]' );
+		}
+	);
+
+	if ( empty( $content_array ) ) {
+		throw new Exception( 'Content generation failed' );
+	}
+
+	return array_values( $content_array );
+}
 
 /**
  * Helper function to generate content using selected AI service.
@@ -345,8 +401,21 @@ function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title
  * @return array|false
  */
 function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_select, $title, $char_limit, $args = array() ) {
+	// Topic Library: a topic's own prompt takes the template's place. It goes
+	// through the same placeholder substitution, so {keyword}/{title}/... work.
+	if ( ! empty( $args['custom_prompt'] ) ) {
+		$args['char_limit'] = $char_limit;
+		$prompt             = abcc_expand_content_prompt( (string) $args['custom_prompt'], $title, $keywords, $args );
+
+		if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
+			$char_limit = max( $char_limit, 800 );
+		}
+
+		return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+	}
+
 	$template_slug = $args['template'] ?? 'default';
-	$templates     = get_option( 'abcc_content_templates', array() );
+	$templates     = abcc_get_setting( 'abcc_content_templates', array() );
 	$template      = $templates[ $template_slug ] ?? ( $templates['default'] ?? array() );
 
 	if ( empty( $template ) ) {
@@ -386,13 +455,29 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
  * @return string The fully expanded prompt with format requirements appended.
  */
 function abcc_build_content_template_prompt( $template_slug, $title, $keywords, $args = array() ) {
-	$templates = get_option( 'abcc_content_templates', array() );
+	$templates = abcc_get_setting( 'abcc_content_templates', array() );
 	$template  = $templates[ $template_slug ] ?? ( $templates['default'] ?? array() );
 
 	if ( empty( $template ) || empty( $template['prompt'] ) ) {
 		return '';
 	}
 
+	return abcc_expand_content_prompt( $template['prompt'], $title, $keywords, $args );
+}
+
+/**
+ * Expand placeholders in a content prompt and append format requirements.
+ *
+ * Substitution core shared by stored templates and Topic Library prompts.
+ *
+ * @since 4.2.0
+ * @param string $raw_prompt Prompt text with {placeholder} tokens.
+ * @param string $title      Post title.
+ * @param array  $keywords   Keywords (index 0 is the focus keyword).
+ * @param array  $args       Substitution data: tone, category, char_limit, keywords_all.
+ * @return string
+ */
+function abcc_expand_content_prompt( $raw_prompt, $title, $keywords, $args = array() ) {
 	$category_id   = isset( $args['category'] ) ? (int) $args['category'] : 0;
 	$category_name = $category_id ? get_cat_name( $category_id ) : 'General';
 	$char_limit    = isset( $args['char_limit'] ) ? (int) $args['char_limit'] : 200;
@@ -409,7 +494,7 @@ function abcc_build_content_template_prompt( $template_slug, $title, $keywords, 
 		'{word_count}' => round( $char_limit * 0.75 ),
 	);
 
-	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $template['prompt'] );
+	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $raw_prompt );
 
 	return $prompt . ABCC_CONTENT_FORMAT_REQUIREMENTS;
 }

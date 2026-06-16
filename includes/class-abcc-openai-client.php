@@ -12,8 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 class ABCC_OpenAI_Client {
 	private $api_key;
-	private $base_url           = 'https://api.openai.com/v1';
-	private $is_custom_endpoint = false;
+	private $base_url = 'https://api.openai.com/v1';
 
 	/**
 	 * Constructor.
@@ -25,100 +24,15 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Set a custom base URL for API requests.
-	 *
-	 * @param string $url The custom base URL.
-	 */
-	public function set_base_url( $url ) {
-		$this->base_url = rtrim( $url, '/' );
-	}
-
-	/**
-	 * Get available models from the API.
-	 *
-	 * @return array|WP_Error Array of models or WP_Error on failure
-	 */
-	public function get_available_models() {
-		$response = wp_remote_get(
-			$this->base_url . '/models',
-			array(
-				'headers' => $this->get_headers(),
-				'timeout' => 15,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-		if ( empty( $body['data'] ) ) {
-			return new WP_Error(
-				'invalid_response',
-				'No models found in API response'
-			);
-		}
-
-		// Extract model IDs and details.
-		$models = array();
-		foreach ( $body['data'] as $model ) {
-			$models[] = array(
-				'id'          => $model['id'],
-				'name'        => $model['id'], // You might want to map these to friendly names
-				'description' => isset( $model['description'] ) ? $model['description'] : '',
-				'cost_tier'   => '1', // Default cost tier
-			);
-		}
-
-		return $models;
-	}
-
-	/**
-	 * Get headers based on endpoint type.
+	 * Get headers for API requests.
 	 *
 	 * @return array Headers for API requests.
 	 */
 	private function get_headers() {
-		$headers = array(
-			'Content-Type' => 'application/json',
+		return array(
+			'Content-Type'  => 'application/json',
+			'Authorization' => 'Bearer ' . $this->api_key,
 		);
-
-		if ( ! $this->is_custom_endpoint ) {
-			$headers['Authorization'] = 'Bearer ' . $this->api_key;
-		} else {
-			// Add custom authentication if needed
-			$headers['X-API-Key'] = $this->api_key;
-		}
-
-		return $headers;
-	}
-
-	/**
-	 * Verify if a specific model is available.
-	 *
-	 * @param string $model_name The model name to verify.
-	 * @return bool Whether the model is available.
-	 */
-	private function verify_model( $model_name ) {
-		if ( true === $this->is_custom_endpoint ) {
-			abcc_debug_log( 'Verifying model availability: ' . $model_name );
-			$models = $this->get_available_models();
-			if ( is_wp_error( $models ) ) {
-				abcc_debug_log( 'Error fetching models: ' . $models->get_error_message() );
-				return false;
-			}
-			$available = in_array( $model_name, array_column( $models, 'id' ), true );
-			abcc_debug_log(
-				sprintf(
-					'Model %s %s available',
-					$model_name,
-					$available ? 'is' : 'is not'
-				)
-			);
-			return $available;
-		}
-		return true;
 	}
 
 	/**
@@ -182,13 +96,6 @@ class ABCC_OpenAI_Client {
 
 		$options = array_merge( $default_options, $options );
 
-		if ( false === $this->verify_model( $options['model'] ) ) {
-			return new WP_Error(
-				'model_not_available',
-				sprintf( 'Model "%s" is not available on this endpoint', $options['model'] )
-			);
-		}
-
 		$data = array_merge( $options, array( 'messages' => $messages ) );
 		return $this->make_request( 'chat/completions', $data );
 	}
@@ -201,12 +108,16 @@ class ABCC_OpenAI_Client {
 	 * @return array|WP_Error The API response or WP_Error on failure.
 	 */
 	public function create_image( $prompt, $options = array() ) {
+		// GPT Image models (gpt-image-1, *-mini, *-1.5) replaced dall-e-3, which
+		// OpenAI deprecated on 2026-05-12. They do NOT accept 'response_format'
+		// (always returning base64 in data[].b64_json) and use low/medium/high
+		// quality rather than DALL-E's standard/hd.
 		$default_options = array(
-			'model'           => 'dall-e-3',
-			'n'               => 1,
-			'size'            => '1792x1024',
-			'quality'         => 'standard',
-			'response_format' => 'url',
+			'model'         => 'gpt-image-1',
+			'n'             => 1,
+			'size'          => '1024x1024',
+			'quality'       => 'medium',
+			'output_format' => 'png',
 		);
 
 		$data = array_merge( $default_options, $options, array( 'prompt' => $prompt ) );

@@ -104,13 +104,16 @@ abcc_test(
 abcc_test(
 	'autosave can round-trip a boolean setting through update and read',
 	function () {
+		// WP persists true as '1' and false as ''.
+		// Use truthy/falsy checks, not strict identity (strict === is the bug caught by review #1).
+
 		// Write false.
 		abcc_update_setting( 'abcc_debug_logging', false );
-		abcc_assert_same( false, abcc_get_setting( 'abcc_debug_logging' ), 'Should read back false' );
+		abcc_assert_false( (bool) abcc_get_setting( 'abcc_debug_logging' ), 'Should read back falsy' );
 
 		// Write true.
 		abcc_update_setting( 'abcc_debug_logging', true );
-		abcc_assert_same( true, abcc_get_setting( 'abcc_debug_logging' ), 'Should read back true' );
+		abcc_assert_true( (bool) abcc_get_setting( 'abcc_debug_logging' ), 'Should read back truthy' );
 
 		// Reset to schema default.
 		abcc_update_setting( 'abcc_debug_logging', abcc_get_setting_default( 'abcc_debug_logging' ) );

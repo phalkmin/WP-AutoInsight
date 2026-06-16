@@ -58,7 +58,6 @@ function abcc_get_seo_meta_fields( $seo_data ) {
 				array(
 					'_yoast_wpseo_metadesc'              => $seo_data['meta_description'],
 					'_yoast_wpseo_focuskw'               => $seo_data['primary_keyword'],
-					'_yoast_wpseo_metakeywords'          => implode( ',', (array) $seo_data['secondary_keywords'] ),
 					'_yoast_wpseo_opengraph-description' => $seo_data['social_excerpt'],
 				)
 			);
@@ -72,9 +71,9 @@ function abcc_get_seo_meta_fields( $seo_data ) {
 			$meta_input = array_merge(
 				$meta_input,
 				array(
-					'rank_math_description'    => $seo_data['meta_description'],
-					'rank_math_focus_keyword'  => implode( ',', $focus_keywords ),
-					'rank_math_og_description' => $seo_data['social_excerpt'],
+					'rank_math_description'          => $seo_data['meta_description'],
+					'rank_math_focus_keyword'        => implode( ',', $focus_keywords ),
+					'rank_math_facebook_description' => $seo_data['social_excerpt'],
 				)
 			);
 			break;

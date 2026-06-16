@@ -69,13 +69,60 @@ jQuery( document ).ready( function ( $ ) {
 				nonce:   $button.data( 'nonce' ),
 			},
 			success: function ( response ) {
-				if ( response.success ) {
-					abcc.showStatus( $status, i18n.regenerateSuccess, 'success' );
-					setTimeout( function () { window.location.href = response.data.edit_url; }, 1000 );
-				} else {
+				if ( ! response.success ) {
 					abcc.setError( $status, response.data.message || i18n.unknownError );
 					$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+					return;
 				}
+
+				abcc.showStatus( $status, i18n.generatingDraft || i18n.regenerateSuccess, 'info' );
+
+				var jobId    = response.data.job_id;
+				var nonce    = $button.data( 'nonce' );
+				var tries    = 0;
+				var maxTries = 60; // ~60s at 1s interval.
+
+				var poll = function () {
+					tries++;
+					$.post( ajaxurl, {
+						action:  'abcc_get_job_status',
+						job_id:  jobId,
+						nonce:   nonce,
+					} )
+						.done( function ( res ) {
+							if ( ! res.success ) {
+								abcc.setError( $status, ( res.data && res.data.message ) || i18n.unknownError );
+								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+								return;
+							}
+							if ( res.success && res.data && res.data.edit_url ) {
+								abcc.showStatus( $status, i18n.regenerateSuccess, 'success' );
+								window.location.href = res.data.edit_url;
+								return;
+							}
+							if ( res.success && res.data && 'failed' === res.data.status ) {
+								abcc.setError( $status, ( res.data.message || i18n.unknownError ) );
+								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+								return;
+							}
+							if ( tries >= maxTries ) {
+								abcc.setError( $status, i18n.unknownError );
+								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+								return;
+							}
+							setTimeout( poll, 1000 );
+						} )
+						.fail( function () {
+							if ( tries >= maxTries ) {
+								abcc.setError( $status, i18n.networkError );
+								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+								return;
+							}
+							setTimeout( poll, 1000 );
+						} );
+				};
+
+				setTimeout( poll, 1000 );
 			},
 			error: function () {
 				abcc.setError( $status, i18n.networkError );

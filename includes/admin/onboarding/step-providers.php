@@ -1,0 +1,285 @@
+<?php
+/**
+ * Onboarding step 2: AI provider connection.
+ *
+ * Markup partial included by abcc_show_onboarding_page(). Extracted verbatim
+ * in 4.2.0 — bytes must stay identical to the pre-split render.
+ *
+ * @package WP-AutoInsight
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+?>
+			<!-- Step 2: API Configuration -->
+	<div class="abcc-onboarding-step abcc-step-2">
+		<div class="abcc-step-content">
+			<h2><?php esc_html_e( 'Connect an AI Provider', 'automated-blog-content-creator' ); ?></h2>
+			<p><?php esc_html_e( 'Choose one AI service to power your content generation.', 'automated-blog-content-creator' ); ?></p>
+
+			<div class="abcc-wp70-detected" id="abcc-wp70-connector-banner" style="display: none;">
+				<div class="abcc-notice-success">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<div class="abcc-notice-content">
+						<strong><?php esc_html_e( 'AI provider already connected via WordPress Connectors!', 'automated-blog-content-creator' ); ?></strong>
+						<p id="abcc-wp70-connected-providers"></p>
+						<p>
+							<a href="#" id="abcc-wp70-use-connectors" class="button button-primary"><?php esc_html_e( 'Use existing connection', 'automated-blog-content-creator' ); ?></a>
+							<button type="button" class="button button-secondary" id="abcc-wp70-add-different"><?php esc_html_e( 'Add a different key manually', 'automated-blog-content-creator' ); ?></button>
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="abcc-wp70-no-keys" id="abcc-wp70-no-keys-banner" style="display: none;">
+				<div class="abcc-notice-info">
+					<span class="dashicons dashicons-info-outline"></span>
+					<div class="abcc-notice-content">
+						<strong><?php esc_html_e( 'Tip: Configure your AI key once in WordPress Connectors', 'automated-blog-content-creator' ); ?></strong>
+						<p><?php esc_html_e( 'WordPress 7.0 lets you manage all AI provider keys centrally at Settings > Connectors. Any key you add there works automatically here.', 'automated-blog-content-creator' ); ?></p>
+						<a href="#" id="abcc-open-connectors" class="button button-secondary" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open Connectors settings', 'automated-blog-content-creator' ); ?></a>
+					</div>
+				</div>
+			</div>
+
+			<div class="abcc-api-providers">
+				<!-- OpenAI -->
+				<div class="abcc-api-provider" data-provider="openai">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.508 4.508 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+							</svg>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'OpenAI', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'GPT-4.1, o4-mini • Best for creative content', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status openai-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'OPENAI_API' ) && ! empty( OPENAI_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security! 🔒', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="openai" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="openai-api-key" placeholder="<?php esc_attr_e( 'sk-...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="openai">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="openai">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your OpenAI API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="openai" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Visit', 'automated-blog-content-creator' ); ?> <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></li>
+										<li><?php esc_html_e( 'Sign up for an account or log in to your existing account', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Click the "Create new secret key" button', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Give your key a name (e.g., "WP-AutoInsight")', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "sk-...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note">
+										<span class="dashicons dashicons-warning"></span>
+										<strong><?php esc_html_e( 'Important:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'You\'ll need to add billing information to your OpenAI account. New accounts usually get $5 in free credits.', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<!-- Claude -->
+				<div class="abcc-api-provider" data-provider="claude">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M7.307 2.5h9.386c2.65 0 4.307 1.657 4.307 4.307v10.386c0 2.65-1.657 4.307-4.307 4.307H7.307C4.657 21.5 3 19.843 3 17.193V6.807C3 4.157 4.657 2.5 7.307 2.5zm4.693 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm-3 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm6 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+							</svg>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'Claude', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'Claude 4.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status claude-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'CLAUDE_API' ) && ! empty( CLAUDE_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security! 🔒', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="claude" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="claude-api-key" placeholder="<?php esc_attr_e( 'sk-ant-api...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="claude">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="claude">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your Claude API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="claude" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Go to', 'automated-blog-content-creator' ); ?> <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
+										<li><?php esc_html_e( 'Create an account or sign in', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Navigate to "API Keys" in the left sidebar', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Click "Create Key" button', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "sk-ant-api...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note">
+										<span class="dashicons dashicons-info"></span>
+										<strong><?php esc_html_e( 'Note:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'Claude requires a paid account. New users get $5 in free credits after adding a payment method.', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<!-- Gemini -->
+				<div class="abcc-api-provider" data-provider="gemini">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+							</svg>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'Google Gemini', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'Gemini 2.5 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status gemini-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'GEMINI_API' ) && ! empty( GEMINI_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security! 🔒', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="gemini" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="gemini-api-key" placeholder="<?php esc_attr_e( 'AIza...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="gemini">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="gemini">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your Gemini API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="gemini" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Visit', 'automated-blog-content-creator' ); ?> <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a></li>
+										<li><?php esc_html_e( 'Sign in with your Google account', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Click "Create API key" button', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Choose "Create API key in new project" (recommended)', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "AIza...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note success">
+										<span class="dashicons dashicons-yes-alt"></span>
+										<strong><?php esc_html_e( 'Great news:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'Gemini offers generous free usage limits - perfect for getting started!', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<!-- Perplexity -->
+				<div class="abcc-api-provider" data-provider="perplexity">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+							</svg>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'Perplexity', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'Sonar Pro - Web-grounded content with citations', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status perplexity-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'PERPLEXITY_API' ) && ! empty( PERPLEXITY_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security!', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="perplexity" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="perplexity-api-key" placeholder="<?php esc_attr_e( 'pplx-...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="perplexity">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="perplexity">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your Perplexity API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="perplexity" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Visit', 'automated-blog-content-creator' ); ?> <a href="https://www.perplexity.ai/settings/api" target="_blank">perplexity.ai/settings/api</a></li>
+										<li><?php esc_html_e( 'Sign up for an account or log in', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Navigate to the API section in Settings', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Generate a new API key', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "pplx-...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note">
+										<span class="dashicons dashicons-info"></span>
+										<strong><?php esc_html_e( 'Note:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'Perplexity API requires a paid plan. Content includes web citations automatically.', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+			</div>
+
+			<div class="abcc-step-actions">
+				<button class="button button-secondary" id="abcc-prev-step-2">
+					<?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?>
+				</button>
+				<button class="button button-primary" id="abcc-next-step-2" disabled>
+					<?php esc_html_e( 'Continue', 'automated-blog-content-creator' ); ?>
+				</button>
+			</div>
+		</div>
+	</div>

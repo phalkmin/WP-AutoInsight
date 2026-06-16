@@ -86,7 +86,7 @@ function abcc_get_tooltip_html( $text ) {
  * @return string
  */
 function abcc_get_current_tab() {
-	$allowed = array( 'dashboard', 'content', 'media', 'connections', 'settings' );
+	$allowed = array( 'dashboard', 'content', 'topics', 'media', 'connections', 'settings' );
 	$tab     = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	return in_array( $tab, $allowed, true ) ? $tab : 'dashboard';
 }
@@ -171,6 +171,10 @@ function abcc_openai_text_settings_page() {
 			$schema   = abcc_get_settings_schema();
 			$exported = array();
 			foreach ( $schema['settings'] as $key => $def ) {
+				// Never export credentials in a portable settings file (review #13).
+				if ( '_api_key' === substr( $key, -8 ) ) {
+					continue;
+				}
 				$exported[ $key ] = abcc_get_setting( $key, $def['default'] );
 			}
 			header( 'Content-Type: application/json' );
@@ -199,7 +203,7 @@ function abcc_openai_text_settings_page() {
 						);
 					}
 				}
-				update_option( 'abcc_keyword_groups', $keyword_groups );
+				abcc_update_setting( 'abcc_keyword_groups', $keyword_groups );
 
 				// Handle Content Templates.
 				$content_templates = array();
@@ -279,8 +283,9 @@ function abcc_openai_text_settings_page() {
 					$preferred_image_service = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
 					$gemini_image_model      = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
 					$gemini_image_size       = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
+					$openai_image_model      = isset( $_POST['abcc_openai_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_model'] ) ) : 'gpt-image-1';
 					$openai_image_size       = isset( $_POST['abcc_openai_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_size'] ) ) : '1024x1024';
-					$openai_image_quality    = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'standard';
+					$openai_image_quality    = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'medium';
 					$stability_image_size    = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';
 					$auto_alt_text           = isset( $_POST['abcc_auto_alt_text'] );
 
@@ -288,6 +293,7 @@ function abcc_openai_text_settings_page() {
 					abcc_update_setting( 'preferred_image_service', $preferred_image_service );
 					abcc_update_setting( 'abcc_gemini_image_model', $gemini_image_model );
 					abcc_update_setting( 'abcc_gemini_image_size', $gemini_image_size );
+					abcc_update_setting( 'abcc_openai_image_model', $openai_image_model );
 					abcc_update_setting( 'abcc_openai_image_size', $openai_image_size );
 					abcc_update_setting( 'abcc_openai_image_quality', $openai_image_quality );
 					abcc_update_setting( 'abcc_stability_image_size', $stability_image_size );
@@ -315,12 +321,12 @@ function abcc_openai_text_settings_page() {
 				if ( 'general' === $subtab ) {
 					$selected_post_types = isset( $_POST['abcc_selected_post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_selected_post_types'] ) ) : array( 'post' );
 					$char_limit          = isset( $_POST['openai_char_limit'] ) ? absint( $_POST['openai_char_limit'] ) : 200;
-					$draft_first         = isset( $_POST['abcc_draft_first'] );
+					$post_status         = isset( $_POST['abcc_default_post_status'] ) ? abcc_sanitize_post_status( sanitize_key( wp_unslash( $_POST['abcc_default_post_status'] ) ) ) : 'draft';
 					$generate_seo        = isset( $_POST['openai_generate_seo'] );
 
 					abcc_update_setting( 'abcc_selected_post_types', $selected_post_types );
 					abcc_update_setting( 'openai_char_limit', $char_limit );
-					abcc_update_setting( 'abcc_draft_first', $draft_first );
+					abcc_update_setting( 'abcc_default_post_status', $post_status );
 					abcc_update_setting( 'openai_generate_seo', $generate_seo );
 
 				} elseif ( 'permissions' === $subtab ) {
@@ -385,7 +391,7 @@ function abcc_openai_text_settings_page() {
 				'generateNPosts' => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
 				'copied'         => __( 'Copied', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator while saving */
-				'saving'         => __( 'Saving\u2026', 'automated-blog-content-creator' ),
+				'saving'         => __( 'Saving…', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator after successful save */
 				'saved'          => __( 'Saved ✓', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator when saving fails */
@@ -411,6 +417,7 @@ function abcc_openai_text_settings_page() {
 			$primary_tabs = array(
 				'dashboard'   => __( 'Dashboard', 'automated-blog-content-creator' ),
 				'content'     => __( 'Content', 'automated-blog-content-creator' ),
+				'topics'      => __( 'Topics', 'automated-blog-content-creator' ),
 				'media'       => __( 'Media', 'automated-blog-content-creator' ),
 				'connections' => __( 'Connections', 'automated-blog-content-creator' ),
 				'settings'    => __( 'Settings', 'automated-blog-content-creator' ),
@@ -436,6 +443,8 @@ function abcc_openai_text_settings_page() {
 				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-dashboard.php';
 			} elseif ( 'content' === $current_tab ) {
 				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-content.php';
+			} elseif ( 'topics' === $current_tab ) {
+				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-topics.php';
 			} elseif ( 'media' === $current_tab ) {
 				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-media.php';
 			} elseif ( 'connections' === $current_tab ) {

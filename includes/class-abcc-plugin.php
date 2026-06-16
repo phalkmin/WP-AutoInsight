@@ -78,6 +78,11 @@ class ABCC_Plugin {
 		if ( ! wp_next_scheduled( 'abcc_daily_provider_health_check' ) ) {
 			wp_schedule_event( time(), 'daily', 'abcc_daily_provider_health_check' );
 		}
+
+		// Hourly Topic Library sweep (callback hooked in includes/topics.php).
+		if ( ! wp_next_scheduled( 'abcc_run_topic_schedules' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'abcc_run_topic_schedules' );
+		}
 	}
 
 	/**
@@ -150,6 +155,7 @@ class ABCC_Plugin {
 	public function deactivate_plugin() {
 		wp_clear_scheduled_hook( 'abcc_openai_generate_post_hook' );
 		wp_clear_scheduled_hook( 'abcc_daily_provider_health_check' );
+		wp_clear_scheduled_hook( 'abcc_run_topic_schedules' );
 	}
 
 	/**
@@ -194,9 +200,9 @@ class ABCC_Plugin {
 						'rewriteSuccess'        => __( 'Success! Reloading page...', 'automated-blog-content-creator' ),
 						'rewriteBtn'            => __( 'Rewrite with AI', 'automated-blog-content-creator' ),
 						/* translators: button label while regenerating a post */
-						'regenerating'          => __( "Regenerating\u2026", 'automated-blog-content-creator' ),
-						'generatingDraft'       => __( "Generating new draft\u2026", 'automated-blog-content-creator' ),
-						'regenerateSuccess'     => __( "Done! Opening new draft\u2026", 'automated-blog-content-creator' ),
+						'regenerating'          => __( 'Regenerating…', 'automated-blog-content-creator' ),
+						'generatingDraft'       => __( 'Generating new draft…', 'automated-blog-content-creator' ),
+						'regenerateSuccess'     => __( 'Done! Opening new draft…', 'automated-blog-content-creator' ),
 						'regenerateBtn'         => __( 'Regenerate as New Draft', 'automated-blog-content-creator' ),
 						/* translators: button label while infographic is being created */
 						'creating'              => __( 'Creating...', 'automated-blog-content-creator' ),
@@ -220,6 +226,25 @@ class ABCC_Plugin {
 		wp_enqueue_style( 'select2-css', plugins_url( '/css/select2.min.css', __DIR__ ), array(), '4.1.0-rc.0' );
 		wp_enqueue_script( 'select2-js', plugins_url( '/js/select2.min.js', __DIR__ ), array( 'jquery' ), '4.1.0-rc.0', true );
 		wp_enqueue_style( 'abcc-admin-style', plugins_url( '/css/admin-style.css', __DIR__ ), array(), $this->version );
+
+		wp_enqueue_script( 'abcc-topics', plugins_url( '/js/topics.js', __DIR__ ), array( 'jquery' ), $this->version, true );
+		wp_localize_script(
+			'abcc-topics',
+			'abccTopics',
+			array(
+				'nonce' => wp_create_nonce( 'abcc_topic_nonce' ),
+				'i18n'  => array(
+					'addTopic'      => __( 'Add Topic', 'automated-blog-content-creator' ),
+					'editTopic'     => __( 'Edit Topic', 'automated-blog-content-creator' ),
+					'saving'        => __( 'Saving…', 'automated-blog-content-creator' ),
+					'queuing'       => __( 'Queuing…', 'automated-blog-content-creator' ),
+					'queued'        => __( 'Queued!', 'automated-blog-content-creator' ),
+					'error'         => __( 'Something went wrong.', 'automated-blog-content-creator' ),
+					'networkError'  => __( 'Network error occurred', 'automated-blog-content-creator' ),
+					'confirmDelete' => __( 'Delete this topic? Posts it already generated are kept.', 'automated-blog-content-creator' ),
+				),
+			)
+		);
 	}
 
 	/**

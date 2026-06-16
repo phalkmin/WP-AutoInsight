@@ -51,6 +51,10 @@ function abcc_get_settings_schema() {
 			'openai_tone'                     => array( 'default' => 'friendly' ),
 			'openai_generate_seo'             => array( 'default' => true ),
 			'abcc_draft_first'                => array( 'default' => true ),
+			'abcc_default_post_status'        => array(
+				'default'  => 'draft',
+				'sanitize' => 'abcc_sanitize_post_status',
+			),
 			'abcc_selected_post_types'        => array( 'default' => array( 'post' ) ),
 			'prompt_select'                   => array( 'default' => 'gpt-4.1-mini-2025-04-14' ),
 			'openai_api_key'                  => array( 'default' => '' ),
@@ -67,8 +71,9 @@ function abcc_get_settings_schema() {
 			'preferred_image_service'         => array( 'default' => 'auto' ),
 			'abcc_gemini_image_model'         => array( 'default' => 'gemini-2.5-flash-image' ),
 			'abcc_gemini_image_size'          => array( 'default' => '2K' ),
+			'abcc_openai_image_model'         => array( 'default' => 'gpt-image-1' ),
 			'abcc_openai_image_size'          => array( 'default' => '1024x1024' ),
-			'abcc_openai_image_quality'       => array( 'default' => 'standard' ),
+			'abcc_openai_image_quality'       => array( 'default' => 'medium' ),
 			'abcc_stability_image_size'       => array( 'default' => '1024x1024' ),
 			'abcc_enable_audio_transcription' => array( 'default' => true ),
 			'abcc_supported_audio_formats'    => array( 'default' => array( 'mp3', 'wav', 'm4a', 'webm' ) ),
@@ -76,10 +81,28 @@ function abcc_get_settings_schema() {
 			'abcc_auto_alt_text'              => array( 'default' => true ),
 			'abcc_enable_infographics'        => array( 'default' => true ),
 			'abcc_infographic_provider'       => array( 'default' => 'auto' ),
+			'abcc_topics_last_sweep'          => array(
+				'default'  => 0,
+				'sanitize' => 'absint',
+			),
 			'abcc_allowed_roles'              => array( 'default' => array( 'administrator', 'editor' ) ),
 			'abcc_debug_logging'              => array( 'default' => false ),
 		),
 	);
+}
+
+/**
+ * Sanitize a post-status setting value.
+ *
+ * Generated posts are only ever created as draft or publish; anything
+ * unexpected falls back to the safe default.
+ *
+ * @since 4.2.0
+ * @param mixed $value Raw value.
+ * @return string 'publish' or 'draft'.
+ */
+function abcc_sanitize_post_status( $value ) {
+	return 'publish' === $value ? 'publish' : 'draft';
 }
 
 /**
@@ -186,6 +209,70 @@ function abcc_display_settings_migration_notice() {
 add_action( 'admin_notices', 'abcc_display_settings_migration_notice' );
 
 /**
+ * Display the one-time draft-mode notice after upgrading to 4.2.
+ *
+ * Existing installs default to draft-first after the upgrade; the notice
+ * explains the change and links to the setting. Dismissal is per-user.
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_display_draft_mode_notice() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+
+	if ( 1 !== (int) get_option( 'abcc_draft_mode_notice', 0 ) ) {
+		return;
+	}
+
+	if ( get_user_meta( get_current_user_id(), 'abcc_draft_mode_notice_dismissed', true ) ) {
+		return;
+	}
+
+	$settings_url = admin_url( 'admin.php?page=automated-blog-content-creator-post&tab=settings' );
+	?>
+	<div class="notice notice-info is-dismissible" data-abcc-notice="draft-mode">
+		<p>
+			<strong><?php esc_html_e( 'WP-AutoInsight 4.2:', 'automated-blog-content-creator' ); ?></strong>
+			<?php esc_html_e( 'Generated posts are now saved as drafts by default so you can review them before they go live. Prefer immediate publishing? Change it in the settings.', 'automated-blog-content-creator' ); ?>
+			<a href="<?php echo esc_url( $settings_url ); ?>"><?php esc_html_e( 'Review setting', 'automated-blog-content-creator' ); ?></a>
+		</p>
+	</div>
+	<script>
+	jQuery( function ( $ ) {
+		$( document ).on( 'click', '[data-abcc-notice="draft-mode"] .notice-dismiss', function () {
+			$.post( ajaxurl, {
+				action: 'abcc_dismiss_draft_mode_notice',
+				nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_dismiss_draft_mode_notice' ) ); ?>'
+			} );
+		} );
+	} );
+	</script>
+	<?php
+}
+add_action( 'admin_notices', 'abcc_display_draft_mode_notice' );
+
+/**
+ * Persist per-user dismissal of the draft-mode notice.
+ *
+ * @since 4.2.0
+ * @return void
+ */
+function abcc_handle_dismiss_draft_mode_notice() {
+	check_ajax_referer( 'abcc_dismiss_draft_mode_notice', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error();
+		return;
+	}
+
+	update_user_meta( get_current_user_id(), 'abcc_draft_mode_notice_dismissed', 1 );
+	wp_send_json_success();
+}
+add_action( 'wp_ajax_abcc_dismiss_draft_mode_notice', 'abcc_handle_dismiss_draft_mode_notice' );
+
+/**
  * Run settings migrations.
  *
  * @return void
@@ -276,6 +363,27 @@ function abcc_run_settings_migrations() {
 		}
 
 		$installed_version = '4.0.0';
+		abcc_update_setting( 'abcc_version', $installed_version );
+	}
+
+	if ( version_compare( $installed_version, '4.2.0', '<' ) ) {
+		// Raw get_option on purpose: abcc_get_setting would mask an explicit
+		// false ("always publish") behind the schema default (true).
+		$old_draft_first = get_option( 'abcc_draft_first' );
+		if ( false !== $old_draft_first ) {
+			abcc_update_setting( 'abcc_default_post_status', $old_draft_first ? 'draft' : 'publish' );
+
+			// One-time notice for real upgrades whose stored preference was
+			// translated; fresh installs and pre-draft_first installs (no
+			// behavior change — both default to draft) are skipped.
+			if ( version_compare( $start_version, '1.0.0', '>' ) ) {
+				update_option( 'abcc_draft_mode_notice', 1 );
+			}
+		}
+		// abcc_draft_first is superseded — left in place until the UI swap;
+		// abcc_resolve_post_status() reads only abcc_default_post_status.
+
+		$installed_version = '4.2.0';
 		abcc_update_setting( 'abcc_version', $installed_version );
 	}
 
