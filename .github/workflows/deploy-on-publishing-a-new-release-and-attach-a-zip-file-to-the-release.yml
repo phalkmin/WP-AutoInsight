@@ -14,18 +14,18 @@ jobs:
       - name: Fix Git safe directory
         run: git config --global --add safe.directory /github/workspace
 
-      - name: Read Stable Tag from readme.txt
+      - name: Read Stable Tag from README.txt
         id: stable_tag
         env:
           GIT_TAG: ${{ github.ref_name }}
         run: |
-          STABLE_TAG=$(grep -E "^Stable tag:" readme.txt | awk '{print $3}' | tr -d '[:space:]')
+          STABLE_TAG=$(grep -E "^Stable tag:" README.txt | awk '{print $3}' | tr -d '[:space:]')
           if [ -z "$STABLE_TAG" ]; then
-            echo "Could not find 'Stable tag:' in readme.txt"
+            echo "Could not find 'Stable tag:' in README.txt"
             exit 1
           fi
           echo "version=$STABLE_TAG" >> "$GITHUB_OUTPUT"
-          echo "Using SVN tag: $STABLE_TAG (from readme.txt, git tag was $GIT_TAG)"
+          echo "Using SVN tag: $STABLE_TAG (from README.txt, git tag was $GIT_TAG)"
 
 
       - name: WordPress Plugin Deploy
