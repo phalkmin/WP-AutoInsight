@@ -1,6 +1,33 @@
 == Full Changelog ==
 
-= 4.2.0 (OOO) =
+= 4.3.0 =
+
+**Added**
+* Dashboard Command Center: a new "Composer" card on the dashboard shows the exact inputs your next post will use — source (keyword group or Topic), template, model, and draft/publish — and lets you edit any of them inline before generating. One click generates with what's shown; per-post overrides become the new sticky default without modifying your global settings.
+* Dashboard capability grid: a compact "Everything you can do" grid surfaces all features (Topics, Bulk Generate, Post from Audio, SEO Refresh, Featured Images, Infographics, Schedule, Providers) with live state and direct links.
+* Post from Audio: upload a recording and pick an output mode — "Transcript + AI intro" (keeps your words, adds an AI title and short intro) or "Full rewrite" (AI turns the recording into a polished article). A per-upload selector defaults to a new "Default audio mode" setting. Output honors draft-first; if the full rewrite fails, the post falls back to transcript + intro so the transcription is never lost.
+* Bulk SEO Regeneration: a new "Regenerate SEO" bulk action on the Posts list queues one background job per selected post to regenerate the title, meta description, and focus keyword with your chosen model. Per-post failures don't halt the batch. Works with Yoast and Rank Math.
+* Onboarding rewrite: a focused, provider-first wizard — connect a provider, choose your draft/publish default, optionally create a first Topic, and discover Post from Audio — with "Skip to settings" on every step.
+
+**Changed**
+* AI model lineup updated: added Claude Opus 4.8, OpenAI GPT-5.4 / GPT-5.4 mini / GPT-5.5, Gemini 3.5 Flash, and Perplexity Sonar Deep Research. GPT-4.1 models remain available and are now labeled "(legacy)". New installs default to GPT-5.4 mini (existing installs keep their selected model). Models with highly variable cost (e.g. Sonar Deep Research) now show a cost warning in the model selector.
+* The default post-status override now applies per generation through the shared status resolver, so the Composer's "Save as" choice takes effect immediately.
+
+**Fixed**
+* OpenAI GPT-5.x models no longer fail with "Unsupported parameter: 'max_tokens'". The OpenAI client now detects reasoning-tier models (GPT-5.x, o-series), sends `max_completion_tokens` instead of `max_tokens`, omits the sampling parameters those models reject (temperature, top_p, penalties), and floors the completion budget so reasoning tokens don't consume small title/SEO requests before any text is produced.
+* OpenAI GPT-5.x content generation no longer fails with an empty result: requests now send `reasoning_effort: none` (supported by all GPT-5.x models in the lineup) so the entire token budget goes to visible output instead of hidden reasoning. o-series models, which can't disable reasoning, get a larger completion floor (4,000 tokens) to cover reasoning overhead.
+* An HTTP 200 response with an empty completion (the reasoning-burn signature) is now detected for all providers, logged to debug.log with token usage, and reported as a provider error instead of cascading into a generic "Content generation failed" with no trace.
+* Generated posts no longer collapse to a single paragraph when the model returns the whole HTML article on one line. The provider response parser now splits content after each closing block-level tag (`</p>`, `</h2>`, etc.) before creating Gutenberg blocks — affects all text providers.
+* Post titles are no longer the model's preamble ("Here are some catchy blog post titles…:") when a chatty model answers the title prompt with a list of options — seen with Gemini. The title prompt now demands a single title with no alternatives, and the response parser skips preamble lines and strips list numbering/bullets before picking the title. The audio post title cleaner shares the same logic.
+* The WordPress admin footer no longer floats over the dashboard's "At a glance" section: a stray closing `</div>` in the dashboard template closed the admin page's structural containers early, detaching the footer from its bottom anchor. A regression test now verifies every admin tab partial has balanced markup.
+* Fixed a PHP 8.1+ deprecation notice (`ltrim(): Passing null`) triggered from the job log and dashboard activity list when a generated post had been deleted: `get_edit_post_link()`/`get_permalink()` can return null and were passed to `esc_url()` unguarded.
+* Added missing context-window entries for GPT-5.4 / GPT-5.4 mini / GPT-5.5, Gemini 3.5 Flash, Claude Opus 4.8, and Sonar Deep Research — these models previously fell back to a 4,096-token budget, which capped generated posts far below the configured length.
+* Post from Audio now uses the API key for your selected text model when writing the post (it previously reused the OpenAI transcription key, so audio posts failed silently for Claude, Gemini, and Perplexity users).
+* Post from Audio now embeds the audio player in the created post, splits the transcript into readable paragraphs, and cleans stray Markdown/heading markers out of the AI-generated title.
+* Onboarding now saves your "Publish immediately" / "Save as drafts" choice correctly (it was silently kept on drafts), and the first step now has a "Skip to settings" link so you're never stuck before adding a key.
+* Bulk SEO Regeneration now picks the API key from each job's chosen model and skips any selected posts you don't have permission to edit.
+
+= 4.2.0 =
 
 **Added**
 * Topic Library: create reusable topics, each with its own prompt, schedule (hourly to weekly), draft/publish override, and model override. Topics generate posts automatically in the background and can be paused, resumed, edited, or run on demand from the new Topics tab. Topics that fail 5 times in a row pause themselves and tell you why. Existing single-prompt scheduling keeps working unchanged.

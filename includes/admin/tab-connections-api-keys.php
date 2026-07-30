@@ -225,7 +225,11 @@ $image_providers = array_filter(
 								<label class="abcc-model-radio-label">
 									<input type="radio" name="selected_model" value="<?php echo esc_attr( $mid ); ?>"
 										<?php checked( $current_model, $mid ); ?>>
-									<span class="abcc-model-radio-name"><?php echo esc_html( $mdata['name'] ); ?></span>
+									<span class="abcc-model-radio-name"><?php echo esc_html( abcc_format_model_option_label( $mid, $mdata ) ); ?></span>
+									<?php
+									if ( ! empty( $mdata['cost_warning'] ) ) :
+										?>
+										<span class="abcc-cost-warning description"><?php esc_html_e( 'Cost varies significantly per query — this model can be expensive.', 'automated-blog-content-creator' ); ?></span><?php endif; ?>
 									<span class="abcc-model-radio-cost">
 										<?php echo esc_html( $tier_labels[ $mdata['cost_tier'] ] ?? '' ); ?>
 										<?php if ( ! empty( $mdata['cost_per_post'] ) ) : ?>

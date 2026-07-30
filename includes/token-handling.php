@@ -18,16 +18,20 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function abcc_get_model_context_window( $model ) {
 	$model_limits = array(
+		// OpenAI GPT-5.x models (~1M context, 128K max output).
+		'gpt-5.4-mini'               => 1000000,
+		'gpt-5.4'                    => 1000000,
+		'gpt-5.5'                    => 1000000,
 		// OpenAI GPT-4.1 models (1M context).
-		'gpt-4.1'                 => 1000000,
-		'gpt-4.1-2025-04-14'      => 1000000,
-		'gpt-4.1-mini'            => 1000000,
-		'gpt-4.1-mini-2025-04-14' => 1000000,
-		'gpt-4.1-nano'            => 1000000,
-		'gpt-4.1-nano-2025-04-14' => 1000000,
+		'gpt-4.1'                    => 1000000,
+		'gpt-4.1-2025-04-14'         => 1000000,
+		'gpt-4.1-mini'               => 1000000,
+		'gpt-4.1-mini-2025-04-14'    => 1000000,
+		'gpt-4.1-nano'               => 1000000,
+		'gpt-4.1-nano-2025-04-14'    => 1000000,
 		// OpenAI o-series reasoning models.
-		'o4-mini'                 => 200000,
-		'o4-mini-2025-04-16'      => 200000,
+		'o4-mini'                    => 200000,
+		'o4-mini-2025-04-16'         => 200000,
 		// Claude 4.5 models (legacy — kept for stored-model fallback).
 		'claude-haiku-4-5'           => 200000,
 		'claude-haiku-4-5-20251001'  => 200000,
@@ -35,17 +39,20 @@ function abcc_get_model_context_window( $model ) {
 		'claude-sonnet-4-5-20250929' => 200000,
 		'claude-opus-4-5'            => 200000,
 		'claude-opus-4-5-20251101'   => 200000,
-		// Claude 4.6/4.7 models (current).
+		// Claude 4.6+ models (current).
 		'claude-sonnet-4-6'          => 1000000,
 		'claude-opus-4-7'            => 1000000,
-		// Gemini 2.5 models (current).
-		'gemini-2.5-flash-lite' => 1048576, // 1M tokens.
-		'gemini-2.5-flash'      => 1048576, // 1M tokens.
-		'gemini-2.5-pro'        => 1048576, // 1M tokens.
+		'claude-opus-4-8'            => 1000000,
+		// Gemini 2.5/3.5 models (current).
+		'gemini-2.5-flash-lite'      => 1048576, // 1M tokens.
+		'gemini-2.5-flash'           => 1048576, // 1M tokens.
+		'gemini-2.5-pro'             => 1048576, // 1M tokens.
+		'gemini-3.5-flash'           => 1048576, // 1M tokens.
 		// Perplexity Sonar models.
-		'sonar'                => 128000,
-		'sonar-pro'            => 200000,
-		'sonar-reasoning-pro'  => 128000,
+		'sonar'                      => 128000,
+		'sonar-pro'                  => 200000,
+		'sonar-reasoning-pro'        => 128000,
+		'sonar-deep-research'        => 128000,
 	);
 
 	return $model_limits[ $model ] ?? 4096;

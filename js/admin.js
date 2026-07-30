@@ -600,10 +600,35 @@ jQuery(document).ready(function ($) {
     });
   });
 
-  // Dashboard "Generate Post Now" quick action
-  $("#abcc-dash-generate").on("click", function () {
+  // Composer \u2014 expand / collapse the editor.
+  $("#abcc-composer-toggle").on("click", function () {
     var $btn = $(this);
-    var $status = $("#abcc-dash-generate-status");
+    var $fields = $("#abcc-composer-fields");
+    var $summary = $("#abcc-composer-summary");
+    var expanded = $btn.attr("aria-expanded") === "true";
+
+    $btn.attr("aria-expanded", !expanded);
+    $btn.text(expanded ? "change \u25be" : "collapse \u25b4");
+    $fields.prop("hidden", expanded);
+    $summary.toggle(expanded);
+  });
+
+  // Composer \u2014 Generate Now.
+  $("#abcc-composer-generate").on("click", function () {
+    var $btn = $(this);
+    var $status = $("#abcc-composer-status");
+
+    var data = {
+      action: "abcc_create_post",
+      nonce: abccAdmin.buttonNonce,
+    };
+
+    // Only send overrides when the editor is open.
+    if ($("#abcc-composer-toggle").attr("aria-expanded") === "true") {
+      data.source = $("#abcc-composer-source").val();
+      data.model = $("#abcc-composer-model").val();
+      data.post_status = $("input[name='abcc-composer-status']:checked").val();
+    }
 
     $btn.prop("disabled", true);
     abcc.showStatus($status, "Queueing generation job\u2026");
@@ -611,10 +636,7 @@ jQuery(document).ready(function ($) {
     $.ajax({
       url: ajaxurl,
       method: "POST",
-      data: {
-        action: "abcc_create_post",
-        nonce: abccAdmin.buttonNonce,
-      },
+      data: data,
       success: function (response) {
         if (response.success) {
           abcc.showStatus($status, response.data.message);

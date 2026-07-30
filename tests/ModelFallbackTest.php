@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 abcc_test(
-	'Claude model registry contains expected 4.6/4.7 models',
+	'Claude model registry contains expected 4.5/4.6/4.8 models',
 	function () {
 		$registry = abcc_get_provider_registry();
 		$models   = array_keys( $registry['claude']['text_models'] );
@@ -13,8 +13,8 @@ abcc_test(
 			throw new Exception( 'claude-sonnet-4-6 missing from Claude model registry' );
 		}
 
-		if ( ! in_array( 'claude-opus-4-7', $models, true ) ) {
-			throw new Exception( 'claude-opus-4-7 missing from Claude model registry' );
+		if ( ! in_array( 'claude-opus-4-8', $models, true ) ) {
+			throw new Exception( 'claude-opus-4-8 missing from Claude model registry' );
 		}
 
 		if ( ! in_array( 'claude-haiku-4-5-20251001', $models, true ) ) {

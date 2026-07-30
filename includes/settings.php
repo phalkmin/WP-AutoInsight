@@ -56,7 +56,11 @@ function abcc_get_settings_schema() {
 				'sanitize' => 'abcc_sanitize_post_status',
 			),
 			'abcc_selected_post_types'        => array( 'default' => array( 'post' ) ),
-			'prompt_select'                   => array( 'default' => 'gpt-4.1-mini-2025-04-14' ),
+			'prompt_select'                   => array( 'default' => 'gpt-5.4-mini' ),
+			'abcc_composer_last_source'       => array(
+				'default'  => '',
+				'sanitize' => 'abcc_sanitize_composer_source',
+			),
 			'openai_api_key'                  => array( 'default' => '' ),
 			'gemini_api_key'                  => array( 'default' => '' ),
 			'claude_api_key'                  => array( 'default' => '' ),
@@ -78,6 +82,10 @@ function abcc_get_settings_schema() {
 			'abcc_enable_audio_transcription' => array( 'default' => true ),
 			'abcc_supported_audio_formats'    => array( 'default' => array( 'mp3', 'wav', 'm4a', 'webm' ) ),
 			'abcc_transcription_language'     => array( 'default' => 'en' ),
+			'abcc_audio_default_mode'         => array(
+				'default'  => 'transcript_plus_intro',
+				'sanitize' => 'abcc_sanitize_audio_mode',
+			),
 			'abcc_auto_alt_text'              => array( 'default' => true ),
 			'abcc_enable_infographics'        => array( 'default' => true ),
 			'abcc_infographic_provider'       => array( 'default' => 'auto' ),
@@ -103,6 +111,29 @@ function abcc_get_settings_schema() {
  */
 function abcc_sanitize_post_status( $value ) {
 	return 'publish' === $value ? 'publish' : 'draft';
+}
+
+/**
+ * Sanitize a Composer source token.
+ *
+ * Valid shapes are 'group:<int>' (keyword-group index) and 'topic:<int>'
+ * (topic post ID). Anything else — including non-strings — collapses to
+ * the empty string, which the resolver treats as "first group with keywords".
+ *
+ * @since 4.3.0
+ * @param mixed $value Raw value.
+ * @return string '' | 'group:N' | 'topic:N'
+ */
+function abcc_sanitize_composer_source( $value ) {
+	if ( ! is_string( $value ) || '' === $value ) {
+		return '';
+	}
+
+	if ( preg_match( '/^(group|topic):(\d+)$/', $value, $matches ) ) {
+		return $matches[1] . ':' . (int) $matches[2];
+	}
+
+	return '';
 }
 
 /**

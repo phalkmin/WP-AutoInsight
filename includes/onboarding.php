@@ -10,6 +10,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Ordered onboarding step model.
+ *
+ * Numbered steps drive the progress indicator and navigation; 'success' is
+ * the terminal screen (num 0). Provider-first flow as of v4.3.
+ *
+ * @since 4.3.0
+ * @return array
+ */
+function abcc_get_onboarding_steps() {
+	return array(
+		array(
+			'key'     => 'provider',
+			'num'     => 1,
+			'partial' => 'step-providers.php',
+			'title'   => __( 'Connect a provider', 'automated-blog-content-creator' ),
+		),
+		array(
+			'key'     => 'post_status',
+			'num'     => 2,
+			'partial' => 'step-post-status.php',
+			'title'   => __( 'New post default', 'automated-blog-content-creator' ),
+		),
+		array(
+			'key'     => 'first_topic',
+			'num'     => 3,
+			'partial' => 'step-first-topic.php',
+			'title'   => __( 'Create a Topic', 'automated-blog-content-creator' ),
+		),
+		array(
+			'key'     => 'try_audio',
+			'num'     => 4,
+			'partial' => 'step-try-audio.php',
+			'title'   => __( 'Try audio', 'automated-blog-content-creator' ),
+		),
+		array(
+			'key'     => 'success',
+			'num'     => 0,
+			'partial' => 'step-success.php',
+			'title'   => __( 'All set', 'automated-blog-content-creator' ),
+		),
+	);
+}
+
+/**
  * Show the onboarding page for new users.
  *
  * @since 3.1.0
@@ -48,19 +92,26 @@ function abcc_show_onboarding_page() {
 					<div class="abcc-progress-fill" data-step="1"></div>
 				</div>
 				<div class="abcc-step-indicators">
-					<span class="abcc-step active" data-step="1">1</span>
-					<span class="abcc-step" data-step="2">2</span>
-					<span class="abcc-step" data-step="3">3</span>
+					<?php
+					foreach ( abcc_get_onboarding_steps() as $step ) :
+						if ( 0 === $step['num'] ) {
+							continue;
+						}
+						$active = 1 === $step['num'] ? ' active' : '';
+						?>
+						<span class="abcc-step<?php echo esc_attr( $active ); ?>" data-step="<?php echo (int) $step['num']; ?>"><?php echo (int) $step['num']; ?></span>
+					<?php endforeach; ?>
 				</div>
 			</div>
 
-<?php include __DIR__ . '/admin/onboarding/step-goals.php'; // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- Indenting would inject bytes into the rendered HTML. ?>
-
-<?php include __DIR__ . '/admin/onboarding/step-providers.php'; // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- Indenting would inject bytes into the rendered HTML. ?>
-
-<?php include __DIR__ . '/admin/onboarding/step-first-post.php'; // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- Indenting would inject bytes into the rendered HTML. ?>
-
-<?php include __DIR__ . '/admin/onboarding/step-success.php'; // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- Indenting would inject bytes into the rendered HTML. ?>
+	<?php
+	foreach ( abcc_get_onboarding_steps() as $step ) {
+		$partial = __DIR__ . '/admin/onboarding/' . $step['partial'];
+		if ( file_exists( $partial ) ) {
+			include $partial;
+		}
+	}
+	?>
 		</div>
 	</div>
 	<?php
@@ -341,6 +392,89 @@ function abcc_handle_onboarding_skip() {
 add_action( 'wp_ajax_abcc_onboarding_skip', 'abcc_handle_onboarding_skip' );
 
 /**
+ * AJAX: create the user's first Topic during onboarding (optional step).
+ *
+ * @since 4.3.0
+ * @return void
+ */
+function abcc_handle_onboarding_first_topic() {
+	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$title     = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$prompt    = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	$frequency = isset( $_POST['frequency'] ) ? sanitize_key( wp_unslash( $_POST['frequency'] ) ) : 'weekly'; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+	if ( '' === $title || '' === $prompt ) {
+		wp_send_json_error( array( 'message' => __( 'A topic needs a name and a prompt.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$topic_id = abcc_create_topic(
+		array(
+			'title'     => $title,
+			'prompt'    => $prompt,
+			'frequency' => $frequency,
+		)
+	);
+
+	if ( is_wp_error( $topic_id ) ) {
+		wp_send_json_error( array( 'message' => $topic_id->get_error_message() ) );
+		return;
+	}
+
+	wp_send_json_success( array( 'topic_id' => $topic_id ) );
+}
+add_action( 'wp_ajax_abcc_onboarding_first_topic', 'abcc_handle_onboarding_first_topic' );
+
+/**
+ * AJAX: finish onboarding from the final step.
+ *
+ * @since 4.3.0
+ * @return void
+ */
+function abcc_handle_onboarding_complete() {
+	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	update_option( 'abcc_onboarding_completed', true );
+	set_transient( 'abcc_onboarding_just_completed', true, 300 );
+
+	wp_send_json_success();
+}
+add_action( 'wp_ajax_abcc_onboarding_complete', 'abcc_handle_onboarding_complete' );
+
+/**
+ * AJAX: persist the default post-status choice from onboarding.
+ *
+ * @since 4.3.0
+ * @return void
+ */
+function abcc_handle_onboarding_post_status() {
+	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$raw_status = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'draft'; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above via check_ajax_referer.
+	$status     = abcc_sanitize_post_status( $raw_status ); // Enforces draft|publish.
+	abcc_update_setting( 'abcc_default_post_status', $status );
+
+	wp_send_json_success( array( 'status' => abcc_get_setting( 'abcc_default_post_status' ) ) );
+}
+add_action( 'wp_ajax_abcc_onboarding_post_status', 'abcc_handle_onboarding_post_status' );
+
+/**
  * Test OpenAI API connection.
  *
  * @since 3.1.0
@@ -547,7 +681,7 @@ function abcc_onboarding_completed_notice() {
 		delete_transient( 'abcc_onboarding_just_completed' );
 		?>
 		<div class="notice notice-success is-dismissible">
-			<p><?php esc_html_e( '🎉 Welcome to WP-AutoInsight! Your first post has been created and you\'re ready to go!', 'automated-blog-content-creator' ); ?></p>
+			<p><?php esc_html_e( '🎉 Welcome to WP-AutoInsight! You\'re all set up and ready to start creating content.', 'automated-blog-content-creator' ); ?></p>
 		</div>
 		<?php
 	}

@@ -10,6 +10,278 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Sanitize an audio output mode.
+ *
+ * @since 4.3.0
+ * @param mixed $mode Raw mode value.
+ * @return string 'transcript_plus_intro' | 'full_rewrite'
+ */
+function abcc_sanitize_audio_mode( $mode ) {
+	return 'full_rewrite' === $mode ? 'full_rewrite' : 'transcript_plus_intro';
+}
+
+/**
+ * Build the prompt for mode A (transcript + intro): a title and a short
+ * introduction that frames the transcript that follows it.
+ *
+ * Does NOT add format/HTML instructions — those are appended globally via
+ * ABCC_CONTENT_FORMAT_REQUIREMENTS.
+ *
+ * @since 4.3.0
+ * @param string $transcript Raw transcript text.
+ * @param array  $options    Reserved for future use (e.g. language).
+ * @return string
+ */
+function abcc_audio_build_intro_prompt( $transcript, $options = array() ) {
+	return sprintf(
+		'You are preparing a blog post built around an audio transcript. ' .
+		'Write a compelling post title on the first line, then a short (2-3 sentence) introduction ' .
+		'that sets up the transcript for the reader. Do not summarize the whole transcript and do not ' .
+		"repeat it — the full transcript will appear after your introduction.\n\nTRANSCRIPT:\n%s",
+		$transcript
+	);
+}
+
+/**
+ * Build the prompt for mode B (full rewrite): turn a rough transcript into a
+ * complete, well-structured blog post. Permissive by design — voice memos
+ * and rough recordings benefit from freedom to restructure.
+ *
+ * Does NOT add format/HTML instructions — those are appended globally via
+ * ABCC_CONTENT_FORMAT_REQUIREMENTS.
+ *
+ * @since 4.3.0
+ * @param string $transcript Raw transcript text.
+ * @param array  $options    Reserved for future use (e.g. language).
+ * @return string
+ */
+function abcc_audio_build_rewrite_prompt( $transcript, $options = array() ) {
+	return sprintf(
+		'You are turning a rough audio transcript into a polished blog post. ' .
+		'Write a post title on the first line, then the full article. You are free to restructure, ' .
+		"reorder, expand, add headings, and clean up filler — keep the speaker's meaning and key points " .
+		"but make it read as a written article, not a transcript.\n\nTRANSCRIPT (source material):\n%s",
+		$transcript
+	);
+}
+
+/**
+ * Orchestrate post creation from an audio file in one of two modes.
+ *
+ * Mode A (transcript_plus_intro): Generates a title and short intro via AI, then
+ * appends a Transcript heading and the raw transcript as a structured Gutenberg post.
+ *
+ * Mode B (full_rewrite): Generates a fully rewritten blog post from the transcript.
+ * If generation fails or returns empty content, falls back silently to Mode A and
+ * records the failure via the _abcc_audio_rewrite_failed post meta flag.
+ *
+ * @since 4.3.0
+ * @param string $audio_path Server path to the audio file.
+ * @param string $mode       'transcript_plus_intro' | 'full_rewrite'.
+ * @param array  $options    Optional. Keys: attachment_id (int), title_fallback (string).
+ * @return int|WP_Error Post ID on success, WP_Error on failure.
+ */
+function abcc_generate_post_from_audio( $audio_path, $mode, $options = array() ) {
+	// Transcription is OpenAI Whisper only for now.
+	$provider = 'openai';
+
+	if ( ! abcc_provider_supports_audio_transcription( $provider ) ) {
+		return new WP_Error(
+			'abcc_audio_unsupported',
+			__( 'The selected provider does not support audio transcription. Use OpenAI for audio.', 'automated-blog-content-creator' )
+		);
+	}
+
+	$api_key = abcc_get_provider_api_key( $provider );
+	if ( empty( $api_key ) ) {
+		return new WP_Error(
+			'abcc_audio_no_key',
+			__( 'No OpenAI API key configured for transcription.', 'automated-blog-content-creator' )
+		);
+	}
+
+	// Transcribe. Any failure → WP_Error, no post created.
+	try {
+		$transcript = abcc_transcribe_audio( $api_key, $audio_path );
+	} catch ( Exception $e ) {
+		return new WP_Error( 'abcc_audio_transcribe_failed', $e->getMessage() );
+	}
+
+	if ( ! is_string( $transcript ) || '' === trim( $transcript ) ) {
+		return new WP_Error(
+			'abcc_audio_transcribe_failed',
+			__( 'Transcription returned no text.', 'automated-blog-content-creator' )
+		);
+	}
+
+	$mode           = abcc_sanitize_audio_mode( $mode );
+	$model          = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$char_limit     = (int) abcc_get_setting( 'openai_char_limit', 200 );
+	$rewrite_failed = false;
+	$title          = '';
+	$blocks         = array();
+
+	// Content generation may use a different provider than transcription
+	// (transcription is OpenAI-only; the text model is the user's selection).
+	// Resolve the key for the text model's provider so a Claude/Gemini model
+	// is not called with the OpenAI key.
+	$gen_key = abcc_check_api_key( $model );
+	if ( empty( $gen_key ) ) {
+		return new WP_Error(
+			'abcc_audio_no_gen_key',
+			__( 'No API key configured for the selected content model. Add one under Connections.', 'automated-blog-content-creator' )
+		);
+	}
+
+	if ( 'full_rewrite' === $mode ) {
+		$prompt = abcc_audio_build_rewrite_prompt( $transcript, $options );
+		$raw    = abcc_generate_content( $gen_key, $prompt, $model, $char_limit );
+
+		// Filter out blank lines; treat false or all-empty result as failure.
+		$lines = is_array( $raw ) ? array_values(
+			array_filter(
+				$raw,
+				function ( $line ) {
+					return '' !== trim( (string) $line );
+				}
+			)
+		) : array();
+
+		if ( ! empty( $lines ) ) {
+			$title  = abcc_audio_clean_title( array_shift( $lines ) );
+			$blocks = abcc_create_blocks( $lines );
+		} else {
+			// Generation failed or returned empty content — fall back to Mode A silently.
+			$rewrite_failed = true;
+			$mode           = 'transcript_plus_intro';
+		}
+	}
+
+	if ( 'transcript_plus_intro' === $mode ) {
+		$prompt = abcc_audio_build_intro_prompt( $transcript, $options );
+		$lines  = abcc_generate_content( $gen_key, $prompt, $model, $char_limit );
+
+		if ( ! empty( $lines ) ) {
+			$title = abcc_audio_clean_title( array_shift( $lines ) );
+		}
+
+		$intro_lines = ! empty( $lines ) ? $lines : array();
+
+		// Build: intro paragraph(s) + Transcript heading + transcript body
+		// (split into paragraphs so it isn't one wall-of-text block).
+		$content_lines = array_merge(
+			$intro_lines,
+			array( '<h2>' . __( 'Transcript', 'automated-blog-content-creator' ) . '</h2>' ),
+			abcc_audio_split_transcript_paragraphs( $transcript )
+		);
+		$blocks        = abcc_create_blocks( $content_lines );
+	}
+
+	if ( '' === $title ) {
+		$title = ! empty( $options['title_fallback'] )
+			? $options['title_fallback']
+			: __( 'Untitled audio post', 'automated-blog-content-creator' );
+	}
+
+	// Prepend an audio player block when we know the source attachment, mirroring
+	// the legacy transcribe-and-create path so audio posts remain playable.
+	$post_content = abcc_gutenberg_blocks( $blocks );
+	if ( ! empty( $options['attachment_id'] ) ) {
+		$audio_url = wp_get_attachment_url( (int) $options['attachment_id'] );
+		if ( $audio_url ) {
+			$audio_block  = sprintf(
+				'<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
+				(int) $options['attachment_id'],
+				esc_url( $audio_url )
+			);
+			$post_content = $audio_block . "\n\n" . $post_content;
+		}
+	}
+
+	$post_status = abcc_resolve_post_status( array( 'source' => 'audio' ) );
+
+	$post_id = wp_insert_post(
+		array(
+			'post_title'   => sanitize_text_field( $title ),
+			'post_content' => wp_kses_post( $post_content ),
+			'post_status'  => $post_status,
+			'post_type'    => 'post',
+			'meta_input'   => array(
+				'_abcc_generated'           => '1',
+				'_abcc_model'               => $model,
+				'_abcc_transcript_audio'    => isset( $options['attachment_id'] ) ? (int) $options['attachment_id'] : 0,
+				'_abcc_original_transcript' => sanitize_textarea_field( $transcript ),
+				'_abcc_audio_mode'          => $mode,
+			),
+		),
+		true
+	);
+
+	if ( is_wp_error( $post_id ) ) {
+		return $post_id;
+	}
+
+	if ( $rewrite_failed ) {
+		update_post_meta( $post_id, '_abcc_audio_rewrite_failed', '1' );
+	}
+
+	return $post_id;
+}
+
+/**
+ * Clean a model-generated first line into a usable post title.
+ *
+ * Delegates to the shared title cleaner so audio titles get the same
+ * treatment (HTML, list markers, markdown, quotes) as the rest of the plugin.
+ *
+ * @since 4.3.0
+ * @param string $raw Raw first line from the generated content.
+ * @return string
+ */
+function abcc_audio_clean_title( $raw ) {
+	return abcc_clean_title_line( $raw );
+}
+
+/**
+ * Split a raw transcript into paragraph lines for block creation.
+ *
+ * Whisper returns continuous prose; without splitting, the whole transcript
+ * becomes a single paragraph block. Split on blank lines first, then on single
+ * newlines, falling back to the whole string when there are no breaks.
+ *
+ * @since 4.3.0
+ * @param string $transcript Raw transcript text.
+ * @return array Non-empty paragraph strings.
+ */
+function abcc_audio_split_transcript_paragraphs( $transcript ) {
+	$transcript = (string) $transcript;
+
+	// Prefer blank-line paragraph breaks; fall back to single newlines.
+	$parts = preg_split( '/\n\s*\n/', $transcript );
+	if ( count( $parts ) < 2 ) {
+		$parts = preg_split( '/\n/', $transcript );
+	}
+
+	$paragraphs = array();
+	foreach ( (array) $parts as $part ) {
+		$part = trim( $part );
+		if ( '' !== $part ) {
+			$paragraphs[] = $part;
+		}
+	}
+
+	// Always return at least the original (trimmed) text.
+	if ( empty( $paragraphs ) ) {
+		$trimmed = trim( $transcript );
+		if ( '' !== $trimmed ) {
+			$paragraphs[] = $trimmed;
+		}
+	}
+
+	return $paragraphs;
+}
+
+/**
  * Add transcribe button to audio attachment pages.
  *
  * @since 2.1.0
@@ -38,12 +310,25 @@ function abcc_add_transcribe_button_to_media() {
 	if ( ! in_array( strtolower( $file_extension ), $supported_formats, true ) ) {
 		return;
 	}
+	$default_mode    = abcc_get_setting( 'abcc_audio_default_mode', 'transcript_plus_intro' );
+	$attached_file   = get_attached_file( $post->ID );
+	$file_size_bytes = ( $attached_file && file_exists( $attached_file ) ) ? filesize( $attached_file ) : 0;
 	?>
 	<div class="misc-pub-section">
 		<label><?php esc_html_e( 'AI Transcription:', 'automated-blog-content-creator' ); ?></label>
+		<fieldset class="abcc-audio-mode" style="margin:8px 0;">
+			<label style="display:block;">
+				<input type="radio" name="abcc_audio_mode" value="transcript_plus_intro" <?php checked( $default_mode, 'transcript_plus_intro' ); ?>>
+				<?php esc_html_e( 'Transcript + AI intro', 'automated-blog-content-creator' ); ?>
+			</label>
+			<label style="display:block;">
+				<input type="radio" name="abcc_audio_mode" value="full_rewrite" <?php checked( $default_mode, 'full_rewrite' ); ?>>
+				<?php esc_html_e( 'Full rewrite', 'automated-blog-content-creator' ); ?>
+			</label>
+		</fieldset>
 		<div style="margin-top: 8px;">
-			<button type="button" class="button" id="abcc-transcribe-audio" data-id="<?php echo esc_attr( $post->ID ); ?>">
-				<?php esc_html_e( 'Transcribe & Create Post', 'automated-blog-content-creator' ); ?>
+			<button type="button" class="button button-primary abcc-audio-create-post" data-attachment-id="<?php echo esc_attr( $post->ID ); ?>" data-file-size="<?php echo esc_attr( $file_size_bytes ); ?>">
+				<?php esc_html_e( 'Create Post from Audio', 'automated-blog-content-creator' ); ?>
 			</button>
 			<button type="button" class="button" id="abcc-transcribe-only" data-id="<?php echo esc_attr( $post->ID ); ?>">
 				<?php esc_html_e( 'Transcribe Only', 'automated-blog-content-creator' ); ?>
@@ -433,3 +718,50 @@ function abcc_enqueue_audio_scripts( $hook ) {
 	);
 }
 add_action( 'admin_enqueue_scripts', 'abcc_enqueue_audio_scripts' );
+
+/**
+ * AJAX: generate a post from an uploaded audio attachment in the chosen mode.
+ *
+ * @since 4.3.0
+ * @return void
+ */
+function abcc_handle_audio_generate_post() {
+	check_ajax_referer( 'abcc_admin_buttons', 'nonce' );
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$attachment_id = isset( $_POST['attachment_id'] ) ? absint( $_POST['attachment_id'] ) : 0;
+	$mode          = isset( $_POST['mode'] )
+		? abcc_sanitize_audio_mode( sanitize_text_field( wp_unslash( $_POST['mode'] ) ) )
+		: abcc_get_setting( 'abcc_audio_default_mode', 'transcript_plus_intro' );
+
+	if ( ! $attachment_id ) {
+		wp_send_json_error( array( 'message' => __( 'Invalid audio attachment.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$path = get_attached_file( $attachment_id );
+	if ( ! $path ) {
+		wp_send_json_error( array( 'message' => __( 'Could not locate the audio file.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$result = abcc_generate_post_from_audio( $path, $mode, array( 'attachment_id' => $attachment_id ) );
+
+	if ( is_wp_error( $result ) ) {
+		wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		return;
+	}
+
+	wp_send_json_success(
+		array(
+			'message'  => esc_html__( 'Post created from audio.', 'automated-blog-content-creator' ),
+			'post_id'  => $result,
+			'edit_url' => get_edit_post_link( $result, 'raw' ),
+		)
+	);
+}
+add_action( 'wp_ajax_abcc_audio_generate_post', 'abcc_handle_audio_generate_post' );

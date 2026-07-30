@@ -1,12 +1,21 @@
 /**
  * Onboarding JavaScript for WP-AutoInsight
  *
+ * Four-step provider-first flow (v4.3):
+ *   Step 1 – Connect a provider (step-providers.php, old IDs retained)
+ *   Step 2 – Post status         (step-post-status.php, generic data attrs)
+ *   Step 3 – First Topic          (step-first-topic.php, generic data attrs)
+ *   Step 4 – Try audio / Finish   (step-try-audio.php,  generic data attrs)
+ *
  * @package WP-AutoInsight
  */
 jQuery(document).ready(function ($) {
-  let currentStep = 1;
-  let selectedGoal = null;
-  let connectedProvider = null;
+  var currentStep = 1;
+  var connectedProvider = null;
+
+  // Collect numbered steps (exclude success screen).
+  var $steps = $('.abcc-onboarding-step').not('.abcc-step-success');
+  var totalSteps = $steps.length; // 4 in normal flow
 
   // Initialize onboarding
   initOnboarding();
@@ -14,54 +23,68 @@ jQuery(document).ready(function ($) {
   function initOnboarding() {
     updateProgressBar();
     bindEvents();
+    // Check WP 7.0 Connectors on load (providers is step 1).
+    abccCheckWP70Connectors();
+    // Auto-test any wp-config keys visible on step 1.
+    setTimeout(function () {
+      var $wpConfigButtons = $('.abcc-test-api[data-wp-config="true"]');
+      if ($wpConfigButtons.length) {
+        $wpConfigButtons.first().trigger('click');
+      }
+    }, 300);
   }
+
+  // -------------------------------------------------------------------------
+  // Event binding
+  // -------------------------------------------------------------------------
 
   function bindEvents() {
 
     // Help toggle functionality
-    $('.abcc-help-toggle').on('click', function(e) {
-        e.preventDefault();
-        
-        const $button = $(this);
-        const provider = $button.data('provider');
-        const $content = $(`.abcc-help-content[data-provider="${provider}"]`);
-        const $arrow = $button.find('.abcc-help-arrow');
-        
-        // Toggle visibility
-        if ($content.is(':visible')) {
-            $content.slideUp(200);
-            $arrow.text('▼');
-            $button.removeClass('active');
-        } else {
-            // Close other open help sections
-            $('.abcc-help-content').slideUp(200);
-            $('.abcc-help-toggle .abcc-help-arrow').text('▼');
-            $('.abcc-help-toggle').removeClass('active');
-            
-            // Open this one
-            $content.slideDown(200);
-            $arrow.text('▲');
-            $button.addClass('active');
-        }
-    });
-    
-    // Goal selection
-    $(".abcc-goal-card").on("click", selectGoal);
+    $('.abcc-help-toggle').on('click', function (e) {
+      e.preventDefault();
 
-    // Step navigation
-    $("#abcc-next-step-1").on("click", () => nextStep(1));
-    $("#abcc-next-step-2").on("click", () => nextStep(2));
-    $("#abcc-prev-step-2").on("click", () => prevStep(2));
-    $("#abcc-prev-step-3").on("click", () => prevStep(3));
+      var $button = $(this);
+      var provider = $button.data('provider');
+      var $content = $('.abcc-help-content[data-provider="' + provider + '"]');
+      var $arrow = $button.find('.abcc-help-arrow');
+
+      if ($content.is(':visible')) {
+        $content.slideUp(200);
+        $arrow.text('▼');
+        $button.removeClass('active');
+      } else {
+        // Close other open help sections
+        $('.abcc-help-content').slideUp(200);
+        $('.abcc-help-toggle .abcc-help-arrow').text('▼');
+        $('.abcc-help-toggle').removeClass('active');
+
+        $content.slideDown(200);
+        $arrow.text('▲');
+        $button.addClass('active');
+      }
+    });
+
+    // Generic next/prev navigation (steps 2-4 use data-goto).
+    $(document).on('click', '.abcc-next-step', handleNextStep);
+    $(document).on('click', '.abcc-prev-step', handlePrevStep);
+
+    // Step 1 (providers) still uses the old hard-coded IDs from step-providers.php.
+    // There is no Back button on step 1 (#abcc-prev-step-2 exists in the partial
+    // but is the first step so we leave it in place — it will be a no-op since
+    // currentStep can't go below 1).
+    $(document).on('click', '#abcc-prev-step-2', function () {
+      // No-op: providers is step 1, cannot go back.
+    });
 
     // API testing
     $(".abcc-test-api").on("click", testApiConnection);
 
-    // First post generation
-    $("#abcc-generate-first-post").on("click", generateFirstPost);
+    // Finish button (step 4)
+    $(document).on('click', '#abcc-onboarding-finish', handleFinish);
 
-    // Skip onboarding
-    $("#abcc-skip-onboarding").on("click", skipOnboarding);
+    // Skip onboarding (delegated — catches all step skip buttons)
+    $(document).on('click', '.abcc-skip-onboarding', handleSkip);
 
     // Provider selection (visual feedback)
     $(".abcc-api-provider").on("click", function () {
@@ -71,25 +94,26 @@ jQuery(document).ready(function ($) {
 
     // Auto-test when API key is pasted/typed
     $('input[id$="-api-key"]').on("paste input", function () {
-      const $input = $(this);
-      const provider = $input.attr("id").replace("-api-key", "");
+      var $input = $(this);
+      var provider = $input.attr("id").replace("-api-key", "");
 
-      // Clear previous status
-      $(`.${provider}-status`).removeClass("success error").empty();
+      $('.' + provider + '-status').removeClass("success error").empty();
 
-      // Auto-test after short delay
       clearTimeout($input.data("autotest-timeout"));
       $input.data(
         "autotest-timeout",
-        setTimeout(() => {
+        setTimeout(function () {
           if ($input.val().length > 10) {
-            // Reasonable minimum length
-            $(`.abcc-test-api[data-provider="${provider}"]`).trigger("click");
+            $('.abcc-test-api[data-provider="' + provider + '"]').trigger("click");
           }
         }, 1000)
       );
     });
   }
+
+  // -------------------------------------------------------------------------
+  // WP 7.0 Connectors
+  // -------------------------------------------------------------------------
 
   function abccCheckWP70Connectors() {
     $.ajax({
@@ -104,12 +128,14 @@ jQuery(document).ready(function ($) {
           return;
         }
 
-        const data = response.data;
+        var data = response.data;
         $("#abcc-open-connectors").attr("href", data.connectors_url);
 
         if (data.has_connectors && data.has_keys) {
-          const providerNames = data.providers
-            .map((provider) => provider.charAt(0).toUpperCase() + provider.slice(1))
+          var providerNames = data.providers
+            .map(function (provider) {
+              return provider.charAt(0).toUpperCase() + provider.slice(1);
+            })
             .join(", ");
 
           $("#abcc-wp70-connected-providers").text(
@@ -125,10 +151,11 @@ jQuery(document).ready(function ($) {
     });
   }
 
-  // Handle Connectors button click
+  // Handle Connectors "Use existing connection" button
   $(document).on("click", "#abcc-wp70-use-connectors", function (event) {
     event.preventDefault();
     connectedProvider = "wp-connectors";
+    // Enable step 1's Continue button (old hard-coded ID from step-providers.php).
     $("#abcc-next-step-2").prop("disabled", false);
     $(this).text("✓ Connectors Active").prop("disabled", true);
     $(".abcc-api-providers").slideUp();
@@ -139,244 +166,158 @@ jQuery(document).ready(function ($) {
     $(".abcc-api-providers").slideDown();
   });
 
-  function selectGoal() {
-    const $card = $(this);
-    const goal = $card.data("goal");
+  // -------------------------------------------------------------------------
+  // Navigation handlers
+  // -------------------------------------------------------------------------
 
-    // Visual feedback
-    $(".abcc-goal-card").removeClass("selected");
-    $card.addClass("selected");
+  function handleNextStep(e) {
+    e.preventDefault();
+    var $btn = $(this);
+    var targetStep = parseInt($btn.data('goto'), 10);
+    var fromStep = parseInt($btn.data('step'), 10) || currentStep;
 
-    selectedGoal = goal;
-    $("#abcc-next-step-1").prop("disabled", false);
+    if (fromStep === 2) {
+      // Step 2: save post_status before advancing.
+      savePostStatus(targetStep);
+    } else if (fromStep === 3) {
+      // Step 3: optionally create first topic, then advance.
+      maybeCreateFirstTopic(targetStep);
+    } else {
+      goToStep(targetStep);
+    }
+  }
 
-    // Save goal via AJAX
+  function handlePrevStep(e) {
+    e.preventDefault();
+    var targetStep = parseInt($(this).data('goto'), 10);
+    goToStep(targetStep);
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 1 — provider Continue (old ID #abcc-next-step-2, no AJAX needed)
+  // Binding is on the DOM element; enabling is done by testApiConnection success.
+  // The old click binding on #abcc-next-step-2 was removed — this delegated
+  // handler catches it generically because #abcc-next-step-2 does NOT carry
+  // the .abcc-next-step class, so we wire it explicitly here.
+  // -------------------------------------------------------------------------
+
+  $(document).on('click', '#abcc-next-step-2', function (e) {
+    e.preventDefault();
+    if (!$(this).prop('disabled')) {
+      goToStep(2);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Step 2 AJAX: post status
+  // -------------------------------------------------------------------------
+
+  function savePostStatus(targetStep) {
+    var status = $('input[name="abcc_onboarding_status"]:checked').val() || 'draft';
+
     $.ajax({
       url: abccOnboarding.ajaxurl,
-      type: "POST",
+      type: 'POST',
       data: {
-        action: "abcc_onboarding_goal",
-        goal: goal,
+        action: 'abcc_onboarding_post_status',
+        status: status,
         nonce: abccOnboarding.nonce,
       },
       success: function (response) {
         if (response.success) {
-          console.log("Goal configured:", goal);
-          // Add success animation
-          $card.addClass("goal-saved");
-          setTimeout(() => $card.removeClass("goal-saved"), 1000);
+          goToStep(targetStep);
+        } else {
+          showStepError(response.data && response.data.message
+            ? response.data.message
+            : 'Could not save selection. Please try again.');
         }
       },
       error: function () {
-        console.error("Failed to save goal");
+        showStepError('Network error. Please try again.');
       },
     });
   }
 
-function testApiConnection() {
-  const $button = $(this);
-  const provider = $button.data("provider");
-  const isWpConfig = $button.data("wp-config") === true;
-  const $input = $(`#${provider}-api-key`);
-  const $status = $(`.${provider}-status`);
-  
-  // Get API key - either from input or indicate it's from wp-config
-  let apiKey = "";
-  if (isWpConfig) {
-    apiKey = "wp-config"; // Flag to indicate wp-config usage
-  } else {
-    apiKey = $input.val() ? $input.val().trim() : "";
-    if (!apiKey) {
-      showError($status, "Please enter an API key");
+  // -------------------------------------------------------------------------
+  // Step 3 AJAX: first topic (optional)
+  // -------------------------------------------------------------------------
+
+  function maybeCreateFirstTopic(targetStep) {
+    var title  = $('#abcc-first-topic-title').val().trim();
+    var prompt = $('#abcc-first-topic-prompt').val().trim();
+
+    if (!title && !prompt) {
+      // Nothing entered — skip without POSTing.
+      goToStep(targetStep);
       return;
     }
-  }
 
-  // Update UI
-  $button.prop("disabled", true).text(abccOnboarding.i18n.testing);
-  abcc.showStatus($status, "Testing...");
-
-  $.ajax({
-    url: abccOnboarding.ajaxurl,
-    type: "POST",
-    data: {
-      action: "abcc_onboarding_test_api",
-      provider: provider,
-      api_key: apiKey,
-      wp_config: isWpConfig,
-      nonce: abccOnboarding.nonce,
-    },
-    success: function (response) {
-      if (response.success) {
-        showSuccess($status, abccOnboarding.i18n.success);
-        connectedProvider = provider;
-        $("#abcc-next-step-2").prop("disabled", false);
-
-        // Add visual feedback to provider card
-        $(`.abcc-api-provider[data-provider="${provider}"]`).addClass(
-          "connected"
-        );
-      } else {
-        showError(
-          $status,
-          response.data.message || abccOnboarding.i18n.error
-        );
-      }
-    },
-    error: function () {
-      showError($status, abccOnboarding.i18n.error);
-    },
-    complete: function () {
-      $button.prop("disabled", false);
-      if (isWpConfig) {
-        $button.text("Test Connection");
-      } else {
-        $button.text("Test");
-      }
-    },
-  });
-}
-
-  function generateFirstPost() {
-    const $button = $("#abcc-generate-first-post");
-    const $status = $("#abcc-generation-status");
-    const $text = $("#abcc-generation-text");
-
-    // Show loading state
-    $button.prop("disabled", true);
-    $status.show();
-    $text.text(abccOnboarding.i18n.generating);
-
-    // Simulate progress updates
-    const progressMessages = [
-      "Connecting to AI service...",
-      "Generating content...",
-      "Creating SEO metadata...",
-      "Generating featured image...",
-      "Finalizing post...",
-    ];
-
-    let messageIndex = 0;
-    const progressInterval = setInterval(() => {
-      if (messageIndex < progressMessages.length) {
-        $text.text(progressMessages[messageIndex]);
-        messageIndex++;
-      }
-    }, 2000);
+    var frequency = $('#abcc-first-topic-frequency').val() || 'weekly';
+    var $btn = $('.abcc-next-step[data-step="3"]');
+    $btn.prop('disabled', true);
 
     $.ajax({
       url: abccOnboarding.ajaxurl,
-      type: "POST",
+      type: 'POST',
       data: {
-        action: "abcc_onboarding_first_post",
+        action: 'abcc_onboarding_first_topic',
+        title: title,
+        prompt: prompt,
+        frequency: frequency,
         nonce: abccOnboarding.nonce,
       },
-      timeout: 120000, // 2 minute timeout
       success: function (response) {
-        clearInterval(progressInterval);
-
         if (response.success) {
-          $text.text("Post created successfully! 🎉");
-          setTimeout(() => {
-            showSuccessStep(response.data.edit_url);
-          }, 1500);
+          goToStep(targetStep);
         } else {
-          $text.text(
-            "Error: " + (response.data.message || "Failed to create post")
-          );
-          $button.prop("disabled", false);
-          setTimeout(() => $status.hide(), 3000);
+          $btn.prop('disabled', false);
+          showStepError(response.data && response.data.message
+            ? response.data.message
+            : 'Could not create topic. Please try again.');
         }
       },
-      error: function (xhr, status, error) {
-        clearInterval(progressInterval);
-        let errorMsg = "Network error occurred";
-        if (status === "timeout") {
-          errorMsg = "Request timed out. Please try again.";
-        }
-        $text.text("Error: " + errorMsg);
-        $button.prop("disabled", false);
-        setTimeout(() => $status.hide(), 3000);
+      error: function () {
+        $btn.prop('disabled', false);
+        showStepError('Network error. Please try again.');
       },
     });
   }
 
-  function showSuccessStep(editUrl) {
-    // Hide all steps and show success
-    $(".abcc-onboarding-step").removeClass("active").hide();
-    $(".abcc-step-success").show();
+  // -------------------------------------------------------------------------
+  // Step 4: Finish
+  // -------------------------------------------------------------------------
 
-    // Update progress to 100%
-    $(".abcc-progress-fill").css("width", "100%");
-    $(".abcc-step").removeClass("active").addClass("completed");
+  function handleFinish(e) {
+    e.preventDefault();
+    var $btn = $('#abcc-onboarding-finish');
+    $btn.prop('disabled', true).text('Finishing...');
 
-    // Set up the edit post link
-    $("#abcc-view-first-post").attr("href", editUrl);
-
-    // Add celebration animation
-    setTimeout(() => {
-      $(".abcc-success-content").addClass("celebrate");
-    }, 500);
-  }
-
-  function nextStep(step) {
-    if (step === 1 && !selectedGoal) {
-      alert("Please select a goal first");
-      return;
-    }
-    if (step === 2 && !connectedProvider) {
-      alert("Please connect an AI provider first");
-      return;
-    }
-
-    currentStep = step + 1;
-    updateStepDisplay();
-    updateProgressBar();
-  }
-
-  function prevStep(step) {
-    currentStep = step - 1;
-    updateStepDisplay();
-    updateProgressBar();
-  }
-
-  function updateStepDisplay() {
-    $(".abcc-onboarding-step").removeClass("active");
-    $(`.abcc-step-${currentStep}`).addClass("active");
-  }
-
-  function updateProgressBar() {
-    const progress = ((currentStep - 1) / 2) * 100;
-    $(".abcc-progress-fill").css("width", progress + "%");
-
-    // Update step indicators
-    $(".abcc-step").each(function () {
-      const stepNum = parseInt($(this).data("step"));
-      if (stepNum < currentStep) {
-        $(this).removeClass("active").addClass("completed");
-      } else if (stepNum === currentStep) {
-        $(this).addClass("active").removeClass("completed");
-      } else {
-        $(this).removeClass("active completed");
-      }
+    $.ajax({
+      url: abccOnboarding.ajaxurl,
+      type: 'POST',
+      data: {
+        action: 'abcc_onboarding_complete',
+        nonce: abccOnboarding.nonce,
+      },
+      success: function (response) {
+        if (response.success) {
+          showSuccessStep();
+        } else {
+          $btn.prop('disabled', false).text('Finish setup');
+        }
+      },
+      error: function () {
+        $btn.prop('disabled', false).text('Finish setup');
+      },
     });
   }
 
-  function showSuccess($element, message) {
-    $element
-      .removeClass("error")
-      .addClass("success")
-      .html('<span class="dashicons dashicons-yes-alt"></span> ' + message);
-  }
+  // -------------------------------------------------------------------------
+  // Skip onboarding
+  // -------------------------------------------------------------------------
 
-  function showError($element, message) {
-    $element
-      .removeClass("success")
-      .addClass("error")
-      .html('<span class="dashicons dashicons-warning"></span> ' + message);
-  }
-
-  function skipOnboarding() {
+  function handleSkip(e) {
+    e.preventDefault();
     if (
       !confirm(
         "Are you sure you want to skip the setup? You can always configure WP-AutoInsight later in the settings."
@@ -400,19 +341,181 @@ function testApiConnection() {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // API connection test (step 1)
+  // -------------------------------------------------------------------------
+
+  function testApiConnection() {
+    var $button   = $(this);
+    var provider  = $button.data("provider");
+    var isWpConfig = $button.data("wp-config") === true;
+    var $input    = $("#" + provider + "-api-key");
+    var $status   = $("." + provider + "-status");
+
+    var apiKey = "";
+    if (isWpConfig) {
+      apiKey = "wp-config";
+    } else {
+      apiKey = $input.val() ? $input.val().trim() : "";
+      if (!apiKey) {
+        showError($status, "Please enter an API key");
+        return;
+      }
+    }
+
+    $button.prop("disabled", true).text(abccOnboarding.i18n.testing);
+    abcc.showStatus($status, "Testing...");
+
+    $.ajax({
+      url: abccOnboarding.ajaxurl,
+      type: "POST",
+      data: {
+        action: "abcc_onboarding_test_api",
+        provider: provider,
+        api_key: apiKey,
+        wp_config: isWpConfig,
+        nonce: abccOnboarding.nonce,
+      },
+      success: function (response) {
+        if (response.success) {
+          showSuccess($status, abccOnboarding.i18n.success);
+          connectedProvider = provider;
+          // Enable step 1's Continue button (old hard-coded ID from step-providers.php).
+          $("#abcc-next-step-2").prop("disabled", false);
+
+          $(".abcc-api-provider[data-provider=\"" + provider + "\"]").addClass("connected");
+        } else {
+          showError(
+            $status,
+            response.data.message || abccOnboarding.i18n.error
+          );
+        }
+      },
+      error: function () {
+        showError($status, abccOnboarding.i18n.error);
+      },
+      complete: function () {
+        $button.prop("disabled", false);
+        if (isWpConfig) {
+          $button.text("Test Connection");
+        } else {
+          $button.text("Test");
+        }
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Step display & progress
+  // -------------------------------------------------------------------------
+
+  function goToStep(n) {
+    currentStep = n;
+    updateStepDisplay();
+    updateProgressBar();
+    smoothScrollToTop();
+  }
+
+  function updateStepDisplay() {
+    // Show only the nth numbered step (1-indexed); hide all others including success.
+    $steps.hide().eq(currentStep - 1).show();
+  }
+
+  function updateProgressBar() {
+    var progress = totalSteps > 1 ? ((currentStep - 1) / (totalSteps - 1)) * 100 : 0;
+    $(".abcc-progress-fill").css("width", progress + "%");
+
+    $(".abcc-step-indicators .abcc-step").each(function () {
+      var stepNum = parseInt($(this).data("step"), 10);
+      if (stepNum < currentStep) {
+        $(this).removeClass("active").addClass("completed");
+      } else if (stepNum === currentStep) {
+        $(this).addClass("active").removeClass("completed");
+      } else {
+        $(this).removeClass("active completed");
+      }
+    });
+  }
+
+  function showSuccessStep() {
+    $steps.hide();
+    $(".abcc-step-success").show();
+
+    $(".abcc-progress-fill").css("width", "100%");
+    $(".abcc-step-indicators .abcc-step").removeClass("active").addClass("completed");
+
+    removeUnloadListener();
+
+    setTimeout(function () {
+      $(".abcc-success-content").addClass("celebrate");
+    }, 500);
+
+    // Redirect to dashboard after a moment
+    setTimeout(function () {
+      window.location.href = "?page=automated-blog-content-creator-post";
+    }, 3000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Utility
+  // -------------------------------------------------------------------------
+
+  function showSuccess($element, message) {
+    $element
+      .removeClass("error")
+      .addClass("success")
+      .html('<span class="dashicons dashicons-yes-alt"></span> ' + message);
+    $element.closest(".abcc-api-input").trigger("success");
+  }
+
+  function showError($element, message) {
+    $element
+      .removeClass("success")
+      .addClass("error")
+      .html('<span class="dashicons dashicons-warning"></span> ' + message);
+  }
+
+  function showStepError(message) {
+    // Find or create an inline error area near the current step's actions.
+    var $step = $steps.eq(currentStep - 1);
+    var $err = $step.find('.abcc-step-error');
+    if (!$err.length) {
+      $err = $('<p class="abcc-step-error" style="color:#d63638;margin-top:8px;"></p>');
+      $step.find('.abcc-step-actions').before($err);
+    }
+    $err.text(message).show();
+    setTimeout(function () { $err.fadeOut(); }, 5000);
+  }
+
+  function smoothScrollToTop() {
+    $(".abcc-onboarding-container").animate({ scrollTop: 0 }, 300);
+  }
+
+  // -------------------------------------------------------------------------
   // Keyboard navigation
+  // -------------------------------------------------------------------------
+
   $(document).on("keydown", function (e) {
-    if (e.key === "Enter" && currentStep <= 3) {
-      const $nextButton = $(`#abcc-next-step-${currentStep}`);
-      if ($nextButton.length && !$nextButton.prop("disabled")) {
-        $nextButton.click();
+    if (e.key !== "Enter") { return; }
+    if (currentStep === 1) {
+      var $btn = $("#abcc-next-step-2");
+      if ($btn.length && !$btn.prop("disabled")) {
+        $btn.trigger("click");
+      }
+    } else {
+      var $btn = $steps.eq(currentStep - 1).find(".abcc-next-step");
+      if ($btn.length && !$btn.prop("disabled")) {
+        $btn.trigger("click");
       }
     }
   });
 
-  // Auto-resize API key inputs based on content
+  // -------------------------------------------------------------------------
+  // Auto-resize API key inputs
+  // -------------------------------------------------------------------------
+
   $('input[id$="-api-key"]').on("input", function () {
-    const value = $(this).val();
+    var value = $(this).val();
     if (value.length > 20) {
       $(this).addClass("long-key");
     } else {
@@ -420,54 +523,17 @@ function testApiConnection() {
     }
   });
 
-  // Add helpful tooltips
-  $(".abcc-goal-card").hover(
-    function () {
-      $(this).find(".abcc-goal-features").slideDown(200);
-    },
-    function () {
-      $(this).find(".abcc-goal-features").slideUp(200);
-    }
-  );
+  // -------------------------------------------------------------------------
+  // Copy API key button (add after successful test)
+  // -------------------------------------------------------------------------
 
-  // Smooth scrolling for step transitions
-  function smoothScrollToTop() {
-    $(".abcc-onboarding-container").animate({ scrollTop: 0 }, 300);
-  }
-
-  // Add smooth scroll to step transitions
-  const originalNextStep = nextStep;
-  const originalPrevStep = prevStep;
-
-  nextStep = function (step) {
-    originalNextStep(step);
-    smoothScrollToTop();
-    // Auto-test wp-config keys when entering step 2
-    if (step === 1) {
-      abccCheckWP70Connectors();
-      setTimeout(function () {
-        var $wpConfigButtons = $('.abcc-test-api[data-wp-config="true"]');
-        if ($wpConfigButtons.length) {
-          $wpConfigButtons.first().trigger('click');
-        }
-      }, 300);
-    }
-  };
-
-  prevStep = function (step) {
-    originalPrevStep(step);
-    smoothScrollToTop();
-  };
-
-  // Copy API key button (if they want to save it)
   $(".abcc-api-input").each(function () {
-    const $container = $(this);
-    const $input = $container.find("input");
+    var $container = $(this);
+    var $input = $container.find("input");
 
-    // Add copy button after successful test
     $container.on("success", function () {
       if (!$container.find(".abcc-copy-key").length) {
-        const $copyBtn = $(
+        var $copyBtn = $(
           '<button type="button" class="button button-small abcc-copy-key" title="Copy API key">📋</button>'
         );
         $container.append($copyBtn);
@@ -476,7 +542,7 @@ function testApiConnection() {
           $input.select();
           document.execCommand("copy");
           $copyBtn.text("✓").prop("disabled", true);
-          setTimeout(() => {
+          setTimeout(function () {
             $copyBtn.text("📋").prop("disabled", false);
           }, 2000);
         });
@@ -484,16 +550,12 @@ function testApiConnection() {
     });
   });
 
-  // Add success trigger for copy button
-  const originalShowSuccess = showSuccess;
-  showSuccess = function ($element, message) {
-    originalShowSuccess($element, message);
-    $element.closest(".abcc-api-input").trigger("success");
-  };
-
+  // -------------------------------------------------------------------------
   // Prevent accidental page reload during onboarding
+  // -------------------------------------------------------------------------
+
   var beforeUnloadHandler = function (e) {
-    if (currentStep > 1 && currentStep <= 3) {
+    if (currentStep > 1 && currentStep <= totalSteps) {
       e.preventDefault();
       e.returnValue =
         "Are you sure you want to leave? Your onboarding progress will be lost.";
@@ -502,15 +564,7 @@ function testApiConnection() {
   };
   window.addEventListener("beforeunload", beforeUnloadHandler);
 
-  // Remove the beforeunload listener when onboarding is complete
   function removeUnloadListener() {
     window.removeEventListener("beforeunload", beforeUnloadHandler);
   }
-
-  // Call this when showing success step
-  const originalShowSuccessStep = showSuccessStep;
-  showSuccessStep = function (editUrl) {
-    originalShowSuccessStep(editUrl);
-    removeUnloadListener();
-  };
 });

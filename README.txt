@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 4.2.0
+Stable tag: 4.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -244,7 +244,25 @@ Multiple support channels available:
 
 == Changelog ==
 
-= 4.2.0 (OOO) =
+= 4.3.0 =
+* Dashboard reframed into a Command Center: the new "Composer" card shows exactly what your next post will use — source, template, model, and draft/publish — and lets you change any of it in place before generating. Per-post choices stick as the new default without touching your global settings.
+* New capability grid on the dashboard surfaces everything the plugin can do (Topics, Bulk Generate, Post from Audio, SEO Refresh, Featured Images, Infographics, Schedule, Providers) at a glance.
+* Post from Audio: upload a recording and choose how it becomes a post — keep your words with an AI-written intro and title, or have AI rewrite the recording into a full article. Output honors your draft/publish default; if a rewrite fails, your transcription is never lost.
+* Refresh: new bulk "Regenerate SEO" action on the Posts list — select posts and queue background jobs to regenerate titles, meta descriptions, and focus keywords with your chosen model. Works with Yoast and Rank Math.
+* Rewrote first-run onboarding into a focused flow: connect a provider, choose your draft/publish default, optionally create your first Topic, and discover Post from Audio. "Skip to settings" is available on every step.
+* Updated the AI model lineup: Claude Opus 4.8, OpenAI GPT-5.4 / GPT-5.4 mini / GPT-5.5, Gemini 3.5 Flash, and Perplexity Sonar Deep Research. GPT-4.1 models remain available, now labeled "(legacy)". New installs default to GPT-5.4 mini. Models with highly variable cost show a warning in the selector.
+* Fixed: Post from Audio now uses your selected text model's API key (it previously reused the OpenAI transcription key, silently failing for Claude/Gemini/Perplexity users), embeds the audio player, splits the transcript into paragraphs, and cleans Markdown out of the title.
+* Fixed: onboarding now saves your Publish/Draft choice correctly and adds a "Skip to settings" link to the first step.
+* Fixed: Bulk SEO Regeneration uses each job's chosen model key and skips posts you can't edit.
+* Fixed: GPT-5.x models failed with "Unsupported parameter: 'max_tokens'" — the OpenAI client now sends the parameters these models require and omits the ones they reject.
+* Fixed: GPT-5.x content generation returned empty results (a silent "Content generation failed") because the models spent the whole token budget on internal reasoning. Reasoning is now disabled for GPT-5.x requests so every token goes to your post, and empty completions from any provider are logged with details instead of failing silently.
+* Fixed: posts came out as one long paragraph when the model returned the article on a single line; content is now split into proper heading/paragraph blocks for all providers.
+* Fixed: post titles could end up as the model's preamble ("Here are some catchy blog post titles…") when the AI replied with a list of title options (seen with Gemini). The plugin now asks for exactly one title and picks a clean title out of list-style replies.
+* Fixed: the WordPress admin footer overlapped the dashboard's "At a glance" section due to a stray closing tag in the dashboard template.
+* Fixed: new models (GPT-5.x, Gemini 3.5 Flash, Claude Opus 4.8, Sonar Deep Research) were silently limited to a 4,096-token budget, producing much shorter posts than configured.
+* Fixed: a PHP deprecation notice from the job log when a generated post had been deleted.
+
+= 4.2.0 =
 * New Topic Library tab: reusable topics with per-topic schedule (hourly to weekly), draft/publish override, and model override. Pause, resume, edit, or run any topic on demand; topics that fail repeatedly pause themselves and tell you why.
 * Generated posts now save as drafts by default, with a new Draft/Publish setting. Existing installs keep their current behavior automatically and see a one-time notice.
 * Fixed: duplicate posts from one generation job, provider health false "connected" status, Claude API error handling, stray `<title>`/`[SEO]` lines in content, Gemini image API key encoding.

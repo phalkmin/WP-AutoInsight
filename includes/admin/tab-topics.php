@@ -173,7 +173,7 @@ class ABCC_Topics_List_Table extends WP_List_Table {
 			if ( $result_post_id ) {
 				return sprintf(
 					'<a href="%s">%s</a>',
-					esc_url( get_edit_post_link( $result_post_id ) ),
+					esc_url( (string) get_edit_post_link( $result_post_id ) ),
 					esc_html( $label )
 				);
 			}
@@ -249,7 +249,7 @@ $abcc_model_options = abcc_get_available_text_model_options();
 							<?php foreach ( $abcc_model_options as $abcc_provider_data ) : ?>
 								<optgroup label="<?php echo esc_attr( $abcc_provider_data['group'] ); ?>">
 									<?php foreach ( $abcc_provider_data['options'] as $abcc_model_id => $abcc_model_data ) : ?>
-										<option value="<?php echo esc_attr( $abcc_model_id ); ?>"><?php echo esc_html( $abcc_model_data['name'] ); ?></option>
+										<option value="<?php echo esc_attr( $abcc_model_id ); ?>"><?php echo esc_html( abcc_format_model_option_label( $abcc_model_id, $abcc_model_data ) ); ?></option>
 									<?php endforeach; ?>
 								</optgroup>
 							<?php endforeach; ?>

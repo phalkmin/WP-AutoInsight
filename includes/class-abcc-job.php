@@ -210,6 +210,28 @@ function abcc_process_generation_job( $job_id ) {
 
 	try {
 		$started = microtime( true );
+
+		// SEO-regen jobs update an existing post in place.
+		// @since 4.3.0
+		if ( isset( $payload['type'] ) && 'seo_regen' === $payload['type'] ) {
+			$target_post_id = isset( $payload['post_id'] ) ? (int) $payload['post_id'] : 0;
+			$model          = isset( $payload['model'] ) ? $payload['model'] : '';
+			$regen          = abcc_run_seo_regen( $target_post_id, $model );
+
+			if ( is_wp_error( $regen ) ) {
+				abcc_mark_job_failed( $job_id, $regen->get_error_message(), $started );
+				return;
+			}
+
+			$duration = microtime( true ) - $started;
+			update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_SUCCESS );
+			update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
+			update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
+			update_post_meta( $job_id, '_abcc_job_result_post_id', $target_post_id );
+			delete_post_meta( $job_id, '_abcc_job_error' );
+			return;
+		}
+
 		$api_key = abcc_check_api_key( $payload['model'] ?? '' );
 
 		if ( empty( $api_key ) ) {
@@ -296,6 +318,7 @@ function abcc_get_job_source_label( $source ) {
 		'bulk'       => __( 'Bulk', 'automated-blog-content-creator' ),
 		'regenerate' => __( 'Regenerate', 'automated-blog-content-creator' ),
 		'legacy'     => __( 'Legacy', 'automated-blog-content-creator' ),
+		'seo_regen'  => __( 'SEO Regen', 'automated-blog-content-creator' ),
 	);
 
 	return $labels[ $source ] ?? ucfirst( (string) $source );
@@ -415,18 +438,18 @@ function abcc_render_job_log_rows( $args = array() ) {
 				<td>
 					<?php if ( $result_post_id ) : ?>
 						<strong>
-							<a href="<?php echo esc_url( get_edit_post_link( $result_post_id ) ); ?>">
+							<a href="<?php echo esc_url( (string) get_edit_post_link( $result_post_id ) ); ?>">
 								<?php echo esc_html( get_the_title( $result_post_id ) ); ?>
 							</a>
 						</strong>
 						<div class="row-actions">
 							<span class="edit">
-								<a href="<?php echo esc_url( get_edit_post_link( $result_post_id ) ); ?>">
+								<a href="<?php echo esc_url( (string) get_edit_post_link( $result_post_id ) ); ?>">
 									<?php esc_html_e( 'Edit', 'automated-blog-content-creator' ); ?>
 								</a> |
 							</span>
 							<span class="view">
-								<a href="<?php echo esc_url( get_permalink( $result_post_id ) ); ?>" target="_blank" rel="noopener noreferrer">
+								<a href="<?php echo esc_url( (string) get_permalink( $result_post_id ) ); ?>" target="_blank" rel="noopener noreferrer">
 									<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
 								</a> |
 							</span>
@@ -513,18 +536,18 @@ function abcc_render_legacy_history_rows( $limit = 10 ) {
 				<td>&mdash;</td>
 				<td>
 					<strong>
-						<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
+						<a href="<?php echo esc_url( (string) get_edit_post_link( $post->ID ) ); ?>">
 							<?php echo esc_html( $post->post_title ); ?>
 						</a>
 					</strong>
 					<div class="row-actions">
 						<span class="edit">
-							<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
+							<a href="<?php echo esc_url( (string) get_edit_post_link( $post->ID ) ); ?>">
 								<?php esc_html_e( 'Edit', 'automated-blog-content-creator' ); ?>
 							</a> |
 						</span>
 						<span class="view">
-							<a href="<?php echo esc_url( get_permalink( $post->ID ) ); ?>" target="_blank" rel="noopener noreferrer">
+							<a href="<?php echo esc_url( (string) get_permalink( $post->ID ) ); ?>" target="_blank" rel="noopener noreferrer">
 								<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
 							</a> |
 						</span>

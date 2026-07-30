@@ -22,10 +22,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p><?php esc_html_e( 'WP-AutoInsight is now set up and ready to help you create amazing content.', 'automated-blog-content-creator' ); ?></p>
 					
 					<div class="abcc-success-actions">
-						<a href="#" class="button button-primary button-hero" id="abcc-view-first-post">
-							<?php esc_html_e( 'Edit Your First Post', 'automated-blog-content-creator' ); ?>
+						<a href="?page=automated-blog-content-creator-post" class="button button-primary button-hero">
+							<?php esc_html_e( 'Go to Dashboard', 'automated-blog-content-creator' ); ?>
 						</a>
-						<a href="?page=automated-blog-content-creator-post" class="button button-secondary">
+						<a href="?page=automated-blog-content-creator-post&tab=settings" class="button button-secondary">
 							<?php esc_html_e( 'Go to Settings', 'automated-blog-content-creator' ); ?>
 						</a>
 					</div>

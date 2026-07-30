@@ -75,6 +75,45 @@ abcc_test(
 );
 
 abcc_test(
+	'explicit post_status in context wins over global setting',
+	function () {
+		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'draft';
+
+		abcc_assert_same( 'publish', abcc_resolve_post_status( array( 'post_status' => 'publish' ) ) );
+	}
+);
+
+abcc_test(
+	'explicit post_status in context wins over force_draft',
+	function () {
+		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'draft';
+
+		abcc_assert_same( 'publish', abcc_resolve_post_status( array( 'post_status' => 'publish', 'force_draft' => true ) ) );
+	}
+);
+
+abcc_test(
+	'empty post_status in context falls through to existing rules',
+	function () {
+		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'publish';
+
+		abcc_assert_same( 'publish', abcc_resolve_post_status( array( 'post_status' => '' ) ) );
+
+		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'draft';
+		abcc_assert_same( 'draft', abcc_resolve_post_status( array( 'post_status' => '' ) ) );
+	}
+);
+
+abcc_test(
+	'junk post_status sanitizes to draft',
+	function () {
+		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'publish';
+
+		abcc_assert_same( 'draft', abcc_resolve_post_status( array( 'post_status' => 'garbage' ) ) );
+	}
+);
+
+abcc_test(
 	'abcc_resolve_post_status filter can override the resolved value',
 	function () {
 		$GLOBALS['abcc_test_options']['abcc_default_post_status'] = 'draft';

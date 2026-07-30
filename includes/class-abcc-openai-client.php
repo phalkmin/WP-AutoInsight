@@ -78,6 +78,20 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
+	 * Whether a model is a reasoning-tier model with restricted parameters.
+	 *
+	 * GPT-5.x and o-series models reject 'max_tokens' (they require
+	 * 'max_completion_tokens') and only accept default sampling values, so
+	 * temperature/top_p/penalties must be omitted entirely.
+	 *
+	 * @param string $model Model identifier.
+	 * @return bool
+	 */
+	private function is_reasoning_model( $model ) {
+		return 0 === strpos( $model, 'gpt-5' ) || preg_match( '/^o\d/', $model );
+	}
+
+	/**
 	 * Generate chat completions.
 	 *
 	 * @param array $messages The messages array.
@@ -95,6 +109,20 @@ class ABCC_OpenAI_Client {
 		);
 
 		$options = array_merge( $default_options, $options );
+
+		if ( $this->is_reasoning_model( $options['model'] ) ) {
+			// GPT-5.1+ (all gpt-5.x registry models) accept reasoning_effort
+			// 'none': no hidden reasoning tokens, so the whole budget goes to
+			// visible output. o-series models have no 'none' tier; their
+			// reasoning tokens are billed against the completion budget, so the
+			// floor must also cover them or the API returns an empty completion
+			// after burning the entire cap on reasoning.
+			$reasoning_off = 0 === strpos( $options['model'], 'gpt-5.' );
+
+			$options['max_completion_tokens'] = max( (int) $options['max_tokens'], $reasoning_off ? 1000 : 4000 );
+			$options['reasoning_effort']      = $reasoning_off ? 'none' : 'low';
+			unset( $options['max_tokens'], $options['temperature'], $options['top_p'], $options['frequency_penalty'], $options['presence_penalty'] );
+		}
 
 		$data = array_merge( $options, array( 'messages' => $messages ) );
 		return $this->make_request( 'chat/completions', $data );

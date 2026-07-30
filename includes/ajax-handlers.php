@@ -23,16 +23,11 @@ function abcc_handle_create_post() {
 	}
 
 	try {
-		$groups              = abcc_get_setting( 'abcc_keyword_groups', array() );
 		$selected_post_types = abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
 		$post_type           = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
 
 		if ( empty( $post_type ) ) {
 			$post_type = ! empty( $selected_post_types ) ? $selected_post_types[0] : 'post';
-		}
-
-		if ( empty( $groups ) ) {
-			throw new Exception( __( 'No keyword groups found. Please add at least one group in Content Settings.', 'automated-blog-content-creator' ) );
 		}
 
 		if ( ! post_type_exists( $post_type ) ) {
@@ -43,43 +38,56 @@ function abcc_handle_create_post() {
 			throw new Exception( __( 'This post type is not enabled for manual generation.', 'automated-blog-content-creator' ) );
 		}
 
-		// Use the group index passed from the UI, falling back to the first group with keywords.
-		$group_index    = isset( $_POST['group_index'] ) ? absint( $_POST['group_index'] ) : null;
-		$selected_group = null;
-
-		if ( null !== $group_index && isset( $groups[ $group_index ] ) && ! empty( $groups[ $group_index ]['keywords'] ) ) {
-			$selected_group = $groups[ $group_index ];
+		// Resolve the source. Priority: explicit 'source' token > legacy
+		// 'group_index' > sticky default. The resolver handles all fallbacks.
+		$token = '';
+		if ( isset( $_POST['source'] ) ) {
+			$token = abcc_sanitize_composer_source( sanitize_text_field( wp_unslash( $_POST['source'] ) ) );
+		} elseif ( isset( $_POST['group_index'] ) ) {
+			$token = 'group:' . absint( $_POST['group_index'] );
 		} else {
-			foreach ( $groups as $group ) {
-				if ( ! empty( $group['keywords'] ) ) {
-					$selected_group = $group;
-					break;
-				}
-			}
+			$token = abcc_get_setting( 'abcc_composer_last_source', '' );
 		}
 
-		if ( ! $selected_group ) {
-			throw new Exception( __( 'No keywords found in any group.', 'automated-blog-content-creator' ) );
+		$source = abcc_resolve_composer_source( $token );
+		if ( is_wp_error( $source ) ) {
+			throw new Exception( $source->get_error_message() );
 		}
 
-		$keywords = (array) $selected_group['keywords'];
-		$category = $selected_group['category'] ?? 0;
-		$template = $selected_group['template'] ?? 'default';
-
-		$payload = abcc_build_generation_payload(
-			array(
-				'keywords'  => $keywords,
-				'category'  => $category,
-				'post_type' => $post_type,
-				'template'  => $template,
-				'source'    => 'manual',
-			)
+		$payload_args = array(
+			'keywords'  => $source['keywords'],
+			'category'  => $source['category'],
+			'post_type' => $post_type,
+			'template'  => $source['template'],
+			'source'    => 'manual',
 		);
-		$job_id  = abcc_queue_generation_job( $payload );
+		if ( 'topic' === $source['type'] ) {
+			$payload_args['prompt']   = $source['prompt'];
+			$payload_args['topic_id'] = $source['topic_id'];
+			$payload_args['source']   = 'topic';
+		}
+
+		$payload = abcc_build_generation_payload( $payload_args );
+
+		// Per-call overrides (model / save-as) — applied to this payload only.
+		$overrides = array();
+		if ( isset( $_POST['model'] ) ) {
+			$overrides['model'] = sanitize_text_field( wp_unslash( $_POST['model'] ) );
+		}
+		if ( isset( $_POST['post_status'] ) ) {
+			$overrides['post_status'] = sanitize_text_field( wp_unslash( $_POST['post_status'] ) );
+		}
+		$payload = abcc_apply_composer_overrides( $payload, $overrides );
+
+		$job_id = abcc_queue_generation_job( $payload );
 
 		if ( is_wp_error( $job_id ) ) {
 			throw new Exception( $job_id->get_error_message() );
 		}
+
+		// Persist the resolved source as the sticky default — only after a
+		// successful queue, never on validation failure.
+		abcc_update_setting( 'abcc_composer_last_source', $source['token'] );
 
 		wp_send_json_success(
 			array(

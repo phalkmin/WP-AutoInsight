@@ -39,23 +39,37 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => true,
 			),
 			'text_models'              => array(
+				'gpt-5.4-mini'            => array(
+					'name'          => 'GPT-5.4 mini',
+					'description'   => 'Fast and cost-effective — current default tier',
+					'cost_tier'     => '1',
+					'cost_per_post' => 0.0002,
+				),
+				'gpt-5.4'                 => array(
+					'name'          => 'GPT-5.4',
+					'description'   => 'Balanced performance — best coding and instruction following',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.003,
+				),
+				'gpt-5.5'                 => array(
+					'name'          => 'GPT-5.5',
+					'description'   => 'Most capable OpenAI model for complex reasoning',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.015,
+				),
 				'gpt-4.1-mini-2025-04-14' => array(
 					'name'          => 'GPT-4.1 Mini',
 					'description'   => 'Fast and affordable with 1M context window',
 					'cost_tier'     => '1',
 					'cost_per_post' => 0.0002,
+					'legacy'        => true,
 				),
 				'gpt-4.1-2025-04-14'      => array(
 					'name'          => 'GPT-4.1',
 					'description'   => 'Excellent coding and instruction following',
 					'cost_tier'     => '2',
 					'cost_per_post' => 0.003,
-				),
-				'o4-mini-2025-04-16'      => array(
-					'name'          => 'o4-mini',
-					'description'   => 'Advanced reasoning model for complex tasks',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.0004,
+					'legacy'        => true,
 				),
 			),
 		),
@@ -88,8 +102,8 @@ function abcc_get_provider_registry() {
 					'cost_tier'     => '2',
 					'cost_per_post' => 0.004,
 				),
-				'claude-opus-4-7'           => array(
-					'name'          => 'Claude Opus 4.7',
+				'claude-opus-4-8'           => array(
+					'name'          => 'Claude Opus 4.8',
 					'description'   => 'Most capable model for complex reasoning',
 					'cost_tier'     => '3',
 					'cost_per_post' => 0.015,
@@ -131,6 +145,12 @@ function abcc_get_provider_registry() {
 					'cost_tier'     => '3',
 					'cost_per_post' => 0.002,
 				),
+				'gemini-3.5-flash'      => array(
+					'name'          => 'Gemini 3.5 Flash',
+					'description'   => 'Latest generation — best for agentic and complex tasks',
+					'cost_tier'     => '2',
+					'cost_per_post' => 0.0003,
+				),
 			),
 		),
 		'perplexity' => array(
@@ -167,6 +187,13 @@ function abcc_get_provider_registry() {
 					'description'   => 'Advanced multi-step reasoning with citations',
 					'cost_tier'     => '3',
 					'cost_per_post' => 0.01,
+				),
+				'sonar-deep-research' => array(
+					'name'          => 'Sonar Deep Research',
+					'description'   => 'In-depth multi-source synthesis — charges per citation + reasoning token',
+					'cost_tier'     => '3',
+					'cost_per_post' => 0.82,
+					'cost_warning'  => true,
 				),
 			),
 		),
@@ -553,4 +580,26 @@ function abcc_test_stability_connection( $api_key ) {
 	}
 
 	return array( 'success' => true );
+}
+
+/**
+ * Format a model's display label, appending "(legacy)" when flagged.
+ *
+ * @since 4.3.0
+ * @param string $model_id Model identifier.
+ * @param array  $model    Model definition from the registry.
+ * @return string Unescaped label (caller must escape).
+ */
+function abcc_format_model_option_label( $model_id, $model ) {
+	if ( is_string( $model ) && '' !== $model ) {
+		$label = $model;
+	} elseif ( is_array( $model ) && isset( $model['name'] ) ) {
+		$label = $model['name'];
+	} else {
+		$label = (string) $model_id;
+	}
+	if ( is_array( $model ) && ! empty( $model['legacy'] ) ) {
+		$label .= ' ' . __( '(legacy)', 'automated-blog-content-creator' );
+	}
+	return $label;
 }

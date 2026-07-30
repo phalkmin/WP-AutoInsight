@@ -13,17 +13,24 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Resolve the post status for a generated post.
  *
  * The single choke point for post-status decisions. Precedence:
- * 1. force_draft  — per-request flag (e.g. bulk handler's draft checkbox).
- * 2. topic_id     — per-topic override meta (Topic Library, v4.2 Unit D;
+ * 1. post_status  — explicit per-call override (e.g. Composer "Save as" toggle,
+ *                   @since 4.3.0). Highest priority; beats force_draft.
+ * 2. force_draft  — per-request flag (e.g. bulk handler's draft checkbox).
+ * 3. topic_id     — per-topic override meta (Topic Library, v4.2 Unit D;
  *                   read defensively so it is inert until topics exist).
- * 3. global       — abcc_default_post_status setting.
+ * 4. global       — abcc_default_post_status setting.
  *
  * @since 4.2.0
- * @param array $context Optional resolution context: force_draft (bool),
+ * @param array $context Optional resolution context: post_status (string, explicit
+ *                       override — empty string means "no override"), force_draft (bool),
  *                       topic_id (int), source (string).
  * @return string 'draft' or 'publish'.
  */
 function abcc_resolve_post_status( $context = array() ) {
+	if ( ! empty( $context['post_status'] ) ) {
+		return apply_filters( 'abcc_resolve_post_status', abcc_sanitize_post_status( $context['post_status'] ), $context );
+	}
+
 	if ( ! empty( $context['force_draft'] ) ) {
 		return apply_filters( 'abcc_resolve_post_status', 'draft', $context );
 	}
@@ -69,6 +76,109 @@ function abcc_build_generation_payload( $args = array() ) {
 	}
 
 	return $payload;
+}
+
+/**
+ * Resolve a Composer source token into concrete generation inputs.
+ *
+ * Pure resolution only — reads settings/topics, queues nothing. The empty
+ * token (and any stale/deleted/keyword-less token) falls back to the first
+ * keyword group that has keywords, which is the plugin's historical
+ * "Generate Post Now" behavior. This keeps every existing install working
+ * byte-for-byte on upgrade with no migration.
+ *
+ * @since 4.3.0
+ * @param string $token '' | 'group:N' | 'topic:N'
+ * @return array|WP_Error Resolved source array, or WP_Error 'abcc_no_source'.
+ */
+function abcc_resolve_composer_source( $token ) {
+	$token  = abcc_sanitize_composer_source( $token );
+	$groups = (array) abcc_get_setting( 'abcc_keyword_groups', array() );
+
+	// 1. Explicit topic token.
+	if ( 0 === strpos( $token, 'topic:' ) ) {
+		$topic_id = (int) substr( $token, strlen( 'topic:' ) );
+		$topic    = function_exists( 'abcc_get_topic' ) ? abcc_get_topic( $topic_id ) : null;
+
+		if ( null !== $topic && '' !== trim( (string) $topic['title'] ) ) {
+			return array(
+				'token'    => 'topic:' . $topic_id,
+				'type'     => 'topic',
+				'keywords' => array( $topic['title'] ),
+				'category' => 0,
+				'template' => 'default',
+				'topic_id' => $topic_id,
+				'prompt'   => (string) $topic['prompt'],
+				'label'    => $topic['title'],
+			);
+		}
+		// Stale/deleted topic -> fall through to group fallback.
+	}
+
+	// 2. Explicit group token.
+	if ( 0 === strpos( $token, 'group:' ) ) {
+		$index = (int) substr( $token, strlen( 'group:' ) );
+		if ( isset( $groups[ $index ] ) && ! empty( $groups[ $index ]['keywords'] ) ) {
+			return abcc_build_group_source( $index, $groups[ $index ] );
+		}
+		// Stale/keyword-less group -> fall through.
+	}
+
+	// 3. Fallback: first group with keywords.
+	foreach ( $groups as $index => $group ) {
+		if ( ! empty( $group['keywords'] ) ) {
+			return abcc_build_group_source( (int) $index, $group );
+		}
+	}
+
+	// 4. Nothing to generate from.
+	return new WP_Error(
+		'abcc_no_source',
+		__( 'Add a keyword group or a Topic before generating.', 'automated-blog-content-creator' )
+	);
+}
+
+/**
+ * Apply per-call Composer overrides to a generation payload.
+ *
+ * Overrides affect only the payload for THIS generation. They are never
+ * written back to the global prompt_select / abcc_default_post_status —
+ * "my global config" and "what I'm about to generate" stay distinct.
+ *
+ * @since 4.3.0
+ * @param array $payload   Payload from abcc_build_generation_payload().
+ * @param array $overrides Optional 'model' and/or 'post_status'.
+ * @return array
+ */
+function abcc_apply_composer_overrides( $payload, $overrides ) {
+	if ( ! empty( $overrides['model'] ) ) {
+		$payload['model'] = sanitize_text_field( $overrides['model'] );
+	}
+	if ( ! empty( $overrides['post_status'] ) ) {
+		$payload['post_status'] = abcc_sanitize_post_status( $overrides['post_status'] );
+	}
+	return $payload;
+}
+
+/**
+ * Shape a keyword group into the resolver's return array.
+ *
+ * @since 4.3.0
+ * @param int   $index Group index.
+ * @param array $group Group data.
+ * @return array
+ */
+function abcc_build_group_source( $index, $group ) {
+	return array(
+		'token'    => 'group:' . (int) $index,
+		'type'     => 'group',
+		'keywords' => (array) $group['keywords'],
+		'category' => isset( $group['category'] ) ? (int) $group['category'] : 0,
+		'template' => isset( $group['template'] ) ? $group['template'] : 'default',
+		'topic_id' => 0,
+		'prompt'   => '',
+		'label'    => isset( $group['name'] ) ? $group['name'] : ( 'Group ' . ( (int) $index + 1 ) ),
+	);
 }
 
 /**
@@ -198,6 +308,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			'post_content'  => wp_kses_post( $post_content ),
 			'post_status'   => abcc_resolve_post_status(
 				array(
+					'post_status' => isset( $options['post_status'] ) ? $options['post_status'] : '',
 					'force_draft' => ! empty( $options['draft_only'] ),
 					'topic_id'    => isset( $options['topic_id'] ) ? (int) $options['topic_id'] : 0,
 					'source'      => $source,
@@ -328,6 +439,68 @@ function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
 }
 
 /**
+ * Clean one model-emitted line into plain title text.
+ *
+ * Strips HTML, list markers ("1. ", "2)", "-", "*", "•"), markdown
+ * bold/italic, leading heading markers, and wrapping quotes.
+ *
+ * @since 4.3.0
+ * @param string $raw Raw response line.
+ * @return string
+ */
+function abcc_clean_title_line( $raw ) {
+	$title = wp_strip_all_tags( (string) $raw );
+	$title = trim( $title );
+	// List markers models use when returning "options": numbering or bullets.
+	$title = preg_replace( '/^\s*(?:\d+[.)]\s*|[-*•]\s+)/u', '', $title );
+	// Markdown bold/italic markers.
+	$title = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $title );
+	// Leading heading markers (e.g. "## ", "# ").
+	$title = ltrim( $title, '# ' );
+	// Wrapping quotes.
+	$title = trim( trim( $title ), '"\'`' );
+
+	return trim( $title );
+}
+
+/**
+ * Pick one usable title out of a raw model response.
+ *
+ * Chatty models answer the title prompt with a preamble ("Here are some
+ * catchy blog post titles...:") followed by a list of options; taking the
+ * first line blindly turns that preamble into the post title. Preamble
+ * lines end with a colon, real titles don't — return the first cleaned
+ * line that doesn't. When every line looks like preamble, fall back to the
+ * first line minus its trailing colon.
+ *
+ * @since 4.3.0
+ * @param array $lines Response lines.
+ * @return string Clean title, or '' when the response has no usable text.
+ */
+function abcc_extract_generated_title( $lines ) {
+	$candidates = array();
+
+	foreach ( (array) $lines as $line ) {
+		$line = abcc_clean_title_line( $line );
+		if ( '' !== $line ) {
+			$candidates[] = $line;
+		}
+	}
+
+	if ( empty( $candidates ) ) {
+		return '';
+	}
+
+	foreach ( $candidates as $candidate ) {
+		if ( ':' !== substr( $candidate, -1 ) ) {
+			return $candidate;
+		}
+	}
+
+	return rtrim( $candidates[0], ': ' );
+}
+
+/**
  * Generates a title for a post.
  *
  * @param string $api_key API key for the selected service
@@ -336,7 +509,8 @@ function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
  * @return string The generated title
  */
 function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
-	$prompt = 'Create a catchy blog post title about: ' . implode( ', ', $keywords );
+	$prompt  = 'Create a catchy blog post title about: ' . implode( ', ', $keywords ) . '. ';
+	$prompt .= 'Respond with only the title itself on a single line — no introduction, no list of alternatives, no numbering, and no quotation marks.';
 
 	// Use a small token limit for this call - 50 tokens should be plenty for a title
 	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 50 );
@@ -345,15 +519,11 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
 		throw new Exception( 'Failed to generate title' );
 	}
 
-	// Take the first line as the title.
-	$title = trim( $result[0] );
+	$title = abcc_extract_generated_title( (array) $result );
 
-	// Remove any quotes that might be around the title.
-	$title = trim( $title, '"\'`' );
-
-	// Strip markdown bold/italic and heading markers (Perplexity returns Markdown).
-	$title = preg_replace( '/\*{1,3}(.+?)\*{1,3}/', '$1', $title );
-	$title = ltrim( $title, '# ' );
+	if ( '' === $title ) {
+		throw new Exception( 'Failed to generate title' );
+	}
 
 	return $title;
 }

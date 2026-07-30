@@ -12,8 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 ?>
-			<!-- Step 2: API Configuration -->
-	<div class="abcc-onboarding-step abcc-step-2">
+			<!-- Step 1: API Configuration (provider-first flow, v4.3) -->
+	<div class="abcc-onboarding-step abcc-step-1">
 		<div class="abcc-step-content">
 			<h2><?php esc_html_e( 'Connect an AI Provider', 'automated-blog-content-creator' ); ?></h2>
 			<p><?php esc_html_e( 'Choose one AI service to power your content generation.', 'automated-blog-content-creator' ); ?></p>
@@ -274,9 +274,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</div>
 
 			<div class="abcc-step-actions">
-				<button class="button button-secondary" id="abcc-prev-step-2">
-					<?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?>
-				</button>
+				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-1"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-primary" id="abcc-next-step-2" disabled>
 					<?php esc_html_e( 'Continue', 'automated-blog-content-creator' ); ?>
 				</button>

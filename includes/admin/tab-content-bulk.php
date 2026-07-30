@@ -51,7 +51,7 @@ $templates     = abcc_get_setting( 'abcc_content_templates', array() );
 					<optgroup label="<?php echo esc_attr( $provider_data['group'] ); ?>">
 						<?php foreach ( $provider_data['options'] as $model_id => $model_data ) : ?>
 							<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $current_model, $model_id ); ?>>
-								<?php echo esc_html( $model_data['name'] ); ?>
+								<?php echo esc_html( abcc_format_model_option_label( $model_id, $model_data ) ); ?>
 							</option>
 						<?php endforeach; ?>
 					</optgroup>

@@ -87,6 +87,25 @@ $languages         = array(
 					</select>
 				</td>
 			</tr>
+			<tr>
+				<th scope="row">
+					<label><?php esc_html_e( 'Default audio mode', 'automated-blog-content-creator' ); ?></label>
+				</th>
+				<td>
+					<label class="abcc-label-inline">
+						<input type="radio" name="abcc_audio_default_mode" value="transcript_plus_intro"
+							data-autosave-key="abcc_audio_default_mode"
+							<?php checked( abcc_get_setting( 'abcc_audio_default_mode', 'transcript_plus_intro' ), 'transcript_plus_intro' ); ?>>
+						<?php esc_html_e( 'Transcript + AI intro (keeps your words, adds a title and a short intro)', 'automated-blog-content-creator' ); ?>
+					</label><br>
+					<label class="abcc-label-inline">
+						<input type="radio" name="abcc_audio_default_mode" value="full_rewrite"
+							data-autosave-key="abcc_audio_default_mode"
+							<?php checked( abcc_get_setting( 'abcc_audio_default_mode', 'transcript_plus_intro' ), 'full_rewrite' ); ?>>
+						<?php esc_html_e( 'Full rewrite (AI turns the recording into a polished article)', 'automated-blog-content-creator' ); ?>
+					</label>
+				</td>
+			</tr>
 		</table>
 
 		<div class="abcc-how-it-works">

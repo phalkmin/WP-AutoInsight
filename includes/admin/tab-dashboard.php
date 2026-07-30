@@ -12,6 +12,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // ── Data preparation ──────────────────────────────────────────────────────
 
+// ── Composer (Zone 1) ──────────────────────────────────────────────────────
+$composer_groups   = (array) abcc_get_setting( 'abcc_keyword_groups', array() );
+$composer_topics   = function_exists( 'abcc_get_topics' ) ? abcc_get_topics() : array();
+$composer_models   = abcc_get_available_text_model_options();
+$composer_has_key  = ! empty( $composer_models ); // No connected provider => no model options.
+$composer_resolved = abcc_resolve_composer_source( abcc_get_setting( 'abcc_composer_last_source', '' ) );
+$composer_ready    = ! is_wp_error( $composer_resolved );
+$composer_status   = abcc_get_setting( 'abcc_default_post_status', 'draft' );
+$composer_model    = abcc_get_setting( 'prompt_select', '' );
+
 // Scheduling status.
 $schedule_info = abcc_get_openai_event_schedule();
 
@@ -57,136 +67,396 @@ usort(
 );
 
 $page_slug = 'automated-blog-content-creator-post';
+
+// ── Capability grid (Zone 2) ───────────────────────────────────────────────
+$cap_topic_count  = count( $composer_topics );
+$cap_images_on    = (bool) abcc_get_setting( 'openai_generate_images', true );
+$cap_infogr_on    = (bool) abcc_get_setting( 'abcc_enable_infographics', true );
+$cap_providers_on = 0;
+foreach ( $provider_cards as $card ) {
+	if ( 'connected' === $card['health'] ) {
+		++$cap_providers_on;
+	}
+}
 ?>
 
 <div class="abcc-dashboard">
 
-	<!-- Row 1: Automation Status + Quick Actions -->
-	<div class="abcc-dashboard-row abcc-dashboard-row--top">
-
-		<div class="abcc-dashboard-card abcc-dashboard-card--status">
-			<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Automation Status', 'automated-blog-content-creator' ); ?></h2>
-			<?php if ( $schedule_info ) : ?>
-				<p class="abcc-status-next">
-					<span class="abcc-status-dot abcc-status-dot--active"></span>
-					<?php
-					printf(
-						/* translators: 1: human time diff, 2: next run date */
-						esc_html__( 'Next post in %1$s — %2$s', 'automated-blog-content-creator' ),
-						'<strong>' . esc_html( human_time_diff( time(), $schedule_info['timestamp'] ) ) . '</strong>',
-						'<strong>' . esc_html( $schedule_info['next_run'] ) . '</strong>'
-					);
-					?>
-				</p>
-				<?php if ( ! empty( $schedule_info['group_name'] ) ) : ?>
-					<p class="abcc-status-detail">
-						<?php esc_html_e( 'Group:', 'automated-blog-content-creator' ); ?>
-						<strong><?php echo esc_html( $schedule_info['group_name'] ); ?></strong>
-						&nbsp;&bull;&nbsp;
-						<?php esc_html_e( 'Model:', 'automated-blog-content-creator' ); ?>
-						<strong><?php echo esc_html( ! empty( $schedule_info['model'] ) ? $schedule_info['model'] : '—' ); ?></strong>
-					</p>
-				<?php endif; ?>
-				<p>
-					<a href="
-					<?php
-					echo esc_url(
-						add_query_arg(
-							array(
-								'page'   => $page_slug,
-								'tab'    => 'connections',
-								'subtab' => 'scheduling',
-							)
-						)
-					);
-					?>
-								">
-						<?php esc_html_e( 'Change schedule →', 'automated-blog-content-creator' ); ?>
-					</a>
-				</p>
-			<?php else : ?>
-				<p class="abcc-status-next">
-					<span class="abcc-status-dot abcc-status-dot--inactive"></span>
-					<?php esc_html_e( 'Scheduler is off. No posts are queued.', 'automated-blog-content-creator' ); ?>
-				</p>
-				<p>
-					<a href="
-					<?php
-					echo esc_url(
-						add_query_arg(
-							array(
-								'page'   => $page_slug,
-								'tab'    => 'connections',
-								'subtab' => 'scheduling',
-							)
-						)
-					);
-					?>
-								">
-						<?php esc_html_e( 'Set up schedule →', 'automated-blog-content-creator' ); ?>
-					</a>
-				</p>
+	<!-- Zone 1: Composer -->
+	<div class="abcc-composer" id="abcc-composer">
+		<div class="abcc-composer__header">
+			<span class="abcc-composer__lede"><?php esc_html_e( 'Next post will use', 'automated-blog-content-creator' ); ?></span>
+			<?php if ( $composer_has_key && $composer_ready ) : ?>
+				<button type="button" class="abcc-composer__toggle" id="abcc-composer-toggle" aria-expanded="false">
+					<?php esc_html_e( 'change ▾', 'automated-blog-content-creator' ); ?>
+				</button>
 			<?php endif; ?>
 		</div>
 
-		<div class="abcc-dashboard-card abcc-dashboard-card--actions">
-			<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Quick Actions', 'automated-blog-content-creator' ); ?></h2>
-			<div class="abcc-quick-actions">
-				<button type="button" id="abcc-dash-generate" class="button button-primary abcc-quick-action-btn">
-					<?php esc_html_e( 'Generate Post Now', 'automated-blog-content-creator' ); ?>
-				</button>
-				<p id="abcc-dash-generate-status" class="abcc-status" style="display:none;"></p>
+		<?php if ( ! $composer_has_key ) : ?>
+			<p class="abcc-composer__empty">
+				<?php esc_html_e( 'Connect a provider to start generating.', 'automated-blog-content-creator' ); ?>
 				<a href="
 				<?php
 				echo esc_url(
 					add_query_arg(
 						array(
-							'page'   => $page_slug,
-							'tab'    => 'content',
-							'subtab' => 'bulk',
+							'page' => $page_slug,
+							'tab'  => 'connections',
 						)
 					)
 				);
 				?>
-				" class="button abcc-quick-action-btn">
-					<?php esc_html_e( 'Bulk Generate', 'automated-blog-content-creator' ); ?>
+							">
+					<?php esc_html_e( 'Connect a provider →', 'automated-blog-content-creator' ); ?>
+				</a>
+			</p>
+		<?php elseif ( ! $composer_ready ) : ?>
+			<p class="abcc-composer__empty">
+				<?php esc_html_e( 'Choose what to write about.', 'automated-blog-content-creator' ); ?>
+				<a href="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'page' => $page_slug,
+							'tab'  => 'content',
+						)
+					)
+				);
+				?>
+							">
+					<?php esc_html_e( 'Add a keyword group →', 'automated-blog-content-creator' ); ?>
 				</a>
 				<a href="
 				<?php
 				echo esc_url(
 					add_query_arg(
 						array(
-							'page'   => $page_slug,
-							'tab'    => 'media',
-							'subtab' => 'audio',
+							'page' => $page_slug,
+							'tab'  => 'topics',
 						)
 					)
 				);
 				?>
-				" class="button abcc-quick-action-btn">
-					<?php esc_html_e( 'Upload Audio', 'automated-blog-content-creator' ); ?>
+							">
+					<?php esc_html_e( 'or create a Topic →', 'automated-blog-content-creator' ); ?>
 				</a>
-				<a href="
-				<?php
-				echo esc_url(
-					add_query_arg(
-						array(
-							'page'   => $page_slug,
-							'tab'    => 'media',
-							'subtab' => 'infographics',
-						)
-					)
-				);
-				?>
-				" class="button abcc-quick-action-btn">
-					<?php esc_html_e( 'Create Infographic', 'automated-blog-content-creator' ); ?>
-				</a>
-			</div>
-		</div>
+			</p>
+		<?php else : ?>
 
+			<!-- Collapsed summary -->
+			<div class="abcc-composer__summary" id="abcc-composer-summary">
+				<span class="abcc-composer__chip">
+					<span class="abcc-composer__k"><?php esc_html_e( 'Source', 'automated-blog-content-creator' ); ?></span>
+					<strong><?php echo esc_html( $composer_resolved['label'] ); ?></strong>
+				</span>
+				<span class="abcc-composer__chip">
+					<span class="abcc-composer__k"><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></span>
+					<strong><?php echo esc_html( $composer_resolved['template'] ); ?></strong>
+				</span>
+				<span class="abcc-composer__chip">
+					<span class="abcc-composer__k"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></span>
+					<strong><?php echo esc_html( $composer_model ); ?></strong>
+				</span>
+				<span class="abcc-composer__chip">
+					<span class="abcc-composer__k"><?php esc_html_e( 'Save as', 'automated-blog-content-creator' ); ?></span>
+					<strong><?php echo 'publish' === $composer_status ? esc_html__( 'Publish', 'automated-blog-content-creator' ) : esc_html__( 'Draft', 'automated-blog-content-creator' ); ?></strong>
+				</span>
+			</div>
+
+			<!-- Expanded editor (hidden by default) -->
+			<div class="abcc-composer__fields" id="abcc-composer-fields" hidden>
+				<p class="abcc-composer__field">
+					<label for="abcc-composer-source"><?php esc_html_e( 'Source', 'automated-blog-content-creator' ); ?></label>
+					<select id="abcc-composer-source">
+						<?php if ( ! empty( $composer_groups ) ) : ?>
+							<optgroup label="<?php esc_attr_e( 'Keyword groups', 'automated-blog-content-creator' ); ?>">
+								<?php foreach ( $composer_groups as $i => $g ) : ?>
+									<?php
+									if ( empty( $g['keywords'] ) ) {
+										continue; }
+									?>
+									<option value="group:<?php echo (int) $i; ?>" <?php selected( $composer_resolved['token'], 'group:' . (int) $i ); ?>>
+										<?php echo esc_html( ! empty( $g['name'] ) ? $g['name'] : sprintf( /* translators: %d: group number */ __( 'Group %d', 'automated-blog-content-creator' ), (int) $i + 1 ) ); ?>
+									</option>
+								<?php endforeach; ?>
+							</optgroup>
+						<?php endif; ?>
+						<?php if ( ! empty( $composer_topics ) ) : ?>
+							<optgroup label="<?php esc_attr_e( 'Topics', 'automated-blog-content-creator' ); ?>">
+								<?php foreach ( $composer_topics as $t ) : ?>
+									<?php
+									// Resolver rejects empty-title topics; don't offer them.
+									if ( '' === trim( (string) $t['title'] ) ) {
+										continue;
+									}
+									?>
+									<option value="topic:<?php echo (int) $t['id']; ?>" <?php selected( $composer_resolved['token'], 'topic:' . (int) $t['id'] ); ?>>
+										<?php echo esc_html( $t['title'] ); ?>
+									</option>
+								<?php endforeach; ?>
+							</optgroup>
+						<?php endif; ?>
+					</select>
+				</p>
+				<p class="abcc-composer__field">
+					<label for="abcc-composer-model"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></label>
+					<select id="abcc-composer-model">
+						<?php foreach ( $composer_models as $group ) : ?>
+							<optgroup label="<?php echo esc_attr( $group['group'] ); ?>">
+								<?php foreach ( $group['options'] as $model_id => $model_label ) : ?>
+									<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $composer_model, $model_id ); ?>>
+										<?php echo esc_html( abcc_format_model_option_label( $model_id, $model_label ) ); ?>
+									</option>
+								<?php endforeach; ?>
+							</optgroup>
+						<?php endforeach; ?>
+					</select>
+				</p>
+				<p class="abcc-composer__field">
+					<label><?php esc_html_e( 'Save as', 'automated-blog-content-creator' ); ?></label>
+					<span class="abcc-composer__seg">
+						<label><input type="radio" name="abcc-composer-status" value="draft" <?php checked( $composer_status, 'draft' ); ?>> <?php esc_html_e( 'Draft', 'automated-blog-content-creator' ); ?></label>
+						<label><input type="radio" name="abcc-composer-status" value="publish" <?php checked( $composer_status, 'publish' ); ?>> <?php esc_html_e( 'Publish', 'automated-blog-content-creator' ); ?></label>
+					</span>
+				</p>
+				<p class="abcc-composer__note"><?php esc_html_e( 'Your Source choice sticks as the default for next time. Model and Save-as apply to this post only — your global settings are unchanged.', 'automated-blog-content-creator' ); ?></p>
+			</div>
+
+			<div class="abcc-composer__actions">
+				<button type="button" class="button button-primary" id="abcc-composer-generate">
+					<?php esc_html_e( '⚡ Generate Now', 'automated-blog-content-creator' ); ?>
+				</button>
+				<span class="abcc-composer__hint"><?php esc_html_e( 'One click runs with exactly what is shown.', 'automated-blog-content-creator' ); ?></span>
+				<span class="abcc-status" id="abcc-composer-status" style="display:none;"></span>
+			</div>
+
+		<?php endif; ?>
 	</div>
 
-	<!-- Row 2: Recent Activity (full width) -->
+	<!-- Automation Status -->
+	<div class="abcc-dashboard-card abcc-dashboard-card--status">
+		<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Automation Status', 'automated-blog-content-creator' ); ?></h2>
+		<?php if ( $schedule_info ) : ?>
+			<p class="abcc-status-next">
+				<span class="abcc-status-dot abcc-status-dot--active"></span>
+				<?php
+				printf(
+					/* translators: 1: human time diff, 2: next run date */
+					esc_html__( 'Next post in %1$s — %2$s', 'automated-blog-content-creator' ),
+					'<strong>' . esc_html( human_time_diff( time(), $schedule_info['timestamp'] ) ) . '</strong>',
+					'<strong>' . esc_html( $schedule_info['next_run'] ) . '</strong>'
+				);
+				?>
+			</p>
+			<?php if ( ! empty( $schedule_info['group_name'] ) ) : ?>
+				<p class="abcc-status-detail">
+					<?php esc_html_e( 'Group:', 'automated-blog-content-creator' ); ?>
+					<strong><?php echo esc_html( $schedule_info['group_name'] ); ?></strong>
+					&nbsp;&bull;&nbsp;
+					<?php esc_html_e( 'Model:', 'automated-blog-content-creator' ); ?>
+					<strong><?php echo esc_html( ! empty( $schedule_info['model'] ) ? $schedule_info['model'] : '—' ); ?></strong>
+				</p>
+			<?php endif; ?>
+			<p>
+				<a href="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'page'   => $page_slug,
+							'tab'    => 'connections',
+							'subtab' => 'scheduling',
+						)
+					)
+				);
+				?>
+				">
+					<?php esc_html_e( 'Change schedule →', 'automated-blog-content-creator' ); ?>
+				</a>
+			</p>
+		<?php else : ?>
+			<p class="abcc-status-next">
+				<span class="abcc-status-dot abcc-status-dot--inactive"></span>
+				<?php esc_html_e( 'Scheduler is off. No posts are queued.', 'automated-blog-content-creator' ); ?>
+			</p>
+			<p>
+				<a href="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'page'   => $page_slug,
+							'tab'    => 'connections',
+							'subtab' => 'scheduling',
+						)
+					)
+				);
+				?>
+				">
+					<?php esc_html_e( 'Set up schedule →', 'automated-blog-content-creator' ); ?>
+				</a>
+			</p>
+		<?php endif; ?>
+	</div>
+
+	<!-- Zone 2: Capability grid -->
+	<h2 class="abcc-section-label"><?php esc_html_e( 'Everything you can do', 'automated-blog-content-creator' ); ?></h2>
+	<div class="abcc-capability-grid">
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page' => $page_slug,
+					'tab'  => 'topics',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Topics', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state">
+				<?php
+				/* translators: %d: number of topics */
+				echo esc_html( sprintf( _n( '%d active', '%d active', $cap_topic_count, 'automated-blog-content-creator' ), $cap_topic_count ) );
+				?>
+			</span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'content',
+					'subtab' => 'bulk',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Bulk Generate', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state"><?php esc_html_e( 'Paste a list → drafts', 'automated-blog-content-creator' ); ?></span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'media',
+					'subtab' => 'audio',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Post from Audio', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state abcc-tile__state--new"><?php esc_html_e( 'New in 4.3', 'automated-blog-content-creator' ); ?></span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'content',
+					'subtab' => 'refresh',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'SEO Refresh', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state abcc-tile__state--new"><?php esc_html_e( 'New in 4.3', 'automated-blog-content-creator' ); ?></span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'media',
+					'subtab' => 'images',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Featured Images', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state <?php echo $cap_images_on ? 'abcc-tile__state--on' : 'abcc-tile__state--off'; ?>">
+				<?php echo $cap_images_on ? esc_html__( 'On', 'automated-blog-content-creator' ) : esc_html__( 'Off', 'automated-blog-content-creator' ); ?>
+			</span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'media',
+					'subtab' => 'infographics',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Infographics', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state <?php echo $cap_infogr_on ? 'abcc-tile__state--on' : 'abcc-tile__state--off'; ?>">
+				<?php echo $cap_infogr_on ? esc_html__( 'On', 'automated-blog-content-creator' ) : esc_html__( 'Off', 'automated-blog-content-creator' ); ?>
+			</span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page'   => $page_slug,
+					'tab'    => 'connections',
+					'subtab' => 'scheduling',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Schedule', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state <?php echo $schedule_info ? 'abcc-tile__state--on' : 'abcc-tile__state--off'; ?>">
+				<?php
+				echo $schedule_info
+					? esc_html( sprintf( /* translators: %s: human time diff */ __( 'Next in %s', 'automated-blog-content-creator' ), human_time_diff( time(), $schedule_info['timestamp'] ) ) )
+					: esc_html__( 'Off', 'automated-blog-content-creator' );
+				?>
+			</span>
+		</a>
+		<a class="abcc-tile" href="
+		<?php
+		echo esc_url(
+			add_query_arg(
+				array(
+					'page' => $page_slug,
+					'tab'  => 'connections',
+				)
+			)
+		);
+		?>
+		">
+			<span class="abcc-tile__name"><?php esc_html_e( 'Providers', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state <?php echo $cap_providers_on > 0 ? 'abcc-tile__state--on' : 'abcc-tile__state--off'; ?>">
+				<?php
+				/* translators: %d: number of connected providers */
+				echo esc_html( sprintf( _n( '%d connected', '%d connected', $cap_providers_on, 'automated-blog-content-creator' ), $cap_providers_on ) );
+				?>
+			</span>
+		</a>
+	</div>
+
+	<!-- Zone 3: Status rail -->
+	<h2 class="abcc-section-label"><?php esc_html_e( 'At a glance', 'automated-blog-content-creator' ); ?></h2>
+	<div class="abcc-status-rail">
+
+	<!-- Recent Activity (full width) -->
 	<div class="abcc-dashboard-card abcc-dashboard-card--activity">
 		<div class="abcc-dashboard-card__header">
 			<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Recent Activity', 'automated-blog-content-creator' ); ?></h2>
@@ -213,7 +483,7 @@ $page_slug = 'automated-blog-content-creator-post';
 			</a>
 		</div>
 		<?php if ( empty( $recent_jobs ) ) : ?>
-			<p class="description"><?php esc_html_e( 'No generation jobs yet. Use Quick Actions above to create your first post.', 'automated-blog-content-creator' ); ?></p>
+			<p class="description"><?php esc_html_e( 'No generation jobs yet. Use the Composer above to create your first post.', 'automated-blog-content-creator' ); ?></p>
 		<?php else : ?>
 			<ul class="abcc-activity-list" id="abcc-dash-activity-list">
 				<?php
@@ -235,7 +505,7 @@ $page_slug = 'automated-blog-content-creator-post';
 							&bull; <?php echo esc_html( human_time_diff( get_post_time( 'U', false, $job ), time() ) ); ?> <?php esc_html_e( 'ago', 'automated-blog-content-creator' ); ?>
 						</span>
 						<?php if ( $result && ABCC_Job::STATUS_SUCCESS === $job_status ) : ?>
-							<a href="<?php echo esc_url( get_edit_post_link( $result ) ); ?>" class="abcc-activity-link">
+							<a href="<?php echo esc_url( (string) get_edit_post_link( $result ) ); ?>" class="abcc-activity-link">
 								<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
 							</a>
 						<?php elseif ( $job_error && ABCC_Job::STATUS_FAILED === $job_status ) : ?>
@@ -250,10 +520,8 @@ $page_slug = 'automated-blog-content-creator-post';
 		<?php endif; ?>
 	</div>
 
-	<!-- Row 3: Provider Health + About -->
-	<div class="abcc-dashboard-row abcc-dashboard-row--bottom">
-
-		<div class="abcc-dashboard-card abcc-dashboard-card--health">
+	<!-- Provider Health -->
+	<div class="abcc-dashboard-card abcc-dashboard-card--health">
 			<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Provider Health', 'automated-blog-content-creator' ); ?></h2>
 			<ul class="abcc-health-list">
 				<?php
@@ -305,7 +573,7 @@ $page_slug = 'automated-blog-content-creator-post';
 				<?php
 				printf(
 					/* translators: %s: version number */
-					esc_html__( 'Version %s (Decade)', 'automated-blog-content-creator' ),
+					esc_html__( 'Version %s (Fourze)', 'automated-blog-content-creator' ),
 					esc_html( ABCC_VERSION )
 				);
 				?>
@@ -342,7 +610,7 @@ $page_slug = 'automated-blog-content-creator-post';
 					</a>
 				</li>
 			</ul>
-		</div>
+		</div><!-- /.abcc-dashboard-card--about -->
 
-	</div>
-</div>
+	</div><!-- /.abcc-status-rail -->
+</div><!-- /.abcc-dashboard -->

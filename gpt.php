@@ -198,7 +198,25 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 		return $result;
 	}
 
-	$result['content'] = explode( PHP_EOL, $text );
+	// HTTP 200 with no text: reasoning models can burn the whole completion
+	// budget on hidden reasoning tokens and return an empty message. Without
+	// this guard the empty string cascades into a generic, unlogged
+	// "Content generation failed" downstream.
+	if ( '' === trim( $text ) ) {
+		$detail = $result['truncated']
+			? ' — the token budget was consumed before any text was produced; raise the character limit'
+			: '';
+		abcc_debug_log( $label . ' returned an empty completion' . $detail . '. Usage: ' . wp_json_encode( $result['usage'] ) );
+		$result['error'] = new WP_Error( 'abcc_provider_empty_completion', sprintf( '%s returned an empty completion%s', $label, $detail ) );
+		return $result;
+	}
+
+	// Models sometimes return the whole HTML post on a single line. Downstream
+	// block creation is line-oriented (one heading/paragraph per line), so
+	// break after each closing block-level tag before splitting.
+	$text = preg_replace( '#(</(?:p|h[1-6]|ul|ol|blockquote)>)\s*#i', "$1\n", $text );
+
+	$result['content'] = explode( "\n", str_replace( "\r\n", "\n", $text ) );
 
 	return $result;
 }

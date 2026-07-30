@@ -32,14 +32,20 @@ if ( ! defined( 'ABCC_CONTENT_FORMAT_REQUIREMENTS' ) ) {
 
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
+		private $code;
 		private $message;
 
 		public function __construct( $code = '', $message = '' ) {
+			$this->code    = $code;
 			$this->message = $message;
 		}
 
 		public function get_error_message() {
 			return $this->message;
+		}
+
+		public function get_error_code() {
+			return $this->code;
 		}
 	}
 }
@@ -103,7 +109,15 @@ function apply_filters($hook, $value, ...$args) {
 	return $value;
 }
 function add_action($hook, $callback) { $GLOBALS['abcc_test_actions'][ $hook ][] = $callback; }
-function current_user_can($cap) {
+function current_user_can($cap, ...$args) {
+	// Per-object cap (e.g. current_user_can('edit_post', $post_id)): a test can
+	// mark specific post IDs as uneditable via $GLOBALS['abcc_test_uneditable_posts'].
+	if ( 'edit_post' === $cap && ! empty( $args ) ) {
+		$post_id = (int) $args[0];
+		if ( in_array( $post_id, (array) ( $GLOBALS['abcc_test_uneditable_posts'] ?? array() ), true ) ) {
+			return false;
+		}
+	}
 	if ( array_key_exists( $cap, $GLOBALS['abcc_test_current_user_caps'] ) ) {
 		return (bool) $GLOBALS['abcc_test_current_user_caps'][ $cap ];
 	}
@@ -176,6 +190,7 @@ function wp_get_schedule($hook) { return 'abcc_openai_generate_post_hook' === $h
 function date_i18n($format, $timestamp) { return gmdate('Y-m-d H:i', (int) $timestamp); }
 function abcc_debug_log($message) { return null; }
 function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
+function wp_get_attachment_url($attachment_id) { return 'https://example.test/wp-content/uploads/audio-' . (int) $attachment_id . '.mp3'; }
 function get_post_meta($post_id, $key = '', $single = false) {
 	$meta = $GLOBALS['abcc_test_post_meta'][ (int) $post_id ][ $key ] ?? null;
 	if ( null === $meta ) {
@@ -256,6 +271,28 @@ function wp_delete_post($post_id, $force = false) {
 }
 
 function get_post($post_id) { return $GLOBALS['abcc_test_posts'][ (int) $post_id ] ?? null; }
+
+/**
+ * Seed a topic post (publish) for resolver/composer tests.
+ *
+ * Title -> post_title (topic name), prompt -> post_content.
+ */
+function abcc_test_make_topic( $title, $prompt ) {
+	static $next_id = 9000;
+	$id = $next_id++;
+
+	$post               = new stdClass();
+	$post->ID           = $id;
+	$post->post_type    = defined( 'ABCC_TOPIC_POST_TYPE' ) ? ABCC_TOPIC_POST_TYPE : 'abcc_topic';
+	$post->post_status  = 'publish';
+	$post->post_title   = $title;
+	$post->post_content = $prompt;
+
+	$GLOBALS['abcc_test_posts'][ $id ]      = $post;
+	$GLOBALS['abcc_test_post_types'][ $id ] = $post->post_type;
+
+	return $id;
+}
 
 function get_posts($args = array()) {
 	$results  = array();
@@ -392,10 +429,140 @@ require_once dirname(__DIR__) . '/includes/topics.php';
 require_once dirname(__DIR__) . '/includes/images.php';
 require_once dirname(__DIR__) . '/includes/content-generation.php';
 require_once dirname(__DIR__) . '/includes/seo.php';
+require_once dirname(__DIR__) . '/includes/seo-regen.php';
+require_once dirname(__DIR__) . '/includes/bulk-seo.php';
 require_once dirname(__DIR__) . '/includes/class-abcc-openai-client.php';
 require_once dirname(__DIR__) . '/gpt.php';
+require_once dirname(__DIR__) . '/includes/blocks.php';
+require_once dirname(__DIR__) . '/includes/audio.php';
 require_once dirname(__DIR__) . '/includes/class-abcc-job.php';
 require_once dirname(__DIR__) . '/includes/onboarding.php';
+
+// Snapshot the AJAX/action hooks registered at file scope during plugin load,
+// before any test resets $GLOBALS['abcc_test_actions']. Lets a test assert that
+// a bootstrap-loaded file (e.g. audio.php) registered its hook, without
+// re-requiring it (which would fatal on function redeclare).
+$GLOBALS['abcc_test_actions_at_load'] = $GLOBALS['abcc_test_actions'];
+
+if ( ! function_exists( 'wp_strip_all_tags' ) ) {
+	function wp_strip_all_tags( $text ) {
+		return strip_tags( (string) $text );
+	}
+}
+
+if ( ! function_exists( 'wp_kses' ) ) {
+	function wp_kses( $text, $allowed_tags = array() ) {
+		return $text;
+	}
+}
+
+if ( ! function_exists( 'esc_html' ) ) {
+	function esc_html( $text ) {
+		return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+if ( ! function_exists( 'esc_attr' ) ) {
+	function esc_attr( $text ) {
+		return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+if ( ! function_exists( 'esc_url' ) ) {
+	function esc_url( $url ) {
+		return $url;
+	}
+}
+
+if ( ! function_exists( 'wp_generate_password' ) ) {
+	function wp_generate_password( $length = 12, $special_chars = true ) {
+		return str_repeat( 'x', (int) $length );
+	}
+}
+
+/**
+ * Queue a raw canned HTTP response for the next wp_remote_post/wp_remote_request.
+ *
+ * @param string $body Raw response body string.
+ */
+function abcc_test_queue_http_response( $body ) {
+	$GLOBALS['abcc_http_queue'][] = array(
+		'response' => array( 'code' => 200 ),
+		'body'     => $body,
+	);
+}
+
+/**
+ * Return a fake Whisper transcription response body (raw text — response_format=text).
+ *
+ * @param string $text The transcript text.
+ * @return string
+ */
+function abcc_test_fake_transcription( $text ) {
+	return $text;
+}
+
+/**
+ * Return a fake chat-completion response body whose content is SEO JSON,
+ * shaped for abcc_generate_title_and_seo's OpenAI parser.
+ *
+ * Keys match the schema seo.php expects at lines 106-113:
+ * title, meta_description, primary_keyword, secondary_keywords, social_excerpt.
+ *
+ * @param string $title       SEO title.
+ * @param string $description Meta description.
+ * @param string $keyword     Primary keyword.
+ * @return string JSON-encoded chat-completion response body.
+ */
+function abcc_test_fake_seo_json( $title, $description, $keyword ) {
+	$seo_json = wp_json_encode(
+		array(
+			'title'               => $title,
+			'meta_description'    => $description,
+			'primary_keyword'     => $keyword,
+			'secondary_keywords'  => array(),
+			'social_excerpt'      => $title . ' - ' . $keyword,
+		)
+	);
+
+	return wp_json_encode(
+		array(
+			'choices' => array(
+				array(
+					'message'       => array( 'content' => $seo_json ),
+					'finish_reason' => 'stop',
+				),
+			),
+			'usage'   => array(
+				'prompt_tokens'     => 10,
+				'completion_tokens' => 20,
+			),
+		)
+	);
+}
+
+/**
+ * Return a fake chat-completion response body shaped for abcc_call_provider_api's OpenAI parser.
+ *
+ * @param string $text The generated text (may contain newlines).
+ * @return string JSON-encoded response body.
+ */
+function abcc_test_fake_generation( $text ) {
+	return wp_json_encode(
+		array(
+			'choices' => array(
+				array(
+					'message'       => array( 'content' => $text ),
+					'finish_reason' => 'stop',
+				),
+			),
+			'usage'   => array(
+				'prompt_tokens'     => 10,
+				'completion_tokens' => 20,
+			),
+		)
+	);
+}
 
 function abcc_test($name, callable $callback) {
 	$GLOBALS['abcc_tests'][] = array(
