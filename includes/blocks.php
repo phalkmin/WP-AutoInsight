@@ -22,7 +22,10 @@ function abcc_create_block( $block_name, $attributes = array(), $content = '' ) 
 	$content = trim( $content );
 
 	if ( 'heading' === $block_name ) {
-		$level = isset( $attributes['level'] ) ? $attributes['level'] : 2;
+		// A model that emits <h7> or a malformed level would otherwise produce
+		// invalid HTML that Gutenberg silently drops.
+		$level = isset( $attributes['level'] ) ? (int) $attributes['level'] : 2;
+		$level = max( 1, min( 6, $level ) );
 		return sprintf(
 			'<!-- wp:heading {"level":%d} --><h%d class="wp-block-heading">%s</h%d><!-- /wp:heading -->',
 			$level,

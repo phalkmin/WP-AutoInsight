@@ -15,9 +15,7 @@ jQuery(document).ready(function ($) {
 
     // Reset UI
     $result.hide();
-    $status.html(
-      '<span class="spinner is-active"></span> ' + abccAudio.i18n.transcribing
-    );
+    abcc.showStatus($status, abccAudio.i18n.transcribing, "loading");
     $button.prop("disabled", true);
     $(".abcc-audio-create-post").prop("disabled", true);
 
@@ -33,10 +31,7 @@ jQuery(document).ready(function ($) {
       timeout: 300000, // 5 minutes timeout for large files
       success: function (response) {
         if (response.success) {
-          $status.html(
-            '<span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> ' +
-              response.data.message
-          );
+          abcc.showStatus($status, response.data.message, "success");
 
           // Show transcript and create post button
           $("#abcc-transcript-text").val(response.data.transcript);
@@ -48,9 +43,10 @@ jQuery(document).ready(function ($) {
           textarea.style.height = "auto";
           textarea.style.height = textarea.scrollHeight + "px";
         } else {
-          $status.html(
-            '<span class="dashicons dashicons-warning" style="color: #dc3232;"></span> ' +
-              (response.data.message || abccAudio.i18n.error)
+          abcc.showStatus(
+            $status,
+            response.data.message || abccAudio.i18n.error,
+            "error"
           );
         }
       },
@@ -59,10 +55,7 @@ jQuery(document).ready(function ($) {
         if (status === "timeout") {
           errorMsg = "Request timed out. Try with a smaller file.";
         }
-        $status.html(
-          '<span class="dashicons dashicons-warning" style="color: #dc3232;"></span> ' +
-            errorMsg
-        );
+        abcc.showStatus($status, errorMsg, "error");
       },
       complete: function () {
         $button.prop("disabled", false);
@@ -81,14 +74,12 @@ jQuery(document).ready(function ($) {
     const transcript = $("#abcc-transcript-text").val();
 
     if (!transcript.trim()) {
-      alert("No transcript available");
+      alert(abccAudio.i18n.noTranscript || "No transcript available");
       return;
     }
 
     $button.prop("disabled", true);
-    $status.html(
-      '<span class="spinner is-active"></span> ' + abccAudio.i18n.creating
-    );
+    abcc.showStatus($status, abccAudio.i18n.creating, "loading");
 
     $.ajax({
       url: abccAudio.ajaxurl,
@@ -101,27 +92,27 @@ jQuery(document).ready(function ($) {
       },
       success: function (response) {
         if (response.success) {
-          $status.html(
-            '<span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> ' +
-              response.data.message +
-              ' <a href="' +
-              response.data.edit_url +
-              '" class="button button-small" target="_blank">' +
-              "Edit Post</a>"
-          );
+          var $editLink = $("<a>")
+            .attr("href", response.data.edit_url)
+            .attr("class", "button button-small")
+            .attr("target", "_blank")
+            .text("Edit Post");
+          var $msg = $("<span>")
+            .text(response.data.message + " ")
+            .append($editLink);
+
+          abcc.showHtml($status, $msg, "success");
           $button.hide(); // Hide since post is created
         } else {
-          $status.html(
-            '<span class="dashicons dashicons-warning" style="color: #dc3232;"></span> ' +
-              (response.data.message || abccAudio.i18n.error)
+          abcc.showStatus(
+            $status,
+            response.data.message || abccAudio.i18n.error,
+            "error"
           );
         }
       },
       error: function () {
-        $status.html(
-          '<span class="dashicons dashicons-warning" style="color: #dc3232;"></span> ' +
-            abccAudio.i18n.error
-        );
+        abcc.showStatus($status, abccAudio.i18n.error, "error");
       },
       complete: function () {
         $button.prop("disabled", false);
@@ -140,7 +131,7 @@ jQuery(document).ready(function ($) {
     }
 
     $btn.prop("disabled", true);
-    $status.text("Transcribing and generating… this can take a minute.");
+    abcc.showStatus($status, "Transcribing and generating… this can take a minute.", "loading");
 
     $.ajax({
       url: abccAudio.ajaxurl,
@@ -154,17 +145,23 @@ jQuery(document).ready(function ($) {
       },
       success: function (response) {
         if (response.success) {
-          $status.html(
-            response.data.message +
-              " <a href='" + response.data.edit_url + "' class='button button-small' target='_blank'>Edit Post</a>"
-          );
+          var $editLink = $("<a>")
+            .attr("href", response.data.edit_url)
+            .attr("class", "button button-small")
+            .attr("target", "_blank")
+            .text("Edit Post");
+          var $msg = $("<span>")
+            .text(response.data.message + " ")
+            .append($editLink);
+
+          abcc.showHtml($status, $msg, "success");
         } else {
-          $status.text(response.data.message);
+          abcc.showStatus($status, response.data.message, "error");
         }
         $btn.prop("disabled", false);
       },
       error: function (xhr) {
-        $status.text("Error: " + xhr.statusText);
+        abcc.showStatus($status, "Error: " + xhr.statusText, "error");
         $btn.prop("disabled", false);
       },
     });
@@ -189,14 +186,16 @@ jQuery(document).ready(function ($) {
   const fileSize = parseInt($(".abcc-audio-create-post").data("file-size"));
   if (fileSize) {
     const maxSize = 25 * 1024 * 1024; // 25MB
-    let fileInfo = "File size: " + formatFileSize(fileSize);
+    const $fileInfo = $("<span>").text("File size: " + formatFileSize(fileSize));
 
     if (fileSize > maxSize) {
-      fileInfo +=
-        ' <span style="color: #dc3232;">(Too large - max 25MB)</span>';
+      const $warning = $("<span>")
+        .css("color", "#dc3232")
+        .text("(Too large - max 25MB)");
+      $fileInfo.append(" ", $warning);
       $(".abcc-audio-create-post, #abcc-transcribe-only").prop("disabled", true);
     }
 
-    $("#abcc-transcription-status").html(fileInfo);
+    abcc.showHtml($("#abcc-transcription-status"), $fileInfo, "info");
   }
 });

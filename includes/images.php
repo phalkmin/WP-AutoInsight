@@ -83,6 +83,94 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 }
 
 /**
+ * Record whether featured-image generation was attempted and how it went.
+ *
+ * @since 4.4.0
+ * @param int    $post_id Post ID.
+ * @param bool   $success Whether generation succeeded.
+ * @param string $reason  Failure reason. Ignored on success.
+ * @return void
+ */
+function abcc_record_image_generation_attempt( $post_id, $success, $reason = '' ) {
+	update_post_meta(
+		(int) $post_id,
+		'_abcc_image_generation_attempted',
+		$success ? '1' : ( '' !== $reason ? $reason : __( 'Unknown error', 'automated-blog-content-creator' ) )
+	);
+}
+
+/**
+ * Resolve the keywords and model to use when retrying a failed featured image.
+ *
+ * The original generation's inputs live in _abcc_generation_params on the
+ * content post (_abcc_job_keywords only exists on job posts). Posts without
+ * params fall back to the post title.
+ *
+ * @since 4.4.0
+ * @param int $post_id Post ID.
+ * @return array array( 'keywords' => string[], 'model' => string )
+ */
+function abcc_get_image_retry_context( $post_id ) {
+	$post_id  = (int) $post_id;
+	$keywords = array();
+	$model    = abcc_get_setting( 'prompt_select', '' );
+
+	$params = json_decode( (string) get_post_meta( $post_id, '_abcc_generation_params', true ), true );
+
+	if ( is_array( $params ) ) {
+		if ( ! empty( $params['focus_keyword'] ) ) {
+			// The original image prompt used the focus keyword, not the full list.
+			$keywords = array( (string) $params['focus_keyword'] );
+		} elseif ( ! empty( $params['keywords'] ) ) {
+			$keywords = array_values( array_filter( array_map( 'strval', (array) $params['keywords'] ), 'strlen' ) );
+		}
+
+		if ( ! empty( $params['model'] ) ) {
+			$model = (string) $params['model'];
+		}
+	}
+
+	if ( empty( $keywords ) ) {
+		$title    = get_the_title( $post_id );
+		$keywords = '' !== (string) $title ? array( (string) $title ) : array();
+	}
+
+	return array(
+		'keywords' => $keywords,
+		'model'    => $model,
+	);
+}
+
+/**
+ * Build the admin notice for a post whose featured image failed.
+ *
+ * @since 4.4.0
+ * @param int $post_id Post ID.
+ * @return string Notice HTML, or '' when there is nothing to report.
+ */
+function abcc_get_image_failure_notice_html( $post_id ) {
+	$attempt = (string) get_post_meta( (int) $post_id, '_abcc_image_generation_attempted', true );
+
+	if ( '' === $attempt || '1' === $attempt ) {
+		return '';
+	}
+
+	return sprintf(
+		'<div class="notice notice-warning is-dismissible abcc-image-failure"><p>%1$s <button type="button" class="button button-small abcc-retry-image" data-post-id="%2$d" data-nonce="%4$s">%3$s</button></p></div>',
+		esc_html(
+			sprintf(
+				/* translators: %s: failure reason from the image provider */
+				__( 'Could not generate a featured image — %s', 'automated-blog-content-creator' ),
+				$attempt
+			)
+		),
+		(int) $post_id,
+		esc_html__( 'Retry', 'automated-blog-content-creator' ),
+		esc_attr( wp_create_nonce( 'abcc_retry_image' ) )
+	);
+}
+
+/**
  * Build featured image alt text.
  *
  * @param string $title           Post title.
@@ -101,6 +189,58 @@ function abcc_build_featured_image_alt_text( $title, $primary_keyword ) {
 }
 
 /**
+ * Register a local image file as an attachment and set it as the featured image.
+ *
+ * media_sideload_image() HTTP-GETs a URL we just wrote to disk — a round trip to
+ * the site's own frontend that fails on local, basic-auth, and firewalled
+ * installs. Registering from the local path skips the network entirely.
+ *
+ * @since 4.4.0
+ * @param int    $post_id  Target post.
+ * @param string $path     Absolute path to an image file inside the uploads dir.
+ * @param string $alt_text Optional alt text.
+ * @return int|false Attachment ID, or false on failure.
+ */
+function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '' ) {
+	if ( ! file_exists( $path ) ) {
+		abcc_debug_log( 'Featured Image Error: local file missing at ' . $path );
+		return false;
+	}
+
+	if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+	}
+
+	$filetype = wp_check_filetype( basename( $path ), null );
+
+	$attachment_id = wp_insert_attachment(
+		array(
+			'post_mime_type' => $filetype['type'] ? $filetype['type'] : 'image/png',
+			'post_title'     => sanitize_file_name( pathinfo( $path, PATHINFO_FILENAME ) ),
+			'post_content'   => '',
+			'post_status'    => 'inherit',
+		),
+		$path,
+		$post_id
+	);
+
+	if ( is_wp_error( $attachment_id ) || ! $attachment_id ) {
+		abcc_debug_log( 'Featured Image Error: wp_insert_attachment failed for ' . $path );
+		return false;
+	}
+
+	wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $path ) );
+
+	if ( ! empty( $alt_text ) ) {
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
+	}
+
+	set_post_thumbnail( $post_id, $attachment_id );
+
+	return (int) $attachment_id;
+}
+
+/**
  * Sets the featured image for a post.
  *
  * @param int    $post_id Post ID.
@@ -110,6 +250,21 @@ function abcc_build_featured_image_alt_text( $title, $primary_keyword ) {
  */
 function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 	try {
+		// Local file: register directly, no self-HTTP.
+		if ( 0 === strpos( $image_url, 'file://' ) || file_exists( $image_url ) ) {
+			return abcc_attach_local_image_to_post( $post_id, str_replace( 'file://', '', $image_url ), $alt_text );
+		}
+
+		// Generated images live in our own uploads dir — map the URL back to a
+		// path so attaching never needs a loopback HTTP request.
+		$uploads = wp_upload_dir();
+		if ( ! empty( $uploads['baseurl'] ) && 0 === strpos( $image_url, $uploads['baseurl'] ) ) {
+			$local_path = $uploads['basedir'] . substr( $image_url, strlen( $uploads['baseurl'] ) );
+			if ( file_exists( $local_path ) ) {
+				return abcc_attach_local_image_to_post( $post_id, $local_path, $alt_text );
+			}
+		}
+
 		if ( ! function_exists( 'media_sideload_image' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/media.php';
 			require_once ABSPATH . 'wp-admin/includes/file.php';

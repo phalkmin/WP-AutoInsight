@@ -38,13 +38,17 @@ function abcc_trigger_inline_api_validation() {
  * @return void
  */
 function abcc_add_subpages_to_menu() {
-	add_menu_page(
+	$page_hook = add_menu_page(
 		__( 'WP-AutoInsight', 'automated-blog-content-creator' ),
 		__( 'WP-AutoInsight', 'automated-blog-content-creator' ),
 		'manage_options',
 		'automated-blog-content-creator-post',
 		'abcc_openai_text_settings_page'
 	);
+
+	// Saves, the export, and redirects need headers and admin_notices, which
+	// are gone by render time — they run on load-{page_hook} instead.
+	add_action( 'load-' . $page_hook, 'abcc_handle_settings_page_actions' );
 }
 add_action( 'admin_menu', 'abcc_add_subpages_to_menu' );
 
@@ -68,13 +72,16 @@ function abcc_get_ai_model_options() {
 function abcc_get_tooltip_html( $text ) {
 	return wp_kses(
 		sprintf(
-			'<span class="wpai-tooltip" data-tooltip="%1$s"><span class="dashicons dashicons-editor-help"></span></span>',
+			'<span class="wpai-tooltip" data-tooltip="%1$s" tabindex="0" role="note" aria-label="%1$s"><span class="dashicons dashicons-editor-help"></span></span>',
 			esc_attr( $text )
 		),
 		array(
 			'span' => array(
 				'class'        => array(),
 				'data-tooltip' => array(),
+				'tabindex'     => array(),
+				'role'         => array(),
+				'aria-label'   => array(),
 			),
 		)
 	);
@@ -151,19 +158,15 @@ function abcc_category_dropdown_single( $selected_category = 0, $name = 'abcc_ca
 }
 
 /**
- * Displays and handles settings for the blog post generator.
+ * Handle settings-page form posts, the settings export, and redirects.
  *
- * @since 1.0.0
+ * Runs on load-{page_hook}, before admin-header.php sends output — the render
+ * callback is too late for header(), wp_safe_redirect(), and admin_notices.
+ *
+ * @since 4.4.0
  * @return void
  */
-function abcc_openai_text_settings_page() {
-
-	// Check if this is a new user who needs onboarding
-	if ( ! get_option( 'abcc_onboarding_completed', false ) && ! abcc_has_any_api_key() ) {
-		abcc_show_onboarding_page();
-		return;
-	}
-
+function abcc_handle_settings_page_actions() {
 	// Handle settings export (GET request with nonce).
 	if ( isset( $_GET['abcc_export_settings'] ) && current_user_can( 'manage_options' ) ) {
 		$nonce_value = isset( $_GET['_wpnonce'] ) ? sanitize_key( wp_unslash( $_GET['_wpnonce'] ) ) : '';
@@ -171,7 +174,7 @@ function abcc_openai_text_settings_page() {
 			$schema   = abcc_get_settings_schema();
 			$exported = array();
 			foreach ( $schema['settings'] as $key => $def ) {
-				// Never export credentials in a portable settings file (review #13).
+				// Never export credentials in a portable settings file.
 				if ( '_api_key' === substr( $key, -8 ) ) {
 					continue;
 				}
@@ -236,6 +239,13 @@ function abcc_openai_text_settings_page() {
 					}
 					abcc_update_setting( 'openai_tone', $openai_tone );
 				}
+
+				if ( isset( $_POST['abcc_content_language'] ) ) {
+					abcc_update_setting(
+						'abcc_content_language',
+						abcc_sanitize_content_language( wp_unslash( $_POST['abcc_content_language'] ) )
+					);
+				}
 				break;
 
 			case 'connections':
@@ -246,7 +256,7 @@ function abcc_openai_text_settings_page() {
 						$key_field = $provider_id . '_api_key';
 						if ( isset( $_POST[ $key_field ] ) ) {
 							$api_key = sanitize_text_field( wp_unslash( $_POST[ $key_field ] ) );
-							abcc_set_provider_saved_api_key( $provider_id, $api_key );
+							abcc_save_provider_api_key_submission( $provider_id, $api_key );
 						}
 					}
 
@@ -353,19 +363,57 @@ function abcc_openai_text_settings_page() {
 							foreach ( $jobs as $id ) {
 								wp_delete_post( $id, true );
 							}
+						} elseif ( 'restart_onboarding' === $action ) {
+							// Keys and settings are kept; the query flag reopens the wizard.
+							abcc_update_setting( 'abcc_onboarding_completed', false );
+							wp_safe_redirect( admin_url( 'admin.php?page=automated-blog-content-creator-post&abcc_onboarding=restart' ) );
+							exit;
 						}
 					}
 				}
 				break;
 		}
 
-		// Add success message for all tabs.
+		// Destructive actions get their own notice instead of "Settings saved".
+		$abcc_posted_action = isset( $_POST['abcc_action'] ) ? sanitize_key( wp_unslash( $_POST['abcc_action'] ) ) : '';
+
+		if ( 'reset_settings' === $abcc_posted_action ) {
+			$abcc_notice = __( 'All settings reset to defaults.', 'automated-blog-content-creator' );
+		} elseif ( 'delete_history' === $abcc_posted_action ) {
+			$abcc_notice = __( 'Generation history deleted.', 'automated-blog-content-creator' );
+		} else {
+			$abcc_notice = __( 'Settings saved successfully!', 'automated-blog-content-creator' );
+		}
+
 		add_action(
 			'admin_notices',
-			function () {
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully!', 'automated-blog-content-creator' ) . '</p></div>';
+			function () use ( $abcc_notice ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $abcc_notice ) . '</p></div>';
 			}
 		);
+	}
+}
+
+/**
+ * Displays settings for the blog post generator.
+ *
+ * Render only — form posts and header-sending actions run earlier, on
+ * load-{page_hook} (abcc_handle_settings_page_actions()).
+ *
+ * @since 1.0.0
+ * @return void
+ */
+function abcc_openai_text_settings_page() {
+
+	// New users get the wizard; the restart flag reopens it for existing
+	// users. The flag must be ORed in, not ANDed:
+	// abcc_check_existing_user_on_activation() re-completes onboarding on
+	// admin_init for every key-holder.
+	$abcc_onboarding_restart = isset( $_GET['abcc_onboarding'] ) && 'restart' === sanitize_key( wp_unslash( $_GET['abcc_onboarding'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only routing; the restart action itself was nonce-checked on submit.
+
+	if ( $abcc_onboarding_restart || ( ! get_option( 'abcc_onboarding_completed', false ) && ! abcc_has_any_api_key() ) ) {
+		abcc_show_onboarding_page();
+		return;
 	}
 
 	$schedule_info     = abcc_get_openai_event_schedule();
@@ -388,20 +436,30 @@ function abcc_openai_text_settings_page() {
 			'adminUrl'    => admin_url( 'post.php?' ),
 			'i18n'        => array(
 				/* translators: %d: number of posts to generate */
-				'generateNPosts' => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
-				'copied'         => __( 'Copied', 'automated-blog-content-creator' ),
+				'generateNPosts'        => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
+				'copied'                => __( 'Copied', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator while saving */
-				'saving'         => __( 'Saving…', 'automated-blog-content-creator' ),
+				'saving'                => __( 'Saving…', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator after successful save */
-				'saved'          => __( 'Saved ✓', 'automated-blog-content-creator' ),
+				'saved'                 => __( 'Saved ✓', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator when saving fails */
-				'saveFailed'     => __( 'Save failed ✗', 'automated-blog-content-creator' ),
-				'queued'         => __( 'Queued', 'automated-blog-content-creator' ),
+				'saveFailed'            => __( 'Save failed ✗', 'automated-blog-content-creator' ),
+				'queued'                => __( 'Queued', 'automated-blog-content-creator' ),
 				/* translators: shown while a bulk post is being generated */
-				'generating'     => __( 'Generating…', 'automated-blog-content-creator' ),
-				'done'           => __( 'Done', 'automated-blog-content-creator' ),
-				'failed'         => __( 'Failed', 'automated-blog-content-creator' ),
-				'viewPost'       => __( 'View post', 'automated-blog-content-creator' ),
+				'generating'            => __( 'Generating…', 'automated-blog-content-creator' ),
+				'done'                  => __( 'Done', 'automated-blog-content-creator' ),
+				'failed'                => __( 'Failed', 'automated-blog-content-creator' ),
+				'viewPost'              => __( 'View post', 'automated-blog-content-creator' ),
+				'editPost'              => __( 'Edit post', 'automated-blog-content-creator' ),
+				'postCreated'           => __( 'Post created!', 'automated-blog-content-creator' ),
+				'stillWorking'          => __( 'Still working… you can leave this page and check Content → Generation Log.', 'automated-blog-content-creator' ),
+				'confirmDeleteGroup'    => __( 'Are you sure you want to remove this keyword group?', 'automated-blog-content-creator' ),
+				'confirmDeleteTemplate' => __( 'Are you sure you want to remove this content template?', 'automated-blog-content-creator' ),
+				'confirmRegeneratePost' => __( 'Are you sure you want to regenerate this post? It will create a NEW draft using the same parameters.', 'automated-blog-content-creator' ),
+				'regenerating'          => __( 'Regenerating…', 'automated-blog-content-creator' ),
+				'unknownError'          => __( 'Something went wrong. Check Content → Generation Log.', 'automated-blog-content-creator' ),
+				'networkError'          => __( 'Could not reach the server. Check your connection.', 'automated-blog-content-creator' ),
+				'generationFailed'      => __( 'Generation failed. Check Content → Generation Log.', 'automated-blog-content-creator' ),
 			),
 		)
 	);

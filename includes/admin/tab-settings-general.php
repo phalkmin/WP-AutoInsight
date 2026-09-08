@@ -46,8 +46,17 @@ $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 						data-autosave-key="openai_char_limit"
 						min="100" max="4000" step="100"
 						value="<?php echo esc_attr( $char_limit ); ?>"
-						oninput="document.getElementById('abcc-char-limit-display').textContent = this.value + ' tokens'">
-					<span id="abcc-char-limit-display"><?php echo esc_html( $char_limit ); ?> <?php esc_html_e( 'tokens', 'automated-blog-content-creator' ); ?></span>
+						oninput="document.getElementById('abcc-char-limit-display').textContent = '≈' + Math.round(this.value * 0.75) + ' words';">
+					<span id="abcc-char-limit-display">
+						<?php
+						// 0.75 words-per-token matches the tooltip and {word_count}.
+						printf(
+							/* translators: %s: approximate word count */
+							esc_html__( '≈%s words', 'automated-blog-content-creator' ),
+							esc_html( (string) round( $char_limit * 0.75 ) )
+						);
+						?>
+					</span>
 				</td>
 			</tr>
 			<tr>

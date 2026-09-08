@@ -33,3 +33,49 @@ abcc_test(
 		abcc_assert_equals( array( 'alpha', 'beta' ), $params['keywords'] );
 	}
 );
+
+abcc_test(
+	'detailed generation surfaces truncated and error alongside content',
+	function () {
+		// finish_reason "length" is the OpenAI truncation signal.
+		abcc_test_queue_http_response(
+			wp_json_encode(
+				array(
+					'choices' => array(
+						array(
+							'message'       => array( 'content' => "<p>Cut off here" ),
+							'finish_reason' => 'length',
+						),
+					),
+					'usage'   => array( 'prompt_tokens' => 10, 'completion_tokens' => 20 ),
+				)
+			)
+		);
+
+		$result = abcc_generate_content_detailed(
+			'sk-test',
+			'Write something.',
+			'gpt-4.1-mini-2025-04-14',
+			200
+		);
+
+		abcc_assert_array_has_key( 'truncated', $result, 'Detailed result must expose truncated.' );
+		abcc_assert_array_has_key( 'error', $result, 'Detailed result must expose error.' );
+		abcc_assert_array_has_key( 'content', $result, 'Detailed result must expose content.' );
+		abcc_assert_true( $result['truncated'], 'finish_reason "length" must set truncated.' );
+	}
+);
+
+abcc_test(
+	'the legacy generate_content wrapper keeps its array-or-false contract',
+	function () {
+		abcc_test_queue_http_response( abcc_test_fake_generation( '<p>Body.</p>' ) );
+
+		$ok = abcc_generate_content( 'sk-test', 'Prompt.', 'gpt-4.1-mini-2025-04-14', 200 );
+		abcc_assert_true( is_array( $ok ), 'Success must still return an array of lines.' );
+
+		// Nothing queued: the request errors.
+		$bad = abcc_generate_content( 'sk-test', 'Prompt.', 'gpt-4.1-mini-2025-04-14', 200 );
+		abcc_assert_false( false !== $bad, 'Failure must still return false, not an array.' );
+	}
+);

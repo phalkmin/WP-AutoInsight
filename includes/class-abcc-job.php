@@ -83,11 +83,17 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 
 	if ( $process_inline ) {
 		// Caller (e.g. bulk-generate AJAX) processes the job itself; do not
-		// also schedule a cron worker that could claim it first (review #12).
+		// also schedule a cron worker that could claim it first.
 		abcc_process_generation_job( $job_id );
 	} elseif ( abcc_is_wp_cron_available() ) {
 		wp_schedule_single_event( time(), 'abcc_process_generation_job', array( $job_id ) );
-		spawn_cron();
+
+		// Batch callers (bulk SEO, bulk generate) pass defer_spawn and call
+		// spawn_cron() once after the whole batch is queued. Spawning per job
+		// fires one loopback HTTP request per selected post.
+		if ( empty( $args['defer_spawn'] ) ) {
+			spawn_cron();
+		}
 	} else {
 		// WP-Cron is disabled (e.g. managed hosting with external cron). Process inline
 		// so generation still completes — the job record still tracks status normally.
@@ -206,6 +212,10 @@ function abcc_process_generation_job( $job_id ) {
 		$payload['post_author'] = $created_by;
 	}
 
+	// Thread the job ID through so the citation transient is keyed per job,
+	// not per user (cron has no current user; see abcc_citation_transient_key()).
+	$payload['job_id'] = $job_id;
+
 	update_post_meta( $job_id, '_abcc_job_started_at', current_time( 'mysql' ) );
 
 	try {
@@ -274,6 +284,26 @@ function abcc_process_generation_job( $job_id ) {
 	}
 }
 add_action( 'abcc_process_generation_job', 'abcc_process_generation_job' );
+
+/**
+ * Append an informational note to a job.
+ *
+ * Distinct from _abcc_job_error, which marks a failure — notes attach to
+ * successful jobs too (e.g. "completed with truncation repair").
+ *
+ * @since 4.4.0
+ * @param int    $job_id Job ID.
+ * @param string $note   Human-readable note.
+ * @return void
+ */
+function abcc_append_job_log_note( $job_id, $note ) {
+	$notes = get_post_meta( (int) $job_id, '_abcc_job_notes', true );
+	$notes = is_array( $notes ) ? $notes : array();
+
+	$notes[] = sanitize_text_field( $note );
+
+	update_post_meta( (int) $job_id, '_abcc_job_notes', $notes );
+}
 
 /**
  * Mark a generation job as failed.
@@ -409,6 +439,8 @@ function abcc_render_job_log_rows( $args = array() ) {
 			$duration       = get_post_meta( $job->ID, '_abcc_job_duration', true );
 			$result_post_id = (int) get_post_meta( $job->ID, '_abcc_job_result_post_id', true );
 			$error_message  = get_post_meta( $job->ID, '_abcc_job_error', true );
+			$job_notes      = get_post_meta( $job->ID, '_abcc_job_notes', true );
+			$job_notes      = is_array( $job_notes ) ? $job_notes : array();
 			$created_at     = get_post_meta( $job->ID, '_abcc_job_created_at', true );
 			?>
 			<tr data-job-id="<?php echo esc_attr( $job->ID ); ?>">
@@ -418,7 +450,7 @@ function abcc_render_job_log_rows( $args = array() ) {
 					</span>
 				</td>
 				<td><?php echo esc_html( abcc_get_job_source_label( $source ) ); ?></td>
-				<td><small><?php echo esc_html( $model ? $model : 'n/a' ); ?></small></td>
+				<td><small><?php echo esc_html( $model ? abcc_get_model_display_name( $model ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( ! empty( $keywords ) ? implode( ', ', $keywords ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( $template ? $template : 'default' ); ?></small></td>
 				<td><small><?php echo esc_html( $created_at ? get_date_from_gmt( get_gmt_from_date( $created_at ), 'Y-m-d H:i' ) : 'n/a' ); ?></small></td>
@@ -476,6 +508,9 @@ function abcc_render_job_log_rows( $args = array() ) {
 					<?php else : ?>
 						&mdash;
 					<?php endif; ?>
+					<?php foreach ( $job_notes as $job_note ) : ?>
+						<br><small class="abcc-job-note"><?php echo esc_html( $job_note ); ?></small>
+					<?php endforeach; ?>
 				</td>
 			</tr>
 			<?php
@@ -529,7 +564,7 @@ function abcc_render_legacy_history_rows( $limit = 10 ) {
 					</span>
 				</td>
 				<td><?php esc_html_e( 'Legacy', 'automated-blog-content-creator' ); ?></td>
-				<td><small><?php echo esc_html( $model ? $model : 'n/a' ); ?></small></td>
+				<td><small><?php echo esc_html( $model ? abcc_get_model_display_name( $model ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( ! empty( $keywords ) ? implode( ', ', $keywords ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( $template ); ?></small></td>
 				<td><small><?php echo esc_html( get_the_date( 'Y-m-d H:i', $post ) ); ?></small></td>
@@ -582,12 +617,14 @@ function abcc_get_job_data( $job_id ) {
 	}
 
 	$result_post_id = (int) get_post_meta( $job_id, '_abcc_job_result_post_id', true );
+	$job_notes      = get_post_meta( $job_id, '_abcc_job_notes', true );
 
 	return array(
 		'id'          => $job_id,
 		'status'      => get_post_meta( $job_id, '_abcc_job_status', true ),
 		'statusLabel' => abcc_get_job_status_label( get_post_meta( $job_id, '_abcc_job_status', true ) ),
 		'message'     => get_post_meta( $job_id, '_abcc_job_error', true ),
+		'notes'       => is_array( $job_notes ) ? $job_notes : array(),
 		'post_id'     => $result_post_id,
 		'edit_url'    => $result_post_id ? get_edit_post_link( $result_post_id, 'raw' ) : '',
 	);

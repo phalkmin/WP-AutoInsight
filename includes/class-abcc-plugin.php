@@ -73,16 +73,9 @@ class ABCC_Plugin {
 		// Migrations.
 		add_action( 'admin_init', array( $this, 'run_migrations' ) );
 
-		// Daily provider health check cron.
+		// Daily provider health check cron callback registration. The event
+		// itself is scheduled on activation, not on every request.
 		add_action( 'abcc_daily_provider_health_check', 'abcc_run_provider_health_check' );
-		if ( ! wp_next_scheduled( 'abcc_daily_provider_health_check' ) ) {
-			wp_schedule_event( time(), 'daily', 'abcc_daily_provider_health_check' );
-		}
-
-		// Hourly Topic Library sweep (callback hooked in includes/topics.php).
-		if ( ! wp_next_scheduled( 'abcc_run_topic_schedules' ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'abcc_run_topic_schedules' );
-		}
 	}
 
 	/**
@@ -114,6 +107,16 @@ class ABCC_Plugin {
 	public function activate_plugin() {
 		$this->check_requirements();
 		$this->setup_prompt_ai_capability();
+
+		// Daily provider health check cron.
+		if ( ! wp_next_scheduled( 'abcc_daily_provider_health_check' ) ) {
+			wp_schedule_event( time(), 'daily', 'abcc_daily_provider_health_check' );
+		}
+
+		// Hourly Topic Library sweep (callback hooked in includes/topics.php).
+		if ( ! wp_next_scheduled( 'abcc_run_topic_schedules' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'abcc_run_topic_schedules' );
+		}
 	}
 
 	/**
@@ -213,6 +216,8 @@ class ABCC_Plugin {
 						'edit'                  => __( 'Edit', 'automated-blog-content-creator' ),
 						'networkError'          => __( 'Network error occurred', 'automated-blog-content-creator' ),
 						'unknownError'          => __( 'Unknown error', 'automated-blog-content-creator' ),
+						'stillWorking'          => __( 'Still working… you can leave this page and check Content → Generation Log.', 'automated-blog-content-creator' ),
+						'generationFailed'      => __( 'Generation failed. Check Content → Generation Log.', 'automated-blog-content-creator' ),
 					),
 				)
 			);

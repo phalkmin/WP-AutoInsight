@@ -101,9 +101,13 @@
 		$( document ).on( 'click', '.abcc-topic-toggle', function ( event ) {
 			event.preventDefault();
 
-			post( 'abcc_topic_toggle', { topic_id: $( this ).data( 'topic-id' ) } ).done( function () {
-				window.location.reload();
-			} );
+			post( 'abcc_topic_toggle', { topic_id: $( this ).data( 'topic-id' ) } )
+				.done( function () {
+					window.location.reload();
+				} )
+				.fail( function () {
+					window.alert( abccTopics.i18n.error );
+				} );
 		} );
 
 		$( document ).on( 'click', '.abcc-topic-run-now', function ( event ) {
@@ -129,9 +133,13 @@
 				return;
 			}
 
-			post( 'abcc_topic_delete', { topic_id: $( this ).data( 'topic-id' ) } ).done( function () {
-				window.location.reload();
-			} );
+			post( 'abcc_topic_delete', { topic_id: $( this ).data( 'topic-id' ) } )
+				.done( function () {
+					window.location.reload();
+				} )
+				.fail( function () {
+					window.alert( abccTopics.i18n.error );
+				} );
 		} );
 	} );
 } )( jQuery );

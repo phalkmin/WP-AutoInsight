@@ -67,10 +67,27 @@ class ABCC_OpenAI_Client {
 
 		if ( 200 !== $code ) {
 			$error_data = json_decode( $body, true );
+
+			// Same status-class codes as abcc_call_provider_api() so OpenAI
+			// failures are distinguishable by the error formatter and the
+			// v4.5 fallback chain.
+			if ( 401 === $code || 403 === $code ) {
+				$error_code = 'abcc_provider_auth_error';
+			} elseif ( 429 === $code ) {
+				$error_code = 'abcc_provider_rate_limited';
+			} elseif ( $code >= 500 ) {
+				$error_code = 'abcc_provider_server_error';
+			} else {
+				$error_code = 'abcc_provider_http_error';
+			}
+
 			return new WP_Error(
-				'openai_api_error',
+				$error_code,
 				isset( $error_data['error']['message'] ) ? $error_data['error']['message'] : 'Unknown API error',
-				array( 'status' => $code )
+				array(
+					'status'   => $code,
+					'provider' => 'openai',
+				)
 			);
 		}
 

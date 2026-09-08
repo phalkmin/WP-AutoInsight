@@ -125,6 +125,13 @@ function abcc_handle_rewrite_post() {
 		return;
 	}
 
+	// Role-level prompt access is not enough — the user must also be able to
+	// edit THIS post.
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to edit this post.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	try {
 		// Get the post.
 		$post = get_post( $post_id );
@@ -155,19 +162,25 @@ function abcc_handle_rewrite_post() {
 			"- Make it more engaging and SEO-friendly\n" .
 			'- Use clear headings and better paragraph structure',
 			$post->post_title,
-			wp_strip_all_tags( $post->post_content )
+			// Bound the post body — arbitrary-length content overflows the model context.
+			abcc_bound_prompt_input( wp_strip_all_tags( $post->post_content ) )
 		);
 
 		// Generate new content.
-		$result = abcc_generate_content(
-			$api_key,
-			$prompt,
-			$prompt_select,
-			$char_limit
-		);
+		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit );
+		$result   = is_wp_error( $detailed['error'] ) ? false : $detailed['content'];
 
-		if ( false === $result ) {
-			throw new Exception( __( 'Failed to generate new content', 'automated-blog-content-creator' ) );
+		if ( false === $result || empty( $result ) ) {
+			throw new Exception(
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message from the error formatter.
+				abcc_format_generation_error(
+					isset( $detailed['error'] ) ? $detailed['error'] : null,
+					array(
+						'provider' => abcc_get_provider_for_model( $prompt_select ),
+						'model'    => $prompt_select,
+					)
+				)
+			);
 		}
 
 		// Process the content.
@@ -224,7 +237,15 @@ function abcc_handle_validate_api_key() {
 		return;
 	}
 
-	$provider      = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
+	$provider = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
+
+	// The provider ID is interpolated into an option name below — restrict it
+	// to known providers.
+	if ( ! in_array( $provider, abcc_get_provider_ids(), true ) ) {
+		wp_send_json_error( array( 'message' => __( 'Unknown provider.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	$submitted_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$api_key       = ! empty( $submitted_key ) ? $submitted_key : abcc_get_provider_api_key( $provider );
 	$result        = abcc_test_provider_connection( $provider, $api_key );
@@ -392,6 +413,13 @@ function abcc_handle_regenerate_post() {
 		return;
 	}
 
+	// Role-level prompt access is not enough — the user must also be able to
+	// edit THIS post.
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to edit this post.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	$params_json = get_post_meta( $post_id, '_abcc_generation_params', true );
 	if ( ! $params_json ) {
 		wp_send_json_error( array( 'message' => __( 'Generation parameters not found for this post.', 'automated-blog-content-creator' ) ) );
@@ -435,6 +463,55 @@ function abcc_handle_regenerate_post() {
 	}
 }
 add_action( 'wp_ajax_abcc_regenerate_post', 'abcc_handle_regenerate_post' );
+
+/**
+ * AJAX: retry featured-image generation for a post whose image failed.
+ *
+ * @since 4.4.0
+ * @return void
+ */
+function abcc_handle_retry_featured_image() {
+	check_ajax_referer( 'abcc_retry_image', 'nonce' );
+
+	$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+	if ( ! $post_id ) {
+		wp_send_json_error( array( 'message' => __( 'Invalid post ID', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	if ( ! abcc_current_user_can_prompt() || ! current_user_can( 'edit_post', $post_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	try {
+		$retry     = abcc_get_image_retry_context( $post_id );
+		$image_url = abcc_generate_featured_image( $retry['model'], $retry['keywords'] );
+
+		if ( ! $image_url ) {
+			wp_send_json_error( array( 'message' => __( 'The image provider did not return an image. Check the provider key and image settings.', 'automated-blog-content-creator' ) ) );
+			return;
+		}
+
+		$alt_text = abcc_get_setting( 'abcc_auto_alt_text', true )
+			? abcc_build_featured_image_alt_text( get_the_title( $post_id ), isset( $retry['keywords'][0] ) ? $retry['keywords'][0] : '' )
+			: '';
+		$attached = abcc_set_featured_image( $post_id, $image_url, $alt_text );
+
+		if ( false === $attached ) {
+			wp_send_json_error( array( 'message' => __( 'The image was generated but could not be attached to the post.', 'automated-blog-content-creator' ) ) );
+			return;
+		}
+
+		// Clear the failure record so the notice disappears.
+		delete_post_meta( $post_id, '_abcc_image_generation_attempted' );
+
+		wp_send_json_success( array( 'message' => __( 'Featured image generated.', 'automated-blog-content-creator' ) ) );
+	} catch ( Exception $e ) {
+		wp_send_json_error( array( 'message' => __( 'Image generation failed. Check the debug log for details.', 'automated-blog-content-creator' ) ) );
+	}
+}
+add_action( 'wp_ajax_abcc_retry_featured_image', 'abcc_handle_retry_featured_image' );
 
 /**
  * AJAX handler for polling a generation job.
@@ -520,26 +597,24 @@ function abcc_handle_autosave_setting() {
 		return;
 	}
 
-	// Explicitly block sensitive or array-type keys.
-	$blocked_keys = array(
-		'openai_api_key',
-		'gemini_api_key',
-		'claude_api_key',
-		'perplexity_api_key',
-		'stability_api_key',
-		'abcc_keyword_groups',
-		'abcc_content_templates',
-		'abcc_selected_post_types',
-		'abcc_supported_audio_formats',
-	);
-	if ( in_array( $key, $blocked_keys, true ) ) {
+	$default = $definition['default'];
+
+	// Autosave accepts scalar settings only; structured values go through the
+	// form submit. A scalar stored where consumers expect an array fatals in
+	// array_intersect() on PHP 8.
+	if ( is_array( $default ) ) {
+		wp_send_json_error( array( 'message' => __( 'This setting cannot be auto-saved.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	// Secrets never travel through autosave regardless of type.
+	if ( '_api_key' === substr( $key, -8 ) || 'api_key' === substr( $key, -7 ) ) {
 		wp_send_json_error( array( 'message' => __( 'This setting cannot be auto-saved.', 'automated-blog-content-creator' ) ) );
 		return;
 	}
 
 	// Sanitize value based on the type of the schema default.
-	$default = $definition['default'];
-	$raw     = isset( $_POST['value'] ) ? wp_unslash( $_POST['value'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+	$raw = isset( $_POST['value'] ) ? wp_unslash( $_POST['value'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 	if ( is_bool( $default ) ) {
 		$value = ( '1' === $raw || 'true' === $raw );

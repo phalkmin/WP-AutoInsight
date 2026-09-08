@@ -116,8 +116,9 @@ $image_providers = array_filter(
 						<p class="description abcc-override-warning">
 							<?php esc_html_e( 'WordPress manages this provider via Connectors. A value stored by an earlier plugin version is shown for reference only.', 'automated-blog-content-creator' ); ?>
 						</p>
-						<input type="password" value="<?php echo esc_attr( $saved_key ); ?>"
-							class="regular-text" disabled readonly aria-readonly="true">
+						<input type="password" value="" class="regular-text" disabled readonly
+							aria-readonly="true"
+							placeholder="<?php esc_attr_e( 'Stored by an earlier version', 'automated-blog-content-creator' ); ?>">
 					</details>
 					<?php endif; ?>
 				<?php elseif ( defined( $const ) ) : ?>
@@ -152,7 +153,9 @@ $image_providers = array_filter(
 							<td>
 								<input type="password" id="<?php echo esc_attr( $provider_id ); ?>_api_key"
 									name="<?php echo esc_attr( $provider_id ); ?>_api_key"
-									value="<?php echo esc_attr( $saved_key ); ?>" class="regular-text">
+									value="" class="regular-text"
+									autocomplete="off"
+									placeholder="<?php echo esc_attr( ! empty( $saved_key ) ? __( 'Saved — enter a new key to replace it', 'automated-blog-content-creator' ) : __( 'API Key', 'automated-blog-content-creator' ) ); ?>">
 								<?php if ( $last_v ) : ?>
 									<span class="api-validation-status <?php echo esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ); ?>" data-provider="<?php echo esc_attr( $provider_id ); ?>">
 										<?php echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); ?>
@@ -268,8 +271,9 @@ $image_providers = array_filter(
 						<?php else : ?>
 						<input type="password" id="<?php echo esc_attr( $provider_id ); ?>_api_key"
 							name="<?php echo esc_attr( $provider_id ); ?>_api_key"
-							value="<?php echo esc_attr( $saved_key ); ?>" class="regular-text"
-							placeholder="<?php esc_attr_e( 'API Key', 'automated-blog-content-creator' ); ?>">
+							value="" class="regular-text"
+							autocomplete="off"
+							placeholder="<?php echo esc_attr( ! empty( $saved_key ) ? __( 'Saved — enter a new key to replace it', 'automated-blog-content-creator' ) : __( 'API Key', 'automated-blog-content-creator' ) ); ?>">
 							<?php if ( $last_v ) : ?>
 							<span class="api-validation-status <?php echo esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ); ?>" data-provider="<?php echo esc_attr( $provider_id ); ?>">
 								<?php echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); ?>

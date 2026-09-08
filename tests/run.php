@@ -1,4 +1,7 @@
 <?php
+error_reporting( E_ALL );
+ini_set( 'display_errors', '1' );
+
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
@@ -12,6 +15,7 @@ $failures = 0;
 
 foreach ( $GLOBALS['abcc_tests'] as $test ) {
 	try {
+		abcc_test_reset_state();
 		$test['callback']();
 		echo "[PASS] {$test['name']}\n";
 	} catch ( Throwable $e ) {

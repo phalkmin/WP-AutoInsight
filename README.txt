@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.0
-Stable tag: 4.3.0
+Stable tag: 4.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -243,6 +243,17 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.4.0 =
+* Content language: posts, titles, SEO metadata, and audio intros are written in your site's language automatically. Override it under Content → Keywords → Writing Style. Old custom templates without a {language} placeholder still come out right.
+* Truncation repair: posts that hit the model's token limit are trimmed to the last complete section and given a proper closing paragraph instead of stopping mid-sentence. The generation log notes when this happened.
+* Generation errors now say what went wrong and what to do — a rejected key, a rate limit, an oversized prompt, and a provider outage each get their own actionable message.
+* Featured image failures are visible: the post edit screen shows why the image failed, with a Retry button.
+* New "Restart setup wizard" button in Settings → Advanced (keeps your settings and API keys).
+* Saved API keys are no longer displayed in settings pages; leave the field blank to keep your existing key.
+* Security: onboarding connection test requires administrator capability; rewrite/regenerate check per-post edit permission; Gemini keys moved from the request URL to a header; admin status areas no longer inject server-supplied HTML.
+* Fixed: featured images failing to attach on local and firewalled sites; Perplexity citations attaching to the wrong post under concurrent schedules; prompts being HTML-mangled before sending; bulk SEO firing one request per post; cron schedules queried on every page load; SEO parsing failing on braces in prose; the dashboard SEO Refresh tile linking nowhere; the wizard redirecting away from its completion screen; hover-only error messages; misleading "Settings saved" notices after destructive actions; endless job polling; the settings JSON export producing a broken page instead of a download; Enter breaking multi-line wizard fields.
+* Post length now reads in approximate words; model names show in readable form; tooltips work with keyboard focus; confirm dialogs are translatable.
 
 = 4.3.0 =
 * Dashboard reframed into a Command Center: the new "Composer" card shows exactly what your next post will use — source, template, model, and draft/publish — and lets you change any of it in place before generating. Per-post choices stick as the new default without touching your global settings.

@@ -69,7 +69,7 @@ function abcc_build_generation_payload( $args = array() ) {
 
 	$payload = wp_parse_args( $args, $defaults );
 
-	// Resolve the 'custom' tone keyword to the user's description (review #3).
+	// Resolve the 'custom' tone keyword to the user's description.
 	if ( 'custom' === $payload['tone'] ) {
 		$custom          = trim( (string) abcc_get_setting( 'custom_tone', '' ) );
 		$payload['tone'] = '' !== $custom ? $custom : 'professional';
@@ -208,6 +208,29 @@ function abcc_build_generation_tracking_meta( $payload ) {
 }
 
 /**
+ * Build a unique transient key for one generation's Perplexity citations.
+ *
+ * Keying by user ID collapses every cron-run generation onto one key (cron has
+ * no current user), letting one post's citations attach to another post.
+ * Background jobs key by job ID; interactive generations key by user ID.
+ *
+ * @since 4.4.0
+ * @param array $context Generation context; 'job_id' when running from the queue.
+ * @return string
+ */
+function abcc_citation_transient_key( $context = array() ) {
+	$job_id = isset( $context['job_id'] ) ? (int) $context['job_id'] : 0;
+
+	if ( $job_id > 0 ) {
+		return 'abcc_pplx_citations_job_' . $job_id;
+	}
+
+	// Interactive generation: the write and the read happen in the same request
+	// and must agree, so the key must be stable — no counters.
+	return 'abcc_pplx_citations_' . get_current_user_id();
+}
+
+/**
  * Generates a new post using AI services.
  *
  * @param string  $api_key        The API key for the selected service
@@ -266,7 +289,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		}
 
 		// Then, generate the content.
-		$content_array = abcc_generate_post_content_with_template(
+		$generation_result = abcc_generate_post_content_with_template(
 			$api_key,
 			$focus_keywords,
 			$prompt_select,
@@ -279,19 +302,56 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				'keywords_all'  => (array) $keywords,
 				// Topic Library: a topic's own prompt replaces the stored template.
 				'custom_prompt' => isset( $options['prompt'] ) ? (string) $options['prompt'] : '',
+			),
+			array(
+				'job_id' => isset( $options['job_id'] ) ? (int) $options['job_id'] : 0,
 			)
 		);
 
-		if ( false === $content_array || ! is_array( $content_array ) ) {
-			throw new Exception( 'Content generation failed - no content returned from AI service' );
+		$content_array = $generation_result['content'];
+
+		if ( empty( $content_array ) || ! is_array( $content_array ) ) {
+			throw new Exception(
+				abcc_format_generation_error(
+					isset( $generation_result['error'] ) ? $generation_result['error'] : null,
+					array(
+						'provider' => abcc_get_provider_for_model( $prompt_select ),
+						'model'    => $prompt_select,
+					)
+				)
+			); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
 		$content_array = abcc_filter_generated_content_lines( $content_array );
 
+		// The provider hit its token ceiling — trim the fragment and close the article.
+		if ( ! empty( $generation_result['truncated'] ) ) {
+			$repair = abcc_repair_truncated_content(
+				$content_array,
+				array(
+					'model'   => $prompt_select,
+					'api_key' => $api_key,
+					'title'   => $title,
+				)
+			);
+
+			$content_array = $repair['lines'];
+
+			$repair_note = $repair['repaired']
+				? __( 'Completed with repair — the original response hit the token limit.', 'automated-blog-content-creator' )
+				: __( 'Trimmed at the token limit — could not generate a closing section.', 'automated-blog-content-creator' );
+
+			if ( ! empty( $options['job_id'] ) ) {
+				abcc_append_job_log_note( (int) $options['job_id'], $repair_note );
+			}
+
+			abcc_debug_log( 'Truncation repair: ' . $repair_note );
+		}
+
 		// Process Perplexity citations if applicable.
 		$citation_provider = abcc_get_provider_for_model( $prompt_select );
 		if ( abcc_provider_supports_citations( $citation_provider ) ) {
-			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
+			$generation_id = abcc_citation_transient_key( $options );
 			$citations     = get_transient( $generation_id );
 			if ( ! empty( $citations ) ) {
 				$citation_style = abcc_get_setting( 'abcc_perplexity_citation_style', 'inline' );
@@ -357,11 +417,22 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 						? abcc_build_featured_image_alt_text( $title, $seo_data['primary_keyword'] ?? '' )
 						: '';
 
-					abcc_set_featured_image( $post_id, $image_url, $alt_text );
+					$attached = abcc_set_featured_image( $post_id, $image_url, $alt_text );
+					abcc_record_image_generation_attempt(
+						$post_id,
+						false !== $attached,
+						false !== $attached ? '' : __( 'The image was generated but could not be attached to the post.', 'automated-blog-content-creator' )
+					);
+				} else {
+					abcc_record_image_generation_attempt(
+						$post_id,
+						false,
+						__( 'The image provider did not return an image. Check the provider key and image settings.', 'automated-blog-content-creator' )
+					);
 				}
 			} catch ( Exception $e ) {
 				// Image failures should not abort successful text generation.
-				unset( $e );
+				abcc_record_image_generation_attempt( $post_id, false, $e->getMessage() );
 			}
 		}
 
@@ -403,6 +474,190 @@ function abcc_filter_generated_content_lines( array $content_array ) {
 }
 
 /**
+ * Trim truncated content back to its last complete section.
+ *
+ * When a provider hits max_tokens mid-post the tail is a dangling fragment.
+ * Cutting back to the last complete block means the reader sees a short article
+ * instead of one that stops mid-sentence.
+ *
+ * Recognizes both HTML block closes and Markdown structure: the output format
+ * is HTML today and Markdown after the planned v4.6/v4.7 refactor.
+ *
+ * @since 4.4.0
+ * @param array $lines Content lines.
+ * @return array Trimmed lines. Never empty when the input had content.
+ */
+function abcc_trim_to_content_boundary( $lines ) {
+	$lines = array_values( array_filter( (array) $lines, 'strlen' ) );
+
+	if ( count( $lines ) < 2 ) {
+		return $lines;
+	}
+
+	$last_boundary = -1;
+
+	foreach ( $lines as $index => $line ) {
+		$trimmed = trim( $line );
+
+		// HTML: a line ending in a closing block tag is complete.
+		if ( preg_match( '#</(?:p|h[1-6]|li|ul|ol|blockquote|figure|pre|table)>\s*$#i', $trimmed ) ) {
+			$last_boundary = $index;
+			continue;
+		}
+
+		// Markdown: a heading line is itself complete, and so is a paragraph
+		// line that ends in sentence-final punctuation.
+		if ( preg_match( '/^#{1,6}\s+\S/', $trimmed ) ) {
+			$last_boundary = $index;
+			continue;
+		}
+
+		if ( preg_match( '/[.!?:;"\')\]]\s*$/u', $trimmed ) ) {
+			$last_boundary = $index;
+		}
+	}
+
+	// No boundary found at all: keep everything rather than destroy the content.
+	if ( $last_boundary < 0 ) {
+		return $lines;
+	}
+
+	$kept = array_slice( $lines, 0, $last_boundary + 1 );
+
+	// Drop a trailing heading with nothing under it — an empty section reads
+	// worse than no section.
+	$kept_count = count( $kept );
+	while ( $kept_count > 1 ) {
+		$last = trim( (string) end( $kept ) );
+
+		$is_heading = preg_match( '#^<h[1-6][^>]*>#i', $last ) || preg_match( '/^#{1,6}\s+\S/', $last );
+
+		if ( ! $is_heading ) {
+			break;
+		}
+
+		array_pop( $kept );
+		--$kept_count;
+	}
+
+	return array_values( $kept );
+}
+
+/**
+ * Repair content that a provider cut off at its token limit.
+ *
+ * Trims the dangling tail, then asks the same model for a short conclusion so
+ * the article ends deliberately. The same model is used (not a cheaper one) so
+ * the conclusion matches the body's voice.
+ *
+ * @since 4.4.0
+ * @param array $lines   Truncated content lines.
+ * @param array $context Requires 'model', 'api_key'; optional 'title'.
+ * @return array array( 'lines' => array, 'repaired' => bool )
+ */
+function abcc_repair_truncated_content( $lines, $context ) {
+	$trimmed = abcc_trim_to_content_boundary( $lines );
+
+	$model   = isset( $context['model'] ) ? (string) $context['model'] : '';
+	$api_key = isset( $context['api_key'] ) ? (string) $context['api_key'] : '';
+	$title   = isset( $context['title'] ) ? (string) $context['title'] : '';
+
+	if ( '' === $model || '' === $api_key ) {
+		return array(
+			'lines'    => $trimmed,
+			'repaired' => false,
+		);
+	}
+
+	$prompt = sprintf(
+		'Write a short closing section in %1$s for an article titled "%2$s". One or two paragraphs. Do not add a heading. Do not repeat points already made.' . "\n\nArticle so far:\n%3\$s",
+		abcc_resolve_content_language(),
+		$title,
+		implode( "\n", $trimmed )
+	);
+
+	$conclusion = abcc_generate_content( $api_key, $prompt, $model, 200 );
+
+	if ( false === $conclusion || ! is_array( $conclusion ) || empty( $conclusion ) ) {
+		// A failed conclusion is not a failed post — return the trimmed article.
+		abcc_debug_log( 'Truncation repair: conclusion call failed; returning trimmed content only.' );
+
+		return array(
+			'lines'    => $trimmed,
+			'repaired' => false,
+		);
+	}
+
+	// Not abcc_filter_generated_content_lines() — it throws when nothing
+	// survives, which would fail a successfully generated article.
+	$conclusion_lines = array_values(
+		array_filter(
+			array_map( 'trim', $conclusion ),
+			static function ( $line ) {
+				return '' !== $line
+					&& false === strpos( $line, '<title>' )
+					&& false === strpos( $line, '[SEO]' );
+			}
+		)
+	);
+
+	if ( empty( $conclusion_lines ) ) {
+		return array(
+			'lines'    => $trimmed,
+			'repaired' => false,
+		);
+	}
+
+	return array(
+		'lines'    => array_merge( $trimmed, $conclusion_lines ),
+		'repaired' => true,
+	);
+}
+
+/**
+ * Generate content and return the provider wrapper's full result.
+ *
+ * abcc_generate_content() flattens to array|false, which loses the truncation
+ * signal and the error object. Truncation repair and differentiated error
+ * messages both need them, so this is the path the generation pipeline uses;
+ * abcc_generate_content() stays as a thin wrapper for the many callers that
+ * only want the lines.
+ *
+ * @since 4.4.0
+ * @param string $api_key    API key.
+ * @param string $prompt     Prompt text.
+ * @param string $service    Model identifier.
+ * @param int    $char_limit Requested tokens.
+ * @param array  $context    Optional. 'job_id' keys the citation transient.
+ * @return array array( 'content', 'usage', 'truncated', 'error', 'raw' )
+ */
+function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit, $context = array() ) {
+	$provider = abcc_get_model_provider( $service );
+
+	$result = abcc_call_provider_api(
+		$provider,
+		$service,
+		$prompt,
+		array(
+			'api_key'    => $api_key,
+			'max_tokens' => $char_limit,
+		)
+	);
+
+	// Perplexity returns citations alongside the text. Stash them for the
+	// post-assembly step, keyed so concurrent jobs cannot collide.
+	if ( abcc_provider_supports_citations( $provider ) && ! is_wp_error( $result['error'] ) ) {
+		$citations = isset( $result['raw']['citations'] ) ? (array) $result['raw']['citations'] : array();
+
+		if ( ! empty( $citations ) ) {
+			set_transient( abcc_citation_transient_key( $context ), $citations, 300 );
+		}
+	}
+
+	return $result;
+}
+
+/**
  * Helper function to generate content using selected AI service.
  *
  * @param string $api_key API key
@@ -412,30 +667,9 @@ function abcc_filter_generated_content_lines( array $content_array ) {
  * @return array|false
  */
 function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
-	$result = false;
+	$result = abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit );
 
-	$provider = abcc_get_model_provider( $service );
-	$callback = abcc_get_provider_text_generation_callback( $provider );
-
-	if ( empty( $callback ) || ! is_callable( $callback ) ) {
-		return $result;
-	}
-
-	$response = call_user_func( $callback, $api_key, $prompt, $char_limit, $service );
-
-	if ( abcc_provider_supports_citations( $provider ) ) {
-		$perplexity_result = $response;
-		if ( false !== $perplexity_result && ! empty( $perplexity_result['text'] ) ) {
-			// Store citations in a transient for downstream use.
-			$generation_id = 'abcc_pplx_citations_' . get_current_user_id();
-			set_transient( $generation_id, $perplexity_result['citations'], 300 );
-			$result = $perplexity_result['text'];
-		}
-	} else {
-		$result = $response;
-	}
-
-	return $result;
+	return is_wp_error( $result['error'] ) ? false : $result['content'];
 }
 
 /**
@@ -509,14 +743,31 @@ function abcc_extract_generated_title( $lines ) {
  * @return string The generated title
  */
 function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
-	$prompt  = 'Create a catchy blog post title about: ' . implode( ', ', $keywords ) . '. ';
+	$language = abcc_resolve_content_language();
+
+	$prompt  = sprintf(
+		'Create a blog post title in %1$s about: %2$s. ',
+		$language,
+		implode( ', ', $keywords )
+	);
+	$prompt .= 'Under 60 characters. No quotes, no colons unless essential. Concrete over clever. ';
 	$prompt .= 'Respond with only the title itself on a single line — no introduction, no list of alternatives, no numbering, and no quotation marks.';
 
 	// Use a small token limit for this call - 50 tokens should be plenty for a title
-	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 50 );
+	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 50 );
+	$result   = is_wp_error( $detailed['error'] ) ? false : $detailed['content'];
 
 	if ( false === $result || empty( $result ) ) {
-		throw new Exception( 'Failed to generate title' );
+		throw new Exception(
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message from the error formatter.
+			abcc_format_generation_error(
+				isset( $detailed['error'] ) ? $detailed['error'] : null,
+				array(
+					'provider' => abcc_get_provider_for_model( $prompt_select ),
+					'model'    => $prompt_select,
+				)
+			)
+		);
 	}
 
 	$title = abcc_extract_generated_title( (array) $result );
@@ -536,9 +787,10 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
  * @param string $prompt_select Which AI service to use
  * @param string $title The post title
  * @param int    $char_limit Maximum token limit
- * @return array Array of content lines
+ * @param array  $context    Optional. Generation context (e.g. 'job_id').
+ * @return array Detailed result array( 'content', 'usage', 'truncated', 'error', 'raw' ).
  */
-function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit ) {
+function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context = array() ) {
 	$prompt  = "Write a blog post with the following title: {$title}\n\n";
 	$prompt .= 'Using these keywords: ' . implode( ', ', $keywords ) . "\n\n";
 	$prompt .= 'Format requirements:
@@ -556,7 +808,7 @@ function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title
 		$char_limit = max( $char_limit, 800 );
 	}
 
-	return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+	return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
 }
 
 /**
@@ -568,9 +820,10 @@ function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title
  * @param string $title         Title.
  * @param int    $char_limit    Limit.
  * @param array  $args          Template and other args.
- * @return array|false
+ * @param array  $context       Optional. Generation context (e.g. 'job_id').
+ * @return array Detailed result array( 'content', 'usage', 'truncated', 'error', 'raw' ).
  */
-function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_select, $title, $char_limit, $args = array() ) {
+function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_select, $title, $char_limit, $args = array(), $context = array() ) {
 	// Topic Library: a topic's own prompt takes the template's place. It goes
 	// through the same placeholder substitution, so {keyword}/{title}/... work.
 	if ( ! empty( $args['custom_prompt'] ) ) {
@@ -581,7 +834,7 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
 			$char_limit = max( $char_limit, 800 );
 		}
 
-		return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+		return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
 	}
 
 	$template_slug = $args['template'] ?? 'default';
@@ -590,7 +843,7 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
 
 	if ( empty( $template ) ) {
 		// Fallback to legacy style if no templates exist.
-		return abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit );
+		return abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context );
 	}
 
 	$args['char_limit'] = $char_limit;
@@ -601,7 +854,27 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
 		$char_limit = max( $char_limit, 800 );
 	}
 
-	return abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
+	return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
+}
+
+/**
+ * Bound user-supplied text before it goes into a prompt.
+ *
+ * Full post bodies and long transcripts otherwise overflow the model context.
+ *
+ * @since 4.4.0
+ * @param string $text      Raw user content.
+ * @param int    $max_words Word ceiling. Default 3000 (~4,000 tokens).
+ * @return string Truncated text, with a marker when it was cut.
+ */
+function abcc_bound_prompt_input( $text, $max_words = 3000 ) {
+	$text = (string) $text;
+
+	if ( str_word_count( $text ) <= $max_words ) {
+		return $text;
+	}
+
+	return wp_trim_words( $text, $max_words, ' […truncated for length]' );
 }
 
 /**
@@ -654,6 +927,8 @@ function abcc_expand_content_prompt( $raw_prompt, $title, $keywords, $args = arr
 	$focus_keyword = isset( $keywords[0] ) ? (string) $keywords[0] : '';
 	$keywords_all  = ! empty( $args['keywords_all'] ) ? (array) $args['keywords_all'] : (array) $keywords;
 
+	$language = abcc_resolve_content_language();
+
 	$replacements = array(
 		'{keyword}'    => $focus_keyword,
 		'{keywords}'   => implode( ', ', $keywords_all ),
@@ -662,9 +937,22 @@ function abcc_expand_content_prompt( $raw_prompt, $title, $keywords, $args = arr
 		'{site_name}'  => get_bloginfo( 'name' ),
 		'{category}'   => $category_name,
 		'{word_count}' => round( $char_limit * 0.75 ),
+		'{language}'   => $language,
 	);
 
+	$had_language_token = false !== strpos( $raw_prompt, '{language}' );
+
 	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $raw_prompt );
+
+	// Templates and Topic prompts without a {language} token still need the
+	// language instruction, or non-English sites get English content.
+	if ( ! $had_language_token ) {
+		$prompt .= sprintf(
+			/* translators: %s: language name, e.g. "Brazilian Portuguese" */
+			"\n\n" . __( 'Write the entire response in %s.', 'automated-blog-content-creator' ),
+			$language
+		);
+	}
 
 	return $prompt . ABCC_CONTENT_FORMAT_REQUIREMENTS;
 }

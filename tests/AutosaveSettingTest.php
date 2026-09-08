@@ -119,3 +119,44 @@ abcc_test(
 		abcc_update_setting( 'abcc_debug_logging', abcc_get_setting_default( 'abcc_debug_logging' ) );
 	}
 );
+
+abcc_test(
+	'autosave refuses any array-typed setting, not just denylisted ones',
+	function () {
+		$before = abcc_get_setting( 'abcc_allowed_roles', array() );
+
+		$_POST = array(
+			'key'   => 'abcc_allowed_roles',
+			'value' => 'administrator',
+			'nonce' => 'x',
+		);
+
+		abcc_handle_autosave_setting();
+
+		$json = $GLOBALS['abcc_test_last_json'];
+		abcc_assert_false( $json['success'], 'Array-typed settings must not be autosavable.' );
+		abcc_assert_true(
+			is_array( abcc_get_setting( 'abcc_allowed_roles', array() ) ),
+			'abcc_allowed_roles must still be an array after a rejected autosave.'
+		);
+		abcc_assert_same( $before, abcc_get_setting( 'abcc_allowed_roles', array() ), 'Value must be untouched.' );
+
+		$_POST = array();
+	}
+);
+
+abcc_test(
+	'autosave still accepts bool and int settings',
+	function () {
+		$_POST = array(
+			'key'   => 'abcc_debug_logging',
+			'value' => '1',
+			'nonce' => 'x',
+		);
+		abcc_handle_autosave_setting();
+		abcc_assert_true( $GLOBALS['abcc_test_last_json']['success'], 'Bool settings must remain autosavable.' );
+		abcc_assert_true( (bool) abcc_get_setting( 'abcc_debug_logging', false ), 'Bool value should be stored.' );
+
+		$_POST = array();
+	}
+);

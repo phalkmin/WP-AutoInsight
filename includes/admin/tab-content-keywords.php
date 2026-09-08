@@ -115,6 +115,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 					</div>
 				</td>
 			</tr>
+			<tr>
+				<th scope="row">
+					<label for="abcc_content_language"><?php esc_html_e( 'Content language', 'automated-blog-content-creator' ); ?></label>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'The language generated posts are written in. Defaults to your site language.', 'automated-blog-content-creator' ) ) ); ?>
+				</th>
+				<td>
+					<?php $abcc_language = abcc_sanitize_content_language( abcc_get_setting( 'abcc_content_language', 'site' ) ); ?>
+					<select id="abcc_content_language" name="abcc_content_language" data-autosave-key="abcc_content_language">
+						<?php foreach ( abcc_get_content_language_choices() as $abcc_value => $abcc_label ) : ?>
+							<option value="<?php echo esc_attr( $abcc_value ); ?>" <?php selected( $abcc_language, $abcc_value ); ?>>
+								<?php echo esc_html( $abcc_label ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</td>
+			</tr>
 		</table>
 
 		<?php submit_button( __( 'Save Content Settings', 'automated-blog-content-creator' ) ); ?>

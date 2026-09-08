@@ -546,6 +546,27 @@ function abcc_set_provider_saved_api_key( $provider, $api_key ) {
 }
 
 /**
+ * Apply an API-key field submission, treating blank as "leave unchanged".
+ *
+ * The settings form no longer pre-fills saved keys into the page source, so an
+ * untouched field submits empty. Without this, every save would wipe the key.
+ *
+ * @since 4.4.0
+ * @param string $provider    Provider ID.
+ * @param string $submitted   Raw submitted value (already sanitized by caller).
+ * @return bool True when a new key was written, false when the existing key was kept.
+ */
+function abcc_save_provider_api_key_submission( $provider, $submitted ) {
+	$submitted = trim( (string) $submitted );
+
+	if ( '' === $submitted ) {
+		return false;
+	}
+
+	return (bool) abcc_set_provider_saved_api_key( $provider, $submitted );
+}
+
+/**
  * Run a provider connection test.
  *
  * @param string $provider Provider ID.
@@ -580,6 +601,33 @@ function abcc_test_stability_connection( $api_key ) {
 	}
 
 	return array( 'success' => true );
+}
+
+/**
+ * Resolve a model ID to its human-readable name for read-only display.
+ *
+ * Raw IDs like "gpt-4.1-mini-2025-04-14" mean nothing to most users; the
+ * registry already knows the friendly name. Unknown IDs (removed models,
+ * custom setups) fall back to the raw ID so nothing renders blank.
+ *
+ * @since 4.4.0
+ * @param string $model_id Model identifier.
+ * @return string Friendly name, or the raw ID when unknown.
+ */
+function abcc_get_model_display_name( $model_id ) {
+	$model_id = (string) $model_id;
+
+	if ( '' === $model_id ) {
+		return '';
+	}
+
+	foreach ( abcc_get_provider_registry() as $provider ) {
+		if ( ! empty( $provider['text_models'][ $model_id ]['name'] ) ) {
+			return $provider['text_models'][ $model_id ]['name'];
+		}
+	}
+
+	return $model_id;
 }
 
 /**

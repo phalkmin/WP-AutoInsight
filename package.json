@@ -1,0 +1,10 @@
+{
+  "name": "wp-autoinsight",
+  "private": true,
+  "scripts": {
+    "lint:js": "eslint js"
+  },
+  "devDependencies": {
+    "eslint": "^9.9.0"
+  }
+}

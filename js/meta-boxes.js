@@ -77,52 +77,38 @@ jQuery( document ).ready( function ( $ ) {
 
 				abcc.showStatus( $status, i18n.generatingDraft || i18n.regenerateSuccess, 'info' );
 
-				var jobId    = response.data.job_id;
-				var nonce    = $button.data( 'nonce' );
-				var tries    = 0;
-				var maxTries = 60; // ~60s at 1s interval.
-
-				var poll = function () {
-					tries++;
-					$.post( ajaxurl, {
-						action:  'abcc_get_job_status',
-						job_id:  jobId,
-						nonce:   nonce,
-					} )
-						.done( function ( res ) {
-							if ( ! res.success ) {
-								abcc.setError( $status, ( res.data && res.data.message ) || i18n.unknownError );
-								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
-								return;
-							}
-							if ( res.success && res.data && res.data.edit_url ) {
-								abcc.showStatus( $status, i18n.regenerateSuccess, 'success' );
-								window.location.href = res.data.edit_url;
-								return;
-							}
-							if ( res.success && res.data && 'failed' === res.data.status ) {
-								abcc.setError( $status, ( res.data.message || i18n.unknownError ) );
-								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
-								return;
-							}
-							if ( tries >= maxTries ) {
-								abcc.setError( $status, i18n.unknownError );
-								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
-								return;
-							}
-							setTimeout( poll, 1000 );
-						} )
-						.fail( function () {
-							if ( tries >= maxTries ) {
-								abcc.setError( $status, i18n.networkError );
-								$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
-								return;
-							}
-							setTimeout( poll, 1000 );
-						} );
-				};
-
-				setTimeout( poll, 1000 );
+				// Shared capped poller (abcc-ui.js): 1s interval, 60-try cap.
+				abcc.pollJob( response.data.job_id, {
+					nonce:      $button.data( 'nonce' ),
+					intervalMs: 1000,
+					maxTries:   60,
+					stallAfter: 30,
+					$status:    $status,
+					onUpdate: function ( job ) {
+						if ( job && job.edit_url ) {
+							abcc.showStatus( $status, i18n.regenerateSuccess, 'success' );
+							window.location.href = job.edit_url;
+						}
+					},
+					onSuccess: function ( job ) {
+						abcc.showStatus( $status, i18n.regenerateSuccess, 'success' );
+						if ( job.edit_url ) {
+							window.location.href = job.edit_url;
+						}
+					},
+					onFailed: function ( message ) {
+						abcc.setError( $status, message || i18n.unknownError );
+						$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+					},
+					onError: function ( message ) {
+						abcc.setError( $status, message || i18n.unknownError );
+						$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+					},
+					onStall: function () {
+						abcc.setError( $status, abcc.i18n( 'stillWorking' ) );
+						$button.prop( 'disabled', false ).text( i18n.regenerateBtn );
+					},
+				} );
 			},
 			error: function () {
 				abcc.setError( $status, i18n.networkError );
@@ -153,18 +139,20 @@ jQuery( document ).ready( function ( $ ) {
 			},
 			success: function ( response ) {
 				if ( response.success ) {
-					var attachmentUrl = $( '<a>' ).attr( 'href', response.data.attachment_url ).prop( 'href' );
 					var editUrl = ajaxurl.replace(
 						'admin-ajax.php',
 						'upload.php?item=' + parseInt( response.data.attachment_id, 10 )
 					);
-					abcc.showStatus(
-						$status,
-						i18n.infographicSuccess +
-							' <a href="' + attachmentUrl + '" target="_blank">' + i18n.view + '</a>' +
-							' | <a href="' + editUrl + '">' + i18n.edit + '</a>',
-						'success'
-					);
+					var $viewLink = $( '<a>' )
+						.attr( 'href', response.data.attachment_url )
+						.attr( 'target', '_blank' )
+						.text( i18n.view );
+					var $editLink = $( '<a>' ).attr( 'href', editUrl ).text( i18n.edit );
+					var $msg = $( '<span>' )
+						.text( i18n.infographicSuccess + ' ' )
+						.append( $viewLink, ' | ', $editLink );
+
+					abcc.showHtml( $status, $msg, 'success' );
 				} else {
 					abcc.setError( $status, response.data.message || i18n.unknownError );
 					$button.prop( 'disabled', false ).text( i18n.infographicBtn );
@@ -174,6 +162,39 @@ jQuery( document ).ready( function ( $ ) {
 				abcc.setError( $status, i18n.networkError );
 				$button.prop( 'disabled', false ).text( i18n.infographicBtn );
 			},
+		} );
+	} );
+} );
+
+// ── Retry featured image (admin notice on failed generation) ───────────────
+jQuery( document ).ready( function ( $ ) {
+	'use strict';
+
+	$( document ).on( 'click', '.abcc-retry-image', function () {
+		var $button = $( this );
+		var $notice = $button.closest( '.abcc-image-failure' );
+
+		$button.prop( 'disabled', true );
+
+		$.post( ajaxurl, {
+			action:  'abcc_retry_featured_image',
+			post_id: $button.data( 'post-id' ),
+			nonce:   $button.data( 'nonce' ),
+		} ).done( function ( response ) {
+			if ( response.success ) {
+				$notice
+					.removeClass( 'notice-warning' )
+					.addClass( 'notice-success' )
+					.find( 'p' )
+					.text( response.data.message );
+			} else {
+				$button.prop( 'disabled', false );
+				$notice.find( 'p' ).prepend(
+					$( '<strong>' ).text( ( response.data && response.data.message ? response.data.message : '' ) + ' ' )
+				);
+			}
+		} ).fail( function () {
+			$button.prop( 'disabled', false );
 		} );
 	} );
 } );

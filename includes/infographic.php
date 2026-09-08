@@ -58,7 +58,7 @@ function abcc_handle_create_infographic() {
 			"- Icons or symbols to use\n" .
 			'Keep it concise and focused on visual elements.',
 			$post->post_title,
-			wp_strip_all_tags( $post->post_content )
+			abcc_bound_prompt_input( wp_strip_all_tags( $post->post_content ) )
 		);
 
 		// Generate description using existing content generation function.
@@ -81,7 +81,7 @@ function abcc_handle_create_infographic() {
 			throw new Exception( __( 'No image generation service available', 'automated-blog-content-creator' ) );
 		}
 
-		// Honor the infographic-specific provider override (review #4).
+		// Honor the infographic-specific provider override.
 		$infographic_pref = abcc_get_setting( 'abcc_infographic_provider', 'auto' );
 		if ( 'openai' === $infographic_pref ) {
 			$override_key = abcc_get_provider_api_key( 'openai' );

@@ -30,6 +30,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</label>
 			</fieldset>
 
+			<div class="abcc-onboarding-language">
+				<label for="abcc_onboarding_language">
+					<strong><?php esc_html_e( 'Content language', 'automated-blog-content-creator' ); ?></strong>
+				</label>
+				<p class="description"><?php esc_html_e( 'The language generated posts are written in. Defaults to your site language.', 'automated-blog-content-creator' ); ?></p>
+				<select id="abcc_onboarding_language" name="abcc_onboarding_language">
+					<?php $abcc_language = abcc_sanitize_content_language( abcc_get_setting( 'abcc_content_language', 'site' ) ); ?>
+					<?php foreach ( abcc_get_content_language_choices() as $abcc_value => $abcc_label ) : ?>
+						<option value="<?php echo esc_attr( $abcc_value ); ?>" <?php selected( $abcc_language, $abcc_value ); ?>>
+							<?php echo esc_html( $abcc_label ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</div>
+
 			<div class="abcc-step-actions">
 				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-2"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-secondary abcc-prev-step" data-goto="1"><?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?></button>

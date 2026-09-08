@@ -73,3 +73,25 @@ abcc_test(
 		abcc_assert_same( 'Content generation failed', $message );
 	}
 );
+
+abcc_test(
+	'heading block level is clamped to the valid HTML range',
+	function () {
+		foreach ( array( 0, -3, 7, 99 ) as $bad ) {
+			$html = abcc_gutenberg_blocks(
+				array(
+					array(
+						'name'       => 'heading',
+						'attributes' => array( 'level' => $bad ),
+						'content'    => 'Section',
+					),
+				)
+			);
+
+			abcc_assert_true(
+				(bool) preg_match( '/<h([1-6]) /', $html ) || (bool) preg_match( '/<h([1-6])>/', $html ),
+				'Level ' . $bad . ' should clamp into h1-h6, got: ' . $html
+			);
+		}
+	}
+);

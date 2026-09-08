@@ -77,6 +77,7 @@ function abcc_show_onboarding_page() {
 					'welcome'      => __( 'Welcome to WP-AutoInsight!', 'automated-blog-content-creator' ),
 					/* translators: %s: Comma-separated list of connected AI providers. */
 					'connectedVia' => __( 'Connected via WordPress Connectors: %s', 'automated-blog-content-creator' ),
+					'confirmSkip'  => __( 'Are you sure you want to skip the setup? You can always configure WP-AutoInsight later in the settings.', 'automated-blog-content-creator' ),
 				),
 			)
 		);
@@ -232,6 +233,11 @@ function abcc_has_generated_content() {
  * @return void
  */
 function abcc_check_existing_user_on_activation() {
+	// Runs on every admin_init; once the flag is set nothing below can change it.
+	if ( get_option( 'abcc_onboarding_completed', false ) ) {
+		return;
+	}
+
 	// If any API key exists or any content has been generated, mark as completed.
 	if ( abcc_has_any_api_key() || abcc_has_generated_content() ) {
 		update_option( 'abcc_onboarding_completed', true );
@@ -276,6 +282,11 @@ add_action( 'wp_ajax_abcc_onboarding_goal', 'abcc_handle_onboarding_goal' );
  */
 function abcc_handle_onboarding_test_api() {
 	check_ajax_referer( 'abcc_onboarding', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
 
 	$provider     = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : '';
 	$api_key      = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
@@ -470,6 +481,13 @@ function abcc_handle_onboarding_post_status() {
 	$status     = abcc_sanitize_post_status( $raw_status ); // Enforces draft|publish.
 	abcc_update_setting( 'abcc_default_post_status', $status );
 
+	if ( isset( $_POST['language'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above via check_ajax_referer.
+		abcc_update_setting(
+			'abcc_content_language',
+			abcc_sanitize_content_language( sanitize_text_field( wp_unslash( $_POST['language'] ) ) ) // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above via check_ajax_referer.
+		);
+	}
+
 	wp_send_json_success( array( 'status' => abcc_get_setting( 'abcc_default_post_status' ) ) );
 }
 add_action( 'wp_ajax_abcc_onboarding_post_status', 'abcc_handle_onboarding_post_status' );
@@ -620,11 +638,14 @@ function abcc_test_claude_connection( $api_key ) {
  * @return mixed Whether the connection test succeeded.
  */
 function abcc_test_gemini_connection( $api_key ) {
-	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . rawurlencode( $api_key );
+	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 	$response = wp_remote_post(
 		$url,
 		array(
-			'headers' => array( 'Content-Type' => 'application/json' ),
+			'headers' => array(
+				'Content-Type'   => 'application/json',
+				'x-goog-api-key' => $api_key,
+			),
 			'body'    => wp_json_encode(
 				array(
 					'contents' => array(

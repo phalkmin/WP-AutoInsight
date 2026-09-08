@@ -17,7 +17,7 @@ $content_subtabs = array(
 	'bulk'     => __( 'Bulk Generate', 'automated-blog-content-creator' ),
 	'log'      => __( 'Generation Log', 'automated-blog-content-creator' ),
 );
-$current_subtab = abcc_get_current_subtab( array_keys( $content_subtabs ), 'keywords' );
+$current_subtab  = abcc_get_current_subtab( array_keys( $content_subtabs ), 'keywords' );
 
 abcc_render_subtab_nav( 'content', $content_subtabs, $current_subtab );
 

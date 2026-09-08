@@ -17,7 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_get_default_content_template() {
 	return array(
 		'name'   => 'Default Template',
-		'prompt' => "Write a {tone} blog post with the following title: {title}\n\nFocus the article on: {keyword}",
+		'prompt' => 'Write a {tone} blog post in {language} titled "{title}", focused on {keyword}, '
+			. 'for readers interested in {category}. Work these related keywords in naturally where they fit: {keywords}. '
+			. 'Open with a concrete hook — a specific detail, number, or scenario — never a broad scene-setting cliché. '
+			. 'Prefer short paragraphs and concrete examples over abstractions.',
 	);
 }
 
@@ -54,6 +57,10 @@ function abcc_get_settings_schema() {
 			'abcc_default_post_status'        => array(
 				'default'  => 'draft',
 				'sanitize' => 'abcc_sanitize_post_status',
+			),
+			'abcc_content_language'           => array(
+				'default'  => 'site',
+				'sanitize' => 'abcc_sanitize_content_language',
 			),
 			'abcc_selected_post_types'        => array( 'default' => array( 'post' ) ),
 			'prompt_select'                   => array( 'default' => 'gpt-5.4-mini' ),
@@ -419,6 +426,24 @@ function abcc_run_settings_migrations() {
 	}
 
 	if ( version_compare( get_option( 'abcc_version', '1.0.0' ), ABCC_VERSION, '<' ) ) {
+		// Cron events are scheduled on activation only (since 4.4.0); re-check
+		// on upgrade so installs that lost them recover without a reactivate.
+		if ( ! wp_next_scheduled( 'abcc_daily_provider_health_check' ) ) {
+			wp_schedule_event( time(), 'daily', 'abcc_daily_provider_health_check' );
+		}
+		if ( ! wp_next_scheduled( 'abcc_run_topic_schedules' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'abcc_run_topic_schedules' );
+		}
+
+		// The 'default' template slug is read-only in the UI, so upgrades can
+		// refresh it — otherwise stored copies keep the wording of whatever
+		// version first wrote them. Custom templates are never touched.
+		$abcc_templates = abcc_get_setting( 'abcc_content_templates', array() );
+		if ( is_array( $abcc_templates ) ) {
+			$abcc_templates['default'] = abcc_get_default_content_template();
+			abcc_update_setting( 'abcc_content_templates', $abcc_templates );
+		}
+
 		abcc_update_setting( 'abcc_version', ABCC_VERSION );
 	}
 

@@ -126,52 +126,19 @@ jQuery(document).ready(function ($) {
   }
 
   function pollJob(jobId, callbacks) {
+    // Shared capped poller (abcc-ui.js) plus this file's refreshJobLog side effect.
     const options = callbacks || {};
+    const wrappedUpdate = options.onUpdate;
 
-    function pollOnce() {
-      $.post(ajaxurl, {
-        action: "abcc_get_job_status",
-        nonce: abccAdmin.nonce,
-        job_id: jobId,
-      }).done(function (response) {
-        if (!response.success) {
-          if (options.onError) {
-            options.onError(response.data && response.data.message ? response.data.message : "An error occurred.");
-          }
-          return;
-        }
+    options.nonce = abccAdmin.nonce;
+    options.onUpdate = function (job) {
+      if (wrappedUpdate) {
+        wrappedUpdate(job);
+      }
+      refreshJobLog();
+    };
 
-        const job = response.data;
-
-        if (options.onUpdate) {
-          options.onUpdate(job);
-        }
-
-        refreshJobLog();
-
-        if (job.status === "queued" || job.status === "running") {
-          window.setTimeout(pollOnce, 3000);
-          return;
-        }
-
-        if (job.status === "succeeded") {
-          if (options.onSuccess) {
-            options.onSuccess(job);
-          }
-          return;
-        }
-
-        if (options.onFailed) {
-          options.onFailed(job.message || "Generation failed.");
-        }
-      }).fail(function () {
-        if (options.onError) {
-          options.onError("Network error occurred.");
-        }
-      });
-    }
-
-    pollOnce();
+    abcc.pollJob(jobId, options);
   }
 
   $("#abcc-job-refresh").on("click", function () {
@@ -261,6 +228,20 @@ jQuery(document).ready(function ($) {
 
     // Optional: Show a subtle notification
     showModelSelectedNotification($clickedCard.find("h4").text());
+
+    // Scroll the card into view when it is not fully visible.
+    const cardTop = $clickedCard.offset().top;
+    const windowTop = $(window).scrollTop();
+    const windowHeight = $(window).height();
+
+    if (cardTop < windowTop || cardTop > windowTop + windowHeight - 100) {
+      $("html, body").animate(
+        {
+          scrollTop: cardTop - 100,
+        },
+        300,
+      );
+    }
   });
 
   // Handle keyboard navigation for accessibility
@@ -353,24 +334,6 @@ jQuery(document).ready(function ($) {
     }, 5000);
   });
 
-  // Add smooth scrolling to model cards when they're selected
-  $(".model-card").on("click", function () {
-    const $card = $(this);
-    const cardTop = $card.offset().top;
-    const windowTop = $(window).scrollTop();
-    const windowHeight = $(window).height();
-
-    // Only scroll if the card is not fully visible
-    if (cardTop < windowTop || cardTop > windowTop + windowHeight - 100) {
-      $("html, body").animate(
-        {
-          scrollTop: cardTop - 100,
-        },
-        300,
-      );
-    }
-  });
-
   // API Key Validation — validate a single provider and update its status span.
   function abccValidateProvider(provider) {
     const $status = $(
@@ -380,12 +343,8 @@ jQuery(document).ready(function ($) {
       return;
     }
 
-    $status
-      .removeClass("verified failed")
-      .addClass("loading")
-      .html(
-        '<span class="spinner is-active" style="float:none; margin:0 5px;"></span>',
-      );
+    $status.removeClass("verified failed").addClass("loading");
+    abcc.showStatus($status, "", "loading");
 
     const $keyInput = $("#" + provider + "_api_key");
     const apiKey = $keyInput.length ? $keyInput.val().trim() : "";
@@ -401,16 +360,16 @@ jQuery(document).ready(function ($) {
       function (response) {
         $status.removeClass("loading");
         if (response.success) {
-          $status.addClass("verified").html("✓ " + response.data.message);
+          $status.addClass("verified");
+          abcc.showStatus($status, "✓ " + response.data.message, "success");
         } else {
-          $status.addClass("failed").html("✗ " + response.data.message);
+          $status.addClass("failed");
+          abcc.showStatus($status, "✗ " + response.data.message, "error");
         }
       },
     ).fail(function () {
-      $status
-        .removeClass("loading")
-        .addClass("failed")
-        .html("✗ Connection error");
+      $status.removeClass("loading").addClass("failed");
+      abcc.showStatus($status, "✗ Connection error", "error");
     });
   }
 
@@ -475,7 +434,7 @@ jQuery(document).ready(function ($) {
   });
 
   $(document).on("click", ".abcc-remove-group", function () {
-    if (confirm("Are you sure you want to remove this keyword group?")) {
+    if (confirm(abcc.i18n("confirmDeleteGroup"))) {
       $(this).closest(".abcc-group-item").remove();
     }
   });
@@ -504,7 +463,7 @@ jQuery(document).ready(function ($) {
   });
 
   $(document).on("click", ".abcc-remove-template", function () {
-    if (confirm("Are you sure you want to remove this content template?")) {
+    if (confirm(abcc.i18n("confirmDeleteTemplate"))) {
       $(this).closest(".abcc-template-item").remove();
       updateTemplateSelectors();
     }
@@ -645,11 +604,12 @@ jQuery(document).ready(function ($) {
               abcc.showStatus($status, "Status: " + job.statusLabel);
             },
             onSuccess: function (job) {
-              abcc.showStatus(
-                $status,
-                "Post created! <a href='" + abccAdmin.adminUrl + "post=" + job.post_id + "&action=edit'>Edit post</a>",
-                "success"
-              );
+              const $link = $("<a>")
+                .attr("href", abccAdmin.adminUrl + "post=" + encodeURIComponent(job.post_id) + "&action=edit")
+                .text(abccAdmin.i18n.editPost || "Edit post");
+              const $msg = $("<span>").text(abccAdmin.i18n.postCreated || "Post created!").append(" ", $link);
+
+              abcc.showHtml($status, $msg, "success");
               $btn.prop("disabled", false);
             },
             onFailed: function (message) {
@@ -694,16 +654,12 @@ jQuery(document).ready(function ($) {
     const postId = $link.data("post-id");
     const $statusCell = $link.closest("td");
 
-    if (
-      !confirm(
-        "Are you sure you want to regenerate this post? It will create a NEW draft using the same parameters.",
-      )
-    ) {
+    if (!confirm(abcc.i18n("confirmRegeneratePost"))) {
       return;
     }
 
     $link.css("pointer-events", "none");
-    abcc.showStatus($statusCell, "Regenerating\u2026");
+    abcc.showStatus($statusCell, abcc.i18n("regenerating"));
 
     $.post(
       ajaxurl,
@@ -792,14 +748,19 @@ jQuery(document).ready(function ($) {
       var model    = $('#abcc-bulk-model').val();
       var draft    = $('#abcc-bulk-draft').is(':checked') ? '1' : '0';
 
-      keywords.forEach(function (kw) {
-        $body.append(
-          '<tr data-kw="' + abccEscapeHtml(kw) + '">' +
+      // Hold each row by reference: re-querying by a keyword attribute
+      // selector breaks on keywords containing quotes and picks the wrong
+      // row when two entries share a keyword.
+      var bulkRows = keywords.map(function (kw) {
+        var $tr = $(
+          '<tr>' +
           '<td>' + abccEscapeHtml(kw) + '</td>' +
           '<td class="abcc-bulk-status">' + abccEscapeHtml(abccAdmin.i18n.queued || 'Queued') + '</td>' +
           '<td class="abcc-bulk-result"></td>' +
           '</tr>'
         );
+        $body.append($tr);
+        return $tr;
       });
 
       function processNext(index) {
@@ -810,7 +771,7 @@ jQuery(document).ready(function ($) {
           return;
         }
         var kw  = keywords[index];
-        var $tr = $body.find('tr[data-kw="' + abccEscapeHtml(kw) + '"]');
+        var $tr = bulkRows[index];
         $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.generating || 'Generating\u2026');
 
         $.post(ajaxurl, {

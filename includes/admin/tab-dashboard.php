@@ -157,7 +157,7 @@ foreach ( $provider_cards as $card ) {
 				</span>
 				<span class="abcc-composer__chip">
 					<span class="abcc-composer__k"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></span>
-					<strong><?php echo esc_html( $composer_model ); ?></strong>
+					<strong><?php echo esc_html( abcc_get_model_display_name( $composer_model ) ); ?></strong>
 				</span>
 				<span class="abcc-composer__chip">
 					<span class="abcc-composer__k"><?php esc_html_e( 'Save as', 'automated-blog-content-creator' ); ?></span>
@@ -358,19 +358,13 @@ foreach ( $provider_cards as $card ) {
 		</a>
 		<a class="abcc-tile" href="
 		<?php
-		echo esc_url(
-			add_query_arg(
-				array(
-					'page'   => $page_slug,
-					'tab'    => 'content',
-					'subtab' => 'refresh',
-				)
-			)
-		);
+		// Bulk SEO regeneration lives on the Posts list as a bulk action;
+		// there is no plugin subtab for it.
+		echo esc_url( admin_url( 'edit.php?post_type=post' ) );
 		?>
 		">
 			<span class="abcc-tile__name"><?php esc_html_e( 'SEO Refresh', 'automated-blog-content-creator' ); ?></span>
-			<span class="abcc-tile__state abcc-tile__state--new"><?php esc_html_e( 'New in 4.3', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state"><?php esc_html_e( 'Select posts → Bulk actions', 'automated-blog-content-creator' ); ?></span>
 		</a>
 		<a class="abcc-tile" href="
 		<?php
@@ -500,7 +494,7 @@ foreach ( $provider_cards as $card ) {
 						<span class="abcc-activity-icon"><?php echo $icon; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 						<span class="abcc-activity-title"><?php echo esc_html( get_the_title( $job ) ); ?></span>
 						<span class="abcc-activity-meta">
-							<?php echo esc_html( $model ); ?>
+							<?php echo esc_html( abcc_get_model_display_name( $model ) ); ?>
 							&bull; <?php echo esc_html( abcc_get_job_source_label( $source ) ); ?>
 							&bull; <?php echo esc_html( human_time_diff( get_post_time( 'U', false, $job ), time() ) ); ?> <?php esc_html_e( 'ago', 'automated-blog-content-creator' ); ?>
 						</span>
@@ -509,8 +503,12 @@ foreach ( $provider_cards as $card ) {
 								<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
 							</a>
 						<?php elseif ( $job_error && ABCC_Job::STATUS_FAILED === $job_status ) : ?>
-							<span class="abcc-activity-error" title="<?php echo esc_attr( $job_error ); ?>">
-								<?php esc_html_e( 'Error', 'automated-blog-content-creator' ); ?>
+							<span class="abcc-activity-error">
+								<?php
+								// Inline, not a title attribute — hover-only
+								// text is invisible on touch devices.
+								echo esc_html( wp_trim_words( $job_error, 14, '…' ) );
+								?>
 							</span>
 						<?php endif; ?>
 					</li>

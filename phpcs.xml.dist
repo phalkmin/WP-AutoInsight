@@ -4,6 +4,7 @@
     <file>auto-post.php</file>
     <file>gpt.php</file>
     <file>includes/</file>
+    <file>uninstall.php</file>
     <rule ref="WordPress-Extra">
         <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase" />
         <exclude name="WordPress.Files.FileName.InvalidClassFileName" />

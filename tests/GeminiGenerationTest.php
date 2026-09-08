@@ -143,3 +143,40 @@ abcc_test(
 		abcc_assert_same( false, $result['success'] );
 	}
 );
+
+abcc_test(
+	'Gemini requests send the key as a header, never in the URL',
+	function () {
+		abcc_test_queue_http_response(
+			wp_json_encode(
+				array(
+					'candidates' => array(
+						array(
+							'content'      => array( 'parts' => array( array( 'text' => 'Body text.' ) ) ),
+							'finishReason' => 'STOP',
+						),
+					),
+				)
+			)
+		);
+
+		abcc_call_provider_api(
+			'gemini',
+			'gemini-2.5-flash',
+			'Write something.',
+			array( 'api_key' => 'test-gemini-key' )
+		);
+
+		$request = $GLOBALS['abcc_http_last_request'];
+		abcc_assert_true( is_array( $request ), 'A Gemini request should have been made.' );
+		abcc_assert_false(
+			strpos( $request['url'], 'key=' ) !== false,
+			'Gemini key must not appear in the request URL: ' . $request['url']
+		);
+		abcc_assert_same(
+			'test-gemini-key',
+			$request['args']['headers']['x-goog-api-key'] ?? '',
+			'Gemini key must be sent as the x-goog-api-key header.'
+		);
+	}
+);

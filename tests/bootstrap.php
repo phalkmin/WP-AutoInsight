@@ -8,7 +8,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'ABCC_VERSION' ) ) {
-	define( 'ABCC_VERSION', '4.2.0' );
+	// Read from the plugin header so the harness can't drift out of sync.
+	$abcc_header  = file_get_contents( dirname( __DIR__ ) . '/auto-post.php' );
+	$abcc_matched = preg_match( '/^\s*\*\s*Version:\s*(\S+)/m', (string) $abcc_header, $abcc_version_match );
+	define( 'ABCC_VERSION', $abcc_matched ? $abcc_version_match[1] : '0.0.0' );
+	unset( $abcc_header, $abcc_matched, $abcc_version_match );
 }
 
 if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
@@ -34,10 +38,12 @@ if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
 		private $code;
 		private $message;
+		private $data;
 
-		public function __construct( $code = '', $message = '' ) {
+		public function __construct( $code = '', $message = '', $data = '' ) {
 			$this->code    = $code;
 			$this->message = $message;
+			$this->data    = $data;
 		}
 
 		public function get_error_message() {
@@ -46,6 +52,10 @@ if ( ! class_exists( 'WP_Error' ) ) {
 
 		public function get_error_code() {
 			return $this->code;
+		}
+
+		public function get_error_data() {
+			return $this->data;
 		}
 	}
 }
@@ -59,6 +69,8 @@ $GLOBALS['abcc_test_connectors'] = array();
 $GLOBALS['abcc_test_current_user_caps']  = array();
 $GLOBALS['abcc_test_current_user_roles'] = array( 'administrator' );
 $GLOBALS['abcc_test_current_user_exists'] = true;
+$GLOBALS['abcc_test_nonce_valid'] = true;
+$GLOBALS['abcc_test_locale'] = 'en_US';
 $GLOBALS['abcc_test_last_json'] = null;
 $GLOBALS['abcc_test_schedule']   = array(
 	'timestamp' => false,
@@ -124,8 +136,22 @@ function current_user_can($cap, ...$args) {
 
 	return true;
 }
-function check_ajax_referer() { return true; }
-function wp_verify_nonce() { return true; }
+// Nonce stubs are overridable so tests can exercise the failure path. Default
+// true keeps existing tests working; set $GLOBALS['abcc_test_nonce_valid'] to
+// false to assert a handler actually rejects a bad nonce.
+function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ) {
+	$valid = ! isset( $GLOBALS['abcc_test_nonce_valid'] ) || (bool) $GLOBALS['abcc_test_nonce_valid'];
+	if ( ! $valid && $stop ) {
+		throw new Exception( 'abcc_test_nonce_failure' ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+	}
+	return $valid;
+}
+function wp_create_nonce( $action = -1 ) {
+	return 'test-nonce';
+}
+function wp_verify_nonce( $nonce = '', $action = -1 ) {
+	return ! isset( $GLOBALS['abcc_test_nonce_valid'] ) || (bool) $GLOBALS['abcc_test_nonce_valid'];
+}
 function wp_send_json_error($data = array()) {
 	$GLOBALS['abcc_test_last_json'] = array(
 		'success' => false,
@@ -148,6 +174,7 @@ function sanitize_key($value) { return preg_replace('/[^a-z0-9_\-]/', '', strtol
 function wp_unslash($value) { return $value; }
 function absint($value) { return abs((int) $value); }
 function get_current_user_id() { return 1; }
+function get_locale() { return $GLOBALS['abcc_test_locale'] ?? 'en_US'; }
 function is_wp_error($thing) { return $thing instanceof WP_Error; }
 function wp_parse_args($args, $defaults = array()) { return array_merge($defaults, $args); }
 function get_option($key, $default = false) { return array_key_exists($key, $GLOBALS['abcc_test_options']) ? $GLOBALS['abcc_test_options'][ $key ] : $default; }
@@ -187,8 +214,11 @@ function wp_get_current_user() {
 function wp_is_connector_registered($connector_id) { return in_array($connector_id, $GLOBALS['abcc_test_connectors'], true); }
 function wp_next_scheduled($hook) { return 'abcc_openai_generate_post_hook' === $hook ? $GLOBALS['abcc_test_schedule']['timestamp'] : false; }
 function wp_get_schedule($hook) { return 'abcc_openai_generate_post_hook' === $hook ? $GLOBALS['abcc_test_schedule']['schedule'] : false; }
+function wp_schedule_event($timestamp, $recurrence, $hook, $args = array()) { return true; }
+function wp_clear_scheduled_hook($hook, $args = array()) { return true; }
 function date_i18n($format, $timestamp) { return gmdate('Y-m-d H:i', (int) $timestamp); }
 function abcc_debug_log($message) { return null; }
+function abcc_handle_api_request_error($response, $api) { return null; }
 function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
 function wp_get_attachment_url($attachment_id) { return 'https://example.test/wp-content/uploads/audio-' . (int) $attachment_id . '.mp3'; }
 function get_post_meta($post_id, $key = '', $single = false) {
@@ -214,7 +244,11 @@ function wp_schedule_single_event($timestamp, $hook, $args = array()) {
 	);
 	return true;
 }
-function spawn_cron() { return true; }
+$GLOBALS['abcc_test_spawn_cron_calls'] = 0;
+function spawn_cron() {
+	++$GLOBALS['abcc_test_spawn_cron_calls'];
+	return true;
+}
 
 // --- Minimal in-memory posts store (shares post-type/meta stores above) ---
 $GLOBALS['abcc_test_posts']        = array();
@@ -257,6 +291,11 @@ function wp_update_post($postarr, $wp_error = false) {
 		}
 	}
 	return $id;
+}
+
+function get_the_title( $post = 0 ) {
+	$post_id = (int) $post;
+	return isset( $GLOBALS['abcc_test_posts'][ $post_id ]->post_title ) ? (string) $GLOBALS['abcc_test_posts'][ $post_id ]->post_title : '';
 }
 
 function wp_delete_post($post_id, $force = false) {
@@ -339,8 +378,10 @@ function abcc_test_post_matches_meta_query($post_id, $meta_query) {
 function wp_upload_dir() {
 	$base = sys_get_temp_dir() . '/abcc-test-uploads';
 	return array(
-		'path' => $base,
-		'url'  => 'http://example.test/uploads',
+		'path'    => $base,
+		'url'     => 'http://example.test/uploads',
+		'basedir' => $base,
+		'baseurl' => 'http://example.test/uploads',
 	);
 }
 function wp_mkdir_p($dir) { return is_dir($dir) || mkdir($dir, 0777, true); }
@@ -427,6 +468,8 @@ require_once dirname(__DIR__) . '/includes/token-handling.php';
 require_once dirname(__DIR__) . '/includes/scheduling.php';
 require_once dirname(__DIR__) . '/includes/topics.php';
 require_once dirname(__DIR__) . '/includes/images.php';
+require_once dirname(__DIR__) . '/includes/content-language.php';
+require_once dirname(__DIR__) . '/includes/generation-errors.php';
 require_once dirname(__DIR__) . '/includes/content-generation.php';
 require_once dirname(__DIR__) . '/includes/seo.php';
 require_once dirname(__DIR__) . '/includes/seo-regen.php';
@@ -437,6 +480,52 @@ require_once dirname(__DIR__) . '/includes/blocks.php';
 require_once dirname(__DIR__) . '/includes/audio.php';
 require_once dirname(__DIR__) . '/includes/class-abcc-job.php';
 require_once dirname(__DIR__) . '/includes/onboarding.php';
+
+if ( ! function_exists( 'wp_check_filetype' ) ) {
+	function wp_check_filetype( $filename, $mimes = null ) {
+		$ext = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+		return array(
+			'ext'  => $ext,
+			'type' => $ext ? 'image/' . $ext : false,
+		);
+	}
+}
+
+if ( ! function_exists( 'wp_insert_attachment' ) ) {
+	function wp_insert_attachment( $args, $file = false, $parent = 0 ) {
+		return wp_insert_post(
+			array(
+				'post_type'   => 'attachment',
+				'post_title'  => $args['post_title'] ?? '',
+				'post_status' => 'inherit',
+			)
+		);
+	}
+}
+
+if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
+	function wp_generate_attachment_metadata( $attachment_id, $file ) {
+		return array( 'file' => basename( (string) $file ) );
+	}
+}
+
+if ( ! function_exists( 'wp_update_attachment_metadata' ) ) {
+	function wp_update_attachment_metadata( $attachment_id, $data ) {
+		return update_post_meta( $attachment_id, '_wp_attachment_metadata', $data );
+	}
+}
+
+if ( ! function_exists( 'set_post_thumbnail' ) ) {
+	function set_post_thumbnail( $post_id, $attachment_id ) {
+		return update_post_meta( $post_id, '_thumbnail_id', (int) $attachment_id );
+	}
+}
+
+if ( ! function_exists( 'sanitize_file_name' ) ) {
+	function sanitize_file_name( $name ) {
+		return preg_replace( '/[^A-Za-z0-9_.-]/', '-', (string) $name );
+	}
+}
 
 // Snapshot the AJAX/action hooks registered at file scope during plugin load,
 // before any test resets $GLOBALS['abcc_test_actions']. Lets a test assert that
@@ -561,6 +650,44 @@ function abcc_test_fake_generation( $text ) {
 				'completion_tokens' => 20,
 			),
 		)
+	);
+}
+
+/**
+ * Reset mutable harness state between tests.
+ *
+ * Tests share one process, so a test that writes an option or queues an HTTP
+ * response leaks into whatever runs next and makes suites order-dependent.
+ * The runner calls this before every test.
+ *
+ * Deliberately NOT reset: $GLOBALS['abcc_test_actions_at_load'] (a load-time
+ * snapshot) and the posts/next-post-id stores, which several tests seed at
+ * file scope via abcc_test_make_topic().
+ */
+function abcc_test_reset_state() {
+	$GLOBALS['abcc_test_options']              = array();
+	$GLOBALS['abcc_test_transients']           = array();
+	$GLOBALS['abcc_test_post_meta']            = array();
+	$GLOBALS['abcc_test_filters']              = array();
+	$GLOBALS['abcc_test_scheduled_events']     = array();
+	$GLOBALS['abcc_http_queue']                = array();
+	$GLOBALS['abcc_http_last_request']         = null;
+	$GLOBALS['abcc_test_last_json']            = null;
+	$GLOBALS['abcc_test_connectors']           = array();
+	$GLOBALS['abcc_test_current_user_caps']    = array();
+	$GLOBALS['abcc_test_current_user_roles']   = array( 'administrator' );
+	$GLOBALS['abcc_test_current_user_exists']  = true;
+	$GLOBALS['abcc_test_nonce_valid']          = true;
+	$GLOBALS['abcc_test_locale']               = 'en_US';
+	$GLOBALS['abcc_test_uneditable_posts']     = array();
+	$GLOBALS['abcc_test_spawn_cron_calls']     = 0;
+	$GLOBALS['abcc_test_schedule']             = array(
+		'timestamp' => false,
+		'schedule'  => false,
+	);
+	unset(
+		$GLOBALS['abcc_test_force_insert_error'],
+		$GLOBALS['abcc_test_force_insert_error_once']
 	);
 }
 

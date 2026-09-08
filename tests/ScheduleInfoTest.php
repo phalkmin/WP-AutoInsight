@@ -30,3 +30,28 @@ abcc_test(
 		abcc_assert_same( 'gpt-4.1-mini-2025-04-14', $schedule['model'] );
 	}
 );
+
+abcc_test(
+	'cron events are scheduled on activation, not on construction',
+	function () {
+		$source = file_get_contents( dirname( __DIR__ ) . '/includes/class-abcc-plugin.php' );
+
+		preg_match( '/function __construct\(\).*?\n\t\}/s', $source, $ctor );
+		abcc_assert_true( ! empty( $ctor[0] ), 'Could not locate the constructor.' );
+		abcc_assert_false(
+			false !== strpos( $ctor[0], 'wp_next_scheduled' ),
+			'The constructor must not query cron schedules on every request.'
+		);
+
+		preg_match( '/function activate_plugin\(\).*?\n\t\}/s', $source, $activate );
+		abcc_assert_true( ! empty( $activate[0] ), 'Could not locate activate_plugin().' );
+		abcc_assert_true(
+			false !== strpos( $activate[0], 'abcc_daily_provider_health_check' ),
+			'activate_plugin() must schedule the health-check event.'
+		);
+		abcc_assert_true(
+			false !== strpos( $activate[0], 'abcc_run_topic_schedules' ),
+			'activate_plugin() must schedule the topic-schedule event.'
+		);
+	}
+);

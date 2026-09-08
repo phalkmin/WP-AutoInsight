@@ -80,7 +80,7 @@ $schedule_info = abcc_get_openai_event_schedule();
 						echo ' &bull; ' . esc_html__( 'Group:', 'automated-blog-content-creator' ) . ' <strong>' . esc_html( $schedule_info['group_name'] ) . '</strong>';
 					}
 					if ( ! empty( $schedule_info['model'] ) ) {
-						echo ' &bull; ' . esc_html__( 'Model:', 'automated-blog-content-creator' ) . ' <strong>' . esc_html( $schedule_info['model'] ) . '</strong>';
+						echo ' &bull; ' . esc_html__( 'Model:', 'automated-blog-content-creator' ) . ' <strong>' . esc_html( abcc_get_model_display_name( $schedule_info['model'] ) ) . '</strong>';
 					}
 					?>
 					</p>

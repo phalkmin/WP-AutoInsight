@@ -15,7 +15,7 @@ $settings_subtabs = array(
 	'permissions' => __( 'Permissions', 'automated-blog-content-creator' ),
 	'advanced'    => __( 'Advanced', 'automated-blog-content-creator' ),
 );
-$current_subtab = abcc_get_current_subtab( array_keys( $settings_subtabs ), 'general' );
+$current_subtab   = abcc_get_current_subtab( array_keys( $settings_subtabs ), 'general' );
 
 abcc_render_subtab_nav( 'settings', $settings_subtabs, $current_subtab );
 

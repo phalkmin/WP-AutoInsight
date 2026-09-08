@@ -129,6 +129,176 @@ abcc_test(
 	}
 );
 
+// --- OpenAI reasoning-model parameter mapping (GPT-5.x / o-series) ---
+
+abcc_test(
+	'openai gpt-5.x requests use max_completion_tokens and omit sampling params',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'ok' );
+
+		abcc_call_provider_api(
+			'openai',
+			'gpt-5.4',
+			'prompt',
+			array(
+				'api_key'    => 'sk-test',
+				'max_tokens' => 800,
+			)
+		);
+
+		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+
+		abcc_assert_true( isset( $body['max_completion_tokens'] ), 'GPT-5.x must send max_completion_tokens.' );
+		abcc_assert_true( ! isset( $body['max_tokens'] ), 'GPT-5.x must not send max_tokens.' );
+		abcc_assert_true( ! isset( $body['temperature'] ), 'GPT-5.x must not send temperature.' );
+		abcc_assert_true( ! isset( $body['top_p'] ), 'GPT-5.x must not send top_p.' );
+		abcc_assert_true( ! isset( $body['frequency_penalty'] ), 'GPT-5.x must not send frequency_penalty.' );
+		abcc_assert_true( ! isset( $body['presence_penalty'] ), 'GPT-5.x must not send presence_penalty.' );
+	}
+);
+
+abcc_test(
+	'openai gpt-5.x requests disable reasoning so tokens go to output',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'ok' );
+
+		abcc_call_provider_api(
+			'openai',
+			'gpt-5.4-mini',
+			'prompt',
+			array(
+				'api_key'    => 'sk-test',
+				'max_tokens' => 200,
+			)
+		);
+
+		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+		abcc_assert_same( 'none', $body['reasoning_effort'], 'GPT-5.1+ models must send reasoning_effort=none.' );
+	}
+);
+
+abcc_test(
+	'openai o-series requests keep low reasoning with an enlarged budget',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'ok' );
+
+		abcc_call_provider_api(
+			'openai',
+			'o4-mini',
+			'prompt',
+			array(
+				'api_key'    => 'sk-test',
+				'max_tokens' => 200,
+			)
+		);
+
+		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+		abcc_assert_same( 'low', $body['reasoning_effort'], 'o-series has no reasoning_effort=none; must send low.' );
+		abcc_assert_true( $body['max_completion_tokens'] >= 4000, 'Active reasoning bills hidden tokens against the budget; floor must cover them.' );
+	}
+);
+
+abcc_test(
+	'openai gpt-5.x floors max_completion_tokens so reasoning does not eat tiny budgets',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'A Title' );
+
+		abcc_call_provider_api(
+			'openai',
+			'gpt-5.4-mini',
+			'prompt',
+			array(
+				'api_key'    => 'sk-test',
+				'max_tokens' => 50,
+			)
+		);
+
+		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+		abcc_assert_true( $body['max_completion_tokens'] >= 1000, 'Small budgets must be floored for reasoning models.' );
+	}
+);
+
+abcc_test(
+	'openai gpt-4.1 requests keep legacy max_tokens and temperature',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'ok' );
+
+		abcc_call_provider_api(
+			'openai',
+			'gpt-4.1-2025-04-14',
+			'prompt',
+			array(
+				'api_key'    => 'sk-test',
+				'max_tokens' => 800,
+			)
+		);
+
+		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+
+		abcc_assert_true( isset( $body['max_tokens'] ), 'GPT-4.1 must keep max_tokens.' );
+		abcc_assert_true( isset( $body['temperature'] ), 'GPT-4.1 must keep temperature.' );
+		abcc_assert_true( ! isset( $body['max_completion_tokens'] ), 'GPT-4.1 must not send max_completion_tokens.' );
+	}
+);
+
+// --- Single-line HTML normalization ---
+
+abcc_test(
+	'wrapper splits single-line HTML responses into block-level lines',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response(
+			'<h2>Intro</h2><p>First paragraph.</p><p>Second paragraph.</p>'
+		);
+
+		$result = abcc_call_provider_api( 'openai', 'gpt-4.1-mini', 'prompt', array( 'api_key' => 'sk-test' ) );
+
+		abcc_assert_same(
+			array( '<h2>Intro</h2>', '<p>First paragraph.</p>', '<p>Second paragraph.</p>', '' ),
+			$result['content']
+		);
+	}
+);
+
+// --- Empty completion guard ---
+
+abcc_test(
+	'wrapper returns error when the model emits an empty completion',
+	function () {
+		// HTTP 200, finish_reason=length, empty content: the reasoning-burn
+		// signature that previously cascaded into a silent generic failure.
+		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( '', 'length' );
+
+		$result = abcc_call_provider_api( 'openai', 'gpt-5.4-mini', 'prompt', array( 'api_key' => 'sk-test' ) );
+
+		abcc_assert_true( is_wp_error( $result['error'] ), 'Empty completion must produce a WP_Error, not empty content lines.' );
+		abcc_assert_same( array(), $result['content'] );
+		abcc_assert_true(
+			false !== strpos( $result['error']->get_error_message(), 'empty completion' ),
+			'Error message must name the empty completion.'
+		);
+	}
+);
+
+abcc_test(
+	'wrapper returns error on whitespace-only completion for Claude',
+	function () {
+		$GLOBALS['abcc_http_queue'][] = array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode(
+				array(
+					'content'     => array( array( 'text' => "  \n  " ) ),
+					'stop_reason' => 'end_turn',
+				)
+			),
+		);
+
+		$result = abcc_call_provider_api( 'claude', 'claude-sonnet-4-6', 'prompt', array( 'api_key' => 'sk-test' ) );
+
+		abcc_assert_true( is_wp_error( $result['error'] ), 'Whitespace-only completion must produce a WP_Error.' );
+		abcc_assert_same( array(), $result['content'] );
+	}
+);
+
 // --- Truncation detection ---
 
 abcc_test(
@@ -285,5 +455,40 @@ abcc_test(
 
 		$result = abcc_claude_generate_text( 'bad-key', 'prompt', 500, 'claude-sonnet-4-6' );
 		abcc_assert_same( false, $result );
+	}
+);
+
+abcc_test(
+	'HTTP failures carry a specific error code per status class',
+	function () {
+		$cases = array(
+			401 => 'abcc_provider_auth_error',
+			403 => 'abcc_provider_auth_error',
+			429 => 'abcc_provider_rate_limited',
+			500 => 'abcc_provider_server_error',
+			503 => 'abcc_provider_server_error',
+			418 => 'abcc_provider_http_error',
+		);
+
+		foreach ( $cases as $status => $expected_code ) {
+			$GLOBALS['abcc_http_queue'][] = array(
+				'response' => array( 'code' => $status ),
+				'body'     => '{"error":"nope"}',
+			);
+
+			$result = abcc_call_provider_api(
+				'claude',
+				'claude-sonnet-4-6',
+				'prompt',
+				array( 'api_key' => 'sk-test' )
+			);
+
+			abcc_assert_true( is_wp_error( $result['error'] ), 'HTTP ' . $status . ' should produce an error.' );
+			abcc_assert_same(
+				$expected_code,
+				$result['error']->get_error_code(),
+				'HTTP ' . $status . ' should map to ' . $expected_code . '.'
+			);
+		}
 	}
 );

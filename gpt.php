@@ -66,7 +66,9 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 			array(
 				array(
 					'role'    => 'user',
-					'content' => wp_kses_post( $prompt ),
+					// Verbatim — wp_kses_post() would entity-encode quotes and
+					// strip tag-like text from legitimate prompt input.
+					'content' => $prompt,
 				),
 			),
 			array(
@@ -98,18 +100,21 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 					'messages'   => array(
 						array(
 							'role'    => 'user',
-							'content' => wp_kses_post( $prompt ),
+							'content' => $prompt,
 						),
 					),
 				);
 				break;
 
 			case 'gemini':
-				$url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . rawurlencode( $api_key );
-				$headers = array( 'Content-Type' => 'application/json' );
+				$url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent';
+				$headers = array(
+					'Content-Type'   => 'application/json',
+					'x-goog-api-key' => $api_key,
+				);
 				$body    = array(
 					'contents'         => array(
-						array( 'parts' => array( array( 'text' => wp_kses_post( $prompt ) ) ) ),
+						array( 'parts' => array( array( 'text' => $prompt ) ) ),
 					),
 					'generationConfig' => array( 'maxOutputTokens' => $available_tokens ),
 				);
@@ -127,7 +132,7 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 					'messages'   => array(
 						array(
 							'role'    => 'user',
-							'content' => wp_kses_post( $prompt ),
+							'content' => $prompt,
 						),
 					),
 				);
@@ -161,7 +166,28 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code < 200 || $code >= 300 ) {
 			abcc_debug_log( $label . ' API HTTP ' . $code . ': ' . wp_remote_retrieve_body( $response ) );
-			$result['error'] = new WP_Error( 'abcc_provider_http_error', sprintf( '%s API returned HTTP %d', $label, $code ) );
+
+			// Status class drives both the user-facing message and (from v4.5)
+			// whether the fallback chain should retry. 401 is a config problem
+			// the user must see; 429 and 5xx are transient and retryable.
+			if ( 401 === $code || 403 === $code ) {
+				$error_code = 'abcc_provider_auth_error';
+			} elseif ( 429 === $code ) {
+				$error_code = 'abcc_provider_rate_limited';
+			} elseif ( $code >= 500 ) {
+				$error_code = 'abcc_provider_server_error';
+			} else {
+				$error_code = 'abcc_provider_http_error';
+			}
+
+			$result['error'] = new WP_Error(
+				$error_code,
+				sprintf( '%s API returned HTTP %d', $label, $code ),
+				array(
+					'status'   => $code,
+					'provider' => $provider,
+				)
+			);
 			return $result;
 		}
 
@@ -199,9 +225,7 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 	}
 
 	// HTTP 200 with no text: reasoning models can burn the whole completion
-	// budget on hidden reasoning tokens and return an empty message. Without
-	// this guard the empty string cascades into a generic, unlogged
-	// "Content generation failed" downstream.
+	// budget on hidden reasoning tokens and return an empty message.
 	if ( '' === trim( $text ) ) {
 		$detail = $result['truncated']
 			? ' — the token budget was consumed before any text was produced; raise the character limit'
@@ -370,7 +394,7 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 		'quality' => $image_quality,
 	);
 
-	$response = $client->create_image( wp_kses_post( $prompt ), $options );
+	$response = $client->create_image( $prompt, $options );
 
 	if ( is_wp_error( $response ) ) {
 		abcc_debug_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
@@ -589,9 +613,8 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	}
 
 	$endpoint = sprintf(
-		'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
-		rawurlencode( $model ),
-		rawurlencode( $api_key )
+		'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
+		rawurlencode( $model )
 	);
 
 	$body = array(
@@ -616,7 +639,8 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 		$endpoint,
 		array(
 			'headers' => array(
-				'Content-Type' => 'application/json',
+				'Content-Type'   => 'application/json',
+				'x-goog-api-key' => $api_key,
 			),
 			'body'    => wp_json_encode( $body ),
 			'timeout' => 90,

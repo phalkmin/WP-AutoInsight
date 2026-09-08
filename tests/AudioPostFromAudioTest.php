@@ -199,3 +199,29 @@ abcc_test(
 		abcc_assert_same( 'My Clean Title', get_post( $post_id )->post_title, 'Markdown/heading markers must be stripped from the title.' );
 	}
 );
+
+abcc_test(
+	'legacy transcript handler produces a post with v4.3 tracking meta',
+	function () {
+		$attachment_id = 4242;
+		$GLOBALS['abcc_test_post_types'][ $attachment_id ] = 'attachment';
+		abcc_update_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+		abcc_update_setting( 'openai_api_key', 'sk-test' );
+
+		abcc_test_queue_http_response( abcc_test_fake_generation( "<h2>A Section</h2>\n<p>Body.</p>" ) );
+		abcc_test_queue_http_response( abcc_test_fake_generation( 'A Clean Title' ) );
+
+		$post_id = abcc_create_post_from_audio_transcript( 'Spoken words here.', $attachment_id );
+
+		abcc_assert_true( (int) $post_id > 0, 'Legacy path should still create a post.' );
+		abcc_assert_same(
+			'1',
+			(string) get_post_meta( $post_id, '_abcc_generated', true ),
+			'Legacy path must set the _abcc_generated tracking meta added in v4.3.'
+		);
+		abcc_assert_true(
+			'' !== (string) get_post_meta( $post_id, '_abcc_model', true ),
+			'Legacy path must record the model used.'
+		);
+	}
+);

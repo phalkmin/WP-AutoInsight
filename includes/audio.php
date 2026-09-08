@@ -33,13 +33,23 @@ function abcc_sanitize_audio_mode( $mode ) {
  * @return string
  */
 function abcc_audio_build_intro_prompt( $transcript, $options = array() ) {
-	return sprintf(
+	$transcript = abcc_bound_prompt_input( $transcript );
+
+	$prompt = sprintf(
 		'You are preparing a blog post built around an audio transcript. ' .
 		'Write a compelling post title on the first line, then a short (2-3 sentence) introduction ' .
 		'that sets up the transcript for the reader. Do not summarize the whole transcript and do not ' .
 		"repeat it — the full transcript will appear after your introduction.\n\nTRANSCRIPT:\n%s",
 		$transcript
 	);
+
+	$prompt .= sprintf(
+		/* translators: %s: language name */
+		"\n\n" . __( 'Write the entire response in %s.', 'automated-blog-content-creator' ),
+		abcc_resolve_content_language()
+	);
+
+	return $prompt;
 }
 
 /**
@@ -56,13 +66,23 @@ function abcc_audio_build_intro_prompt( $transcript, $options = array() ) {
  * @return string
  */
 function abcc_audio_build_rewrite_prompt( $transcript, $options = array() ) {
-	return sprintf(
+	$transcript = abcc_bound_prompt_input( $transcript );
+
+	$prompt = sprintf(
 		'You are turning a rough audio transcript into a polished blog post. ' .
 		'Write a post title on the first line, then the full article. You are free to restructure, ' .
 		"reorder, expand, add headings, and clean up filler — keep the speaker's meaning and key points " .
 		"but make it read as a written article, not a transcript.\n\nTRANSCRIPT (source material):\n%s",
 		$transcript
 	);
+
+	$prompt .= sprintf(
+		/* translators: %s: language name */
+		"\n\n" . __( 'Write the entire response in %s.', 'automated-blog-content-creator' ),
+		abcc_resolve_content_language()
+	);
+
+	return $prompt;
 }
 
 /**
@@ -114,6 +134,22 @@ function abcc_generate_post_from_audio( $audio_path, $mode, $options = array() )
 		);
 	}
 
+	return abcc_build_post_from_transcript( $transcript, $mode, $options );
+}
+
+/**
+ * Build a post from an existing transcript, using the v4.3 mode pipeline.
+ *
+ * Shared by the audio orchestrator (which transcribes first) and the legacy
+ * transcript AJAX handler (which receives a transcript from the client).
+ *
+ * @since 4.4.0
+ * @param string $transcript Transcript text.
+ * @param string $mode       Audio output mode.
+ * @param array  $options    Options; 'attachment_id' when an audio file exists.
+ * @return int|WP_Error Post ID on success.
+ */
+function abcc_build_post_from_transcript( $transcript, $mode, $options = array() ) {
 	$mode           = abcc_sanitize_audio_mode( $mode );
 	$model          = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 	$char_limit     = (int) abcc_get_setting( 'openai_char_limit', 200 );
@@ -560,6 +596,11 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 /**
  * Create a post from audio transcript using existing WP-AutoInsight infrastructure.
  *
+ * Delegates to the v4.3 mode pipeline shared with the audio orchestrator, so the
+ * legacy transcript AJAX path gets draft-first, tracking meta, and the global
+ * ABCC_CONTENT_FORMAT_REQUIREMENTS format instructions instead of its own
+ * hardcoded prompt.
+ *
  * @since 2.1.0
  * @param string $transcript     The transcribed text.
  * @param int    $attachment_id  The audio attachment ID.
@@ -567,115 +608,19 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
  * @throws Exception If post creation fails.
  */
 function abcc_create_post_from_audio_transcript( $transcript, $attachment_id ) {
-	// Generate title from transcript excerpt.
-	$title = wp_trim_words( $transcript, 8, '...' );
+	$mode = abcc_get_setting( 'abcc_audio_default_mode', 'transcript_plus_intro' );
 
-	// Get audio URL for embedding.
-	$audio_url = wp_get_attachment_url( $attachment_id );
-
-	// Use existing content generation to enhance the transcript.
-	$api_key       = abcc_check_api_key();
-	$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
-	$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
-
-	// Create enhanced content prompt.
-	$prompt = sprintf(
-		'Transform this audio transcript into a well-structured blog post. Keep the original meaning and key points, but improve readability and add proper structure with headings.
-
-Transcript: %s
-
-Format requirements:
-- Create an engaging title
-- Add introduction paragraph
-- Use <h2> headings for main sections  
-- Use <h3> for subsections if needed
-- Improve paragraph structure
-- Add a conclusion
-- Keep the tone conversational but polished',
-		$transcript
+	$result = abcc_build_post_from_transcript(
+		$transcript,
+		$mode,
+		array( 'attachment_id' => (int) $attachment_id )
 	);
 
-	// Generate enhanced content.
-	$enhanced_content = abcc_generate_content( $api_key, $prompt, $prompt_select, $char_limit );
-
-	if ( $enhanced_content ) {
-		// Process the enhanced content.
-		$content_array = array_filter(
-			$enhanced_content,
-			function ( $line ) {
-				return ! empty( trim( $line ) );
-			}
-		);
-
-		$format_content = abcc_create_blocks( $content_array );
-		$post_content   = abcc_gutenberg_blocks( $format_content );
-
-		// Extract title from enhanced content if available.
-		foreach ( $enhanced_content as $line ) {
-			if ( preg_match( '/<h1>(.*?)<\/h1>/', $line, $matches ) ) {
-				$title = wp_strip_all_tags( $matches[1] );
-				break;
-			}
-		}
-	} else {
-		// Fallback to basic transcript formatting.
-		$post_content = '<!-- wp:paragraph --><p>' . esc_html( $transcript ) . '</p><!-- /wp:paragraph -->';
+	if ( is_wp_error( $result ) ) {
+		throw new Exception( $result->get_error_message() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 
-	// Add audio player at the beginning.
-	$audio_block = sprintf(
-		'<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
-		$attachment_id,
-		esc_url( $audio_url )
-	);
-
-	$final_content = $audio_block . "\n\n" . $post_content;
-
-	// Resolve post status via the shared choke point (honours draft-first and
-	// the global default-status setting). The 'audio' source allows v4.5+
-	// hooks to differentiate audio-sourced posts if needed.
-	$post_status = abcc_resolve_post_status( array( 'source' => 'audio' ) );
-
-	// Create the post.
-	$post_data = array(
-		'post_title'    => sanitize_text_field( $title ),
-		'post_content'  => wp_kses_post( $final_content ),
-		'post_status'   => $post_status,
-		'post_author'   => get_current_user_id(),
-		'post_type'     => 'post',
-		'post_category' => array( (int) get_option( 'default_category', 1 ) ),
-	);
-
-	$post_id = wp_insert_post( $post_data, true );
-
-	if ( is_wp_error( $post_id ) ) {
-		throw new Exception( esc_html( $post_id->get_error_message() ) );
-	}
-
-	// Store transcript metadata.
-	update_post_meta( $post_id, '_abcc_transcript_audio', $attachment_id );
-	update_post_meta( $post_id, '_abcc_original_transcript', $transcript );
-
-	// Generate featured image if enabled.
-	if ( abcc_get_setting( 'openai_generate_images', true ) ) {
-		try {
-			$keywords  = explode( ' ', wp_trim_words( $transcript, 10 ) );
-			$image_url = abcc_generate_featured_image( $prompt_select, $keywords );
-			if ( $image_url ) {
-				$alt_text = get_the_title( $post_id );
-				abcc_set_featured_image( $post_id, $image_url, $alt_text );
-			}
-		} catch ( Exception $e ) {
-			abcc_debug_log( 'Featured image generation failed for audio post: ' . $e->getMessage() );
-		}
-	}
-
-	// Send notification if enabled.
-	if ( abcc_get_setting( 'openai_email_notifications', false ) ) {
-		abcc_send_post_notification( $post_id );
-	}
-
-	return $post_id;
+	return $result;
 }
 
 /**
@@ -698,7 +643,7 @@ function abcc_enqueue_audio_scripts( $hook ) {
 	wp_enqueue_script(
 		'abcc-audio-transcription',
 		plugins_url( '/js/audio-transcriptions.js', __DIR__ ),
-		array( 'jquery' ),
+		array( 'jquery', 'abcc-ui-script' ),
 		ABCC_VERSION,
 		true
 	);
@@ -713,6 +658,7 @@ function abcc_enqueue_audio_scripts( $hook ) {
 				'transcribing' => __( 'Transcribing audio...', 'automated-blog-content-creator' ),
 				'creating'     => __( 'Creating post...', 'automated-blog-content-creator' ),
 				'error'        => __( 'An error occurred', 'automated-blog-content-creator' ),
+				'noTranscript' => __( 'No transcript available', 'automated-blog-content-creator' ),
 			),
 		)
 	);

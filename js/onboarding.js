@@ -214,6 +214,7 @@ jQuery(document).ready(function ($) {
 
   function savePostStatus(targetStep) {
     var status = $('input[name="abcc_onboarding_status"]:checked').val() || 'draft';
+    var language = $('#abcc_onboarding_language').val() || 'site';
 
     $.ajax({
       url: abccOnboarding.ajaxurl,
@@ -221,6 +222,7 @@ jQuery(document).ready(function ($) {
       data: {
         action: 'abcc_onboarding_post_status',
         status: status,
+        language: language,
         nonce: abccOnboarding.nonce,
       },
       success: function (response) {
@@ -318,11 +320,7 @@ jQuery(document).ready(function ($) {
 
   function handleSkip(e) {
     e.preventDefault();
-    if (
-      !confirm(
-        "Are you sure you want to skip the setup? You can always configure WP-AutoInsight later in the settings."
-      )
-    ) {
+    if (!confirm(abccOnboarding.i18n.confirmSkip || "Skip the setup?")) {
       return;
     }
 
@@ -450,10 +448,9 @@ jQuery(document).ready(function ($) {
       $(".abcc-success-content").addClass("celebrate");
     }, 500);
 
-    // Redirect to dashboard after a moment
-    setTimeout(function () {
-      window.location.href = "?page=automated-blog-content-creator-post";
-    }, 3000);
+    // No auto-redirect — the success screen waits for an explicit click so
+    // the "What's Next" list stays readable (screen-reader users especially).
+    $(".abcc-success-actions .button-primary").trigger("focus");
   }
 
   // -------------------------------------------------------------------------
@@ -461,18 +458,20 @@ jQuery(document).ready(function ($) {
   // -------------------------------------------------------------------------
 
   function showSuccess($element, message) {
-    $element
-      .removeClass("error")
-      .addClass("success")
-      .html('<span class="dashicons dashicons-yes-alt"></span> ' + message);
+    var $icon = $("<span>").addClass("dashicons dashicons-yes-alt");
+    var $wrap = $("<span>").append($icon, $("<span>").text(" " + message));
+
+    $element.removeClass("error").addClass("success");
+    abcc.showHtml($element, $wrap, "success");
     $element.closest(".abcc-api-input").trigger("success");
   }
 
   function showError($element, message) {
-    $element
-      .removeClass("success")
-      .addClass("error")
-      .html('<span class="dashicons dashicons-warning"></span> ' + message);
+    var $icon = $("<span>").addClass("dashicons dashicons-warning");
+    var $wrap = $("<span>").append($icon, $("<span>").text(" " + message));
+
+    $element.removeClass("success").addClass("error");
+    abcc.showHtml($element, $wrap, "error");
   }
 
   function showStepError(message) {
@@ -497,6 +496,8 @@ jQuery(document).ready(function ($) {
 
   $(document).on("keydown", function (e) {
     if (e.key !== "Enter") { return; }
+    // Textareas need Enter for newlines — never advance the step from one.
+    if ($(e.target).is("textarea")) { return; }
     if (currentStep === 1) {
       var $btn = $("#abcc-next-step-2");
       if ($btn.length && !$btn.prop("disabled")) {

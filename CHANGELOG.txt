@@ -1,5 +1,49 @@
 == Full Changelog ==
 
+= 4.4.0 =
+
+**Added**
+* Content language: generated posts, titles, SEO metadata, and audio intros are now written in your site's language automatically. A new setting under Content → Keywords → Writing Style (and in the setup wizard) lets you override it per site. Templates written before 4.4 without a `{language}` placeholder still come out in the right language.
+* Truncation repair: when a model stops mid-article at its token limit, the incomplete section is trimmed and a short closing section is generated in the same language and voice, so posts end properly instead of mid-sentence. The generation log records when this happened.
+* Featured image failures are now visible: if image generation fails, the post edit screen shows the reason and a Retry button instead of publishing silently without an image.
+* "Restart setup wizard" button in Settings → Advanced. Restarting keeps all settings and API keys.
+
+**Changed**
+* Generation errors now say what actually went wrong and what to do about it — a rejected API key, a rate limit, an oversized prompt, a provider outage, and an unreachable provider each get their own message instead of "Content generation failed."
+* Saved API keys are no longer displayed in the settings page. The field shows "Saved — enter new key to replace"; leaving it blank keeps your existing key.
+* The default content template (fresh installs and untouched defaults only) now asks for a concrete opening hook and short paragraphs. Custom templates are untouched.
+* Post length now reads in approximate words rather than tokens.
+* Model names appear in readable form ("GPT-5.4 mini") instead of raw IDs across the dashboard, activity list, scheduling status, and generation log.
+* Tooltips are reachable by keyboard and announce their text to screen readers.
+* SEO meta descriptions and social excerpts are enforced at 160 and 200 characters.
+* Confirmation dialogs are now translatable.
+
+**Fixed**
+* The onboarding connection test could be called by any logged-in user; it now requires administrator capability.
+* Users granted content-generation access could rewrite or regenerate posts they cannot edit; both actions now check per-post edit permission.
+* Auto-saving a list-type setting could store it as text and break permission checks.
+* Gemini API keys were sent in the request URL, where they can land in server logs; they now go in a request header.
+* Server-supplied messages were injected as HTML in admin status areas; all status helpers are now XSS-safe.
+* Perplexity citations from concurrent scheduled generations could attach to the wrong post; the citation cache is now keyed per job.
+* Prompts were HTML-sanitized before being sent to the AI, which mangled quotes and bracketed text in keywords and templates.
+* Featured images failed to attach on local, basic-auth, and firewalled sites; they are now registered from the local file instead of a self-HTTP round trip.
+* Posts created from audio through the Media library now go through the same pipeline as the audio tab, honoring your audio mode and draft-first settings.
+* Very long transcripts and post bodies are bounded before prompt assembly instead of overflowing the model context with an unactionable token error.
+* Bulk SEO regeneration fired one background request per selected post; it now fires one per batch.
+* Cron schedules were queried on every page load; they are now scheduled on activation with a self-heal on upgrade.
+* Exporting settings as JSON produced a broken page instead of a download; the export now runs before any page output.
+* Onboarding status lookups no longer run database queries on every admin page load once setup is complete.
+* SEO parsing failed on responses containing braces in prose; parsing now tries ordered strategies (whole string, fenced block, balanced scan).
+* Heading levels from the model are clamped to h1–h6, preventing invalid HTML that Gutenberg silently drops.
+* The dashboard's "SEO Refresh" tile linked to a page that did not exist; it now points at the Posts list where the bulk action lives.
+* The setup wizard no longer redirects away from the completion screen after three seconds.
+* Job errors on the dashboard are readable without hovering, including on touch devices.
+* Destructive actions no longer report "Settings saved successfully!" — the notice says what actually happened.
+* Long-running jobs no longer spin indefinitely; polling is capped and the UI says when a job is taking unusually long.
+* Pressing Enter in a multi-line wizard field no longer skips the step.
+* Failed Topic toggle/delete requests now show an error instead of doing nothing.
+* Bulk generation rows are tracked by reference, fixing wrong-row updates when keywords contain quotes or duplicates.
+
 = 4.3.0 =
 
 **Added**

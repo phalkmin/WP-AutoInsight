@@ -103,6 +103,10 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 
 	$prompt  = $site_context;
 	$prompt .= 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
+	$prompt .= sprintf(
+		"Write the title, meta description and social excerpt in %s.\n\n",
+		abcc_resolve_content_language()
+	);
 	$prompt .= 'Respond ONLY with a valid JSON object using this exact schema:
     {
         "title": "string",
@@ -113,12 +117,99 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
     }';
 
 	// Use a small token limit for this call - 300 tokens should be plenty for JSON.
-	$result = abcc_generate_content( $api_key, $prompt, $prompt_select, 300 );
+	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 300 );
+	$result   = is_array( $detailed['content'] ) && ! empty( $detailed['content'] ) ? $detailed['content'] : false;
 	if ( false === $result ) {
-		throw new Exception( 'Failed to generate title and SEO data' );
+		throw new Exception(
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message from the error formatter.
+			abcc_format_generation_error(
+				isset( $detailed['error'] ) ? $detailed['error'] : null,
+				array(
+					'provider' => abcc_get_provider_for_model( $prompt_select ),
+					'model'    => $prompt_select,
+				)
+			)
+		);
 	}
 
 	return abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select );
+}
+
+/**
+ * Parse an SEO JSON payload out of a model response.
+ *
+ * Strategies in order: the whole string, a fenced code block, then a
+ * balanced-brace scan. A single greedy /\{.*\}/s match breaks on prose
+ * containing braces.
+ *
+ * @since 4.4.0
+ * @param string $raw Raw response text.
+ * @return array|WP_Error Normalized SEO fields, or WP_Error when unparseable.
+ */
+function abcc_parse_seo_json( $raw ) {
+	$raw  = trim( (string) $raw );
+	$data = null;
+
+	// 1. Whole string.
+	$decoded = json_decode( $raw, true );
+	if ( is_array( $decoded ) ) {
+		$data = $decoded;
+	}
+
+	// 2. Fenced code block.
+	if ( null === $data && preg_match( '/```(?:json)?\s*(.+?)\s*```/s', $raw, $m ) ) {
+		$decoded = json_decode( trim( $m[1] ), true );
+		if ( is_array( $decoded ) ) {
+			$data = $decoded;
+		}
+	}
+
+	// 3. Balanced-brace scan: find the first '{' whose matching '}' decodes.
+	if ( null === $data ) {
+		$len   = strlen( $raw );
+		$start = strpos( $raw, '{' );
+
+		while ( false !== $start && null === $data ) {
+			$depth = 0;
+
+			for ( $i = $start; $i < $len; $i++ ) {
+				if ( '{' === $raw[ $i ] ) {
+					++$depth;
+				} elseif ( '}' === $raw[ $i ] ) {
+					--$depth;
+
+					if ( 0 === $depth ) {
+						$decoded = json_decode( substr( $raw, $start, $i - $start + 1 ), true );
+						if ( is_array( $decoded ) ) {
+							$data = $decoded;
+						}
+						break;
+					}
+				}
+			}
+
+			$start = strpos( $raw, '{', $start + 1 );
+		}
+	}
+
+	if ( ! is_array( $data ) ) {
+		return new WP_Error(
+			'abcc_seo_unparseable',
+			__( 'The model returned SEO data that could not be read. Try again or switch providers.', 'automated-blog-content-creator' )
+		);
+	}
+
+	// Enforce the platform limits rather than trusting the model to count.
+	$description = isset( $data['meta_description'] ) ? (string) $data['meta_description'] : '';
+	$excerpt     = isset( $data['social_excerpt'] ) ? (string) $data['social_excerpt'] : '';
+
+	return array(
+		'title'              => isset( $data['title'] ) ? (string) $data['title'] : '',
+		'meta_description'   => mb_substr( $description, 0, 160 ),
+		'primary_keyword'    => isset( $data['primary_keyword'] ) ? (string) $data['primary_keyword'] : '',
+		'secondary_keywords' => isset( $data['secondary_keywords'] ) ? (array) $data['secondary_keywords'] : array(),
+		'social_excerpt'     => mb_substr( $excerpt, 0, 200 ),
+	);
 }
 
 /**
@@ -135,25 +226,22 @@ function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key,
 	// Join lines if result is an array.
 	$raw_response = is_array( $result ) ? implode( "\n", $result ) : $result;
 
-	// Attempt to find JSON in the response (sometimes models wrap it in markdown blocks).
-	if ( preg_match( '/\{.*\}/s', $raw_response, $matches ) ) {
-		$json_data = json_decode( $matches[0], true );
-	} else {
-		$json_data = json_decode( $raw_response, true );
-	}
-
 	$title    = '';
 	$seo_data = array();
 
-	if ( $json_data && is_array( $json_data ) ) {
-		$title                          = $json_data['title'] ?? '';
-		$seo_data['meta_description']   = $json_data['meta_description'] ?? '';
-		$seo_data['primary_keyword']    = $json_data['primary_keyword'] ?? '';
-		$seo_data['secondary_keywords'] = $json_data['secondary_keywords'] ?? array();
-		$seo_data['social_excerpt']     = $json_data['social_excerpt'] ?? '';
+	$parsed = abcc_parse_seo_json( $raw_response );
+
+	if ( ! is_wp_error( $parsed ) ) {
+		$title    = $parsed['title'];
+		$seo_data = array(
+			'meta_description'   => $parsed['meta_description'],
+			'primary_keyword'    => $parsed['primary_keyword'],
+			'secondary_keywords' => $parsed['secondary_keywords'],
+			'social_excerpt'     => $parsed['social_excerpt'],
+		);
 	} else {
 		// Fallback to the old bracket-based parsing if JSON fails (for older models or unexpected output).
-		abcc_debug_log( 'JSON SEO parsing failed, attempting legacy bracket parsing fallback.' );
+		abcc_debug_log( 'JSON SEO parsing failed (' . $parsed->get_error_message() . '), attempting legacy bracket parsing fallback.' );
 
 		$in_title = false;
 		$in_seo   = false;
@@ -211,13 +299,15 @@ function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key,
 		$seo_data['social_excerpt'] = wp_trim_words( $title . ' - ' . implode( ', ', $keywords ), 25 );
 	}
 
+	// Clamp at the single exit point — the legacy bracket parser and the
+	// fallbacks above don't.
 	return array(
 		'title'    => sanitize_text_field( $title ),
 		'seo_data' => array(
-			'meta_description'   => sanitize_text_field( $seo_data['meta_description'] ),
+			'meta_description'   => mb_substr( sanitize_text_field( $seo_data['meta_description'] ), 0, 160 ),
 			'primary_keyword'    => sanitize_text_field( $seo_data['primary_keyword'] ),
 			'secondary_keywords' => array_map( 'sanitize_text_field', (array) $seo_data['secondary_keywords'] ),
-			'social_excerpt'     => sanitize_text_field( $seo_data['social_excerpt'] ),
+			'social_excerpt'     => mb_substr( sanitize_text_field( $seo_data['social_excerpt'] ), 0, 200 ),
 		),
 	);
 }

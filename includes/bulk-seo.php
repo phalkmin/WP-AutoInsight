@@ -44,13 +44,17 @@ function abcc_queue_seo_regen_batch( $post_ids ) {
 				'source'  => 'seo_regen',
 			)
 		);
-		$job_id  = abcc_queue_generation_job( $payload );
+		$job_id  = abcc_queue_generation_job( $payload, array( 'defer_spawn' => true ) );
 
 		if ( is_wp_error( $job_id ) ) {
 			++$failed;
 			continue;
 		}
 		++$queued;
+	}
+
+	if ( $queued > 0 && abcc_is_wp_cron_available() ) {
+		spawn_cron();
 	}
 
 	return array(

@@ -75,3 +75,69 @@ abcc_test(
 		);
 	}
 );
+
+abcc_test(
+	'featured image attaches from a local file without an HTTP round trip',
+	function () {
+		$dir = wp_upload_dir();
+		wp_mkdir_p( $dir['path'] );
+		$path = $dir['path'] . '/abcc-test-featured.png';
+		// 1x1 transparent PNG.
+		file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' ) );
+
+		$post_id = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Has an image' ) );
+
+		// No canned HTTP response is queued: if the implementation makes a
+		// request, wp_remote_post returns the 'no_canned_response' WP_Error and
+		// this fails — which is exactly the regression we're guarding.
+		$attachment_id = abcc_attach_local_image_to_post( $post_id, $path, 'Alt text here' );
+
+		abcc_assert_true( (int) $attachment_id > 0, 'Attachment should be created from local bytes.' );
+		abcc_assert_same(
+			'Alt text here',
+			get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ),
+			'Alt text should be stored on the attachment.'
+		);
+		abcc_assert_same(
+			null,
+			$GLOBALS['abcc_http_last_request'],
+			'Attaching a local file must not perform an HTTP request.'
+		);
+
+		unlink( $path );
+	}
+);
+
+abcc_test(
+	'set_featured_image resolves uploads URLs to local paths without HTTP',
+	function () {
+		// Drive the REAL entry point with the value abcc_save_base64_image
+		// actually returns (an uploads URL) — not the helper directly.
+		$png = "\x89PNG\r\n\x1a\n" . str_repeat( "\x00", 16 );
+		$url = abcc_save_base64_image( base64_encode( $png ), 'image/png', 'integr' );
+		abcc_assert_true( is_string( $url ), 'Precondition: image saved.' );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'  => 'post',
+				'post_title' => 'Image target',
+			)
+		);
+
+		$GLOBALS['abcc_http_last_request'] = null;
+
+		$attachment_id = abcc_set_featured_image( $post_id, $url, 'alt' );
+
+		abcc_assert_true( false !== $attachment_id, 'The generated image must attach.' );
+		abcc_assert_same(
+			null,
+			$GLOBALS['abcc_http_last_request'],
+			'Attaching our own uploaded file must not make an HTTP request (self-HTTP fails on local/firewalled installs).'
+		);
+
+		$file = wp_upload_dir()['path'] . '/' . basename( $url );
+		if ( file_exists( $file ) ) {
+			unlink( $file );
+		}
+	}
+);

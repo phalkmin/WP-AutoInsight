@@ -211,7 +211,8 @@
     height: 18px;
 }
 
-.wpai-tooltip:hover::after {
+.wpai-tooltip:hover::after,
+.wpai-tooltip:focus::after {
     content: attr(data-tooltip);
     position: absolute;
     bottom: 120%;
@@ -229,7 +230,8 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.wpai-tooltip:hover::before {
+.wpai-tooltip:hover::before,
+.wpai-tooltip:focus::before {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -238,6 +240,12 @@
     border: 6px solid transparent;
     border-top-color: #32373c;
     z-index: 100;
+}
+
+.wpai-tooltip:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 
 /* API Validation Status Styles */
@@ -1055,4 +1063,14 @@
 	.abcc-status-rail {
 		grid-template-columns: 1fr;
 	}
+}
+
+/* Inline job errors on the dashboard activity list (v4.4). */
+.abcc-activity-error {
+	display: block;
+	color: #b32d2e;
+	font-size: 12px;
+	line-height: 1.4;
+	max-width: 100%;
+	overflow-wrap: break-word;
 }

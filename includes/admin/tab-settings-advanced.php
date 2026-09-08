@@ -69,6 +69,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</p>
 
 		<hr>
+		<p>
+			<button type="submit" name="abcc_action" value="restart_onboarding" class="button">
+				<?php esc_html_e( 'Restart setup wizard', 'automated-blog-content-creator' ); ?>
+			</button>
+			<span class="description">
+				<?php esc_html_e( 'Reopens the setup wizard. Your settings and API keys are kept.', 'automated-blog-content-creator' ); ?>
+			</span>
+		</p>
+
+		<hr>
 		<div class="abcc-danger-zone">
 			<h3><?php esc_html_e( 'Danger Zone', 'automated-blog-content-creator' ); ?></h3>
 			<p>

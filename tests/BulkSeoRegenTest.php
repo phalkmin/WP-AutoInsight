@@ -173,3 +173,22 @@ abcc_test(
 		$GLOBALS['abcc_test_uneditable_posts'] = array();
 	}
 );
+
+abcc_test(
+	'bulk SEO queues many jobs with a single cron spawn',
+	function () {
+		$GLOBALS['abcc_test_spawn_cron_calls'] = 0;
+
+		$post_ids = array();
+		for ( $i = 0; $i < 12; $i++ ) {
+			$post_ids[] = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Post ' . $i ) );
+		}
+
+		abcc_queue_seo_regen_batch( $post_ids );
+
+		abcc_assert_true(
+			$GLOBALS['abcc_test_spawn_cron_calls'] <= 1,
+			'A 12-post batch must spawn cron at most once, got ' . $GLOBALS['abcc_test_spawn_cron_calls'] . '.'
+		);
+	}
+);

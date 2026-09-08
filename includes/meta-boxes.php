@@ -34,6 +34,29 @@ function abcc_register_meta_boxes() {
 add_action( 'add_meta_boxes', 'abcc_register_meta_boxes' );
 
 /**
+ * Show a notice on the post edit screen when featured-image generation failed.
+ *
+ * @since 4.4.0
+ * @return void
+ */
+function abcc_show_image_failure_notice() {
+	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+
+	if ( ! $screen || 'post' !== $screen->base ) {
+		return;
+	}
+
+	$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen detection.
+
+	if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
+		return;
+	}
+
+	echo wp_kses_post( abcc_get_image_failure_notice_html( $post_id ) );
+}
+add_action( 'admin_notices', 'abcc_show_image_failure_notice' );
+
+/**
  * Callback for the WP-AutoInsight Tools meta box.
  *
  * @param WP_Post $post The current post object.
