@@ -294,7 +294,85 @@ function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 }
 
 /**
+ * Curated image style presets. slug => translatable label.
+ *
+ * Slugs double as the prompt text, so they stay in English regardless of the
+ * admin locale — image models respond best to English style terms.
+ *
+ * @since 4.5.0
+ * @return array<string, string>
+ */
+function abcc_get_image_style_options() {
+	return array(
+		'editorial photography' => __( 'Editorial photography', 'automated-blog-content-creator' ),
+		'flat illustration'     => __( 'Flat illustration', 'automated-blog-content-creator' ),
+		'3D render'             => __( '3D render', 'automated-blog-content-creator' ),
+		'minimalist line art'   => __( 'Minimalist line art', 'automated-blog-content-creator' ),
+		'watercolor'            => __( 'Watercolor', 'automated-blog-content-creator' ),
+		'cinematic'             => __( 'Cinematic', 'automated-blog-content-creator' ),
+		'custom'                => __( 'Custom…', 'automated-blog-content-creator' ),
+	);
+}
+
+/**
+ * Sanitize the image style setting. Unknown values fall back to the default preset.
+ *
+ * @since 4.5.0
+ * @param mixed $value Raw value.
+ * @return string
+ */
+function abcc_sanitize_image_style( $value ) {
+	if ( is_string( $value ) && isset( abcc_get_image_style_options()[ $value ] ) ) {
+		return $value;
+	}
+
+	return 'editorial photography';
+}
+
+/**
+ * Sanitize the custom image style text: plain text, at most 200 characters.
+ *
+ * @since 4.5.0
+ * @param mixed $value Raw value.
+ * @return string
+ */
+function abcc_sanitize_image_style_custom( $value ) {
+	if ( ! is_string( $value ) ) {
+		return '';
+	}
+
+	$value = sanitize_text_field( wp_strip_all_tags( $value ) );
+
+	return mb_substr( $value, 0, 200 );
+}
+
+/**
+ * Effective style text for image prompts.
+ *
+ * A preset returns its slug; 'custom' returns the saved custom text, or the
+ * default preset when that text is blank so a half-configured setting never
+ * emits "Style: ".
+ *
+ * @since 4.5.0
+ * @return string
+ */
+function abcc_get_effective_image_style() {
+	$style = abcc_sanitize_image_style( abcc_get_setting( 'abcc_image_style', 'editorial photography' ) );
+
+	if ( 'custom' !== $style ) {
+		return $style;
+	}
+
+	$custom = abcc_sanitize_image_style_custom( abcc_get_setting( 'abcc_image_style_custom', '' ) );
+
+	return '' !== $custom ? $custom : 'editorial photography';
+}
+
+/**
  * Builds the image generation prompt.
+ *
+ * Shape: "{keywords}. Related to: {categories}. Style: {style}. Clean
+ * composition, natural lighting, no text, no watermarks, no logos."
  *
  * @param array $keywords Keywords for the image.
  * @param array $category_names Category names for context.
@@ -303,18 +381,28 @@ function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 function abcc_build_image_prompt( $keywords, $category_names ) {
 	$prompt_parts = array();
 
-	// Add keywords.
 	if ( ! empty( $keywords ) ) {
-		$prompt_parts[] = implode( ', ', array_map( 'sanitize_text_field', $keywords ) );
+		$prompt_parts[] = implode( ', ', array_map( 'sanitize_text_field', (array) $keywords ) );
 	}
 
-	// Add categories for context.
 	if ( ! empty( $category_names ) ) {
-		$prompt_parts[] = 'Related to: ' . implode( ', ', $category_names );
+		$prompt_parts[] = 'Related to: ' . implode( ', ', array_map( 'sanitize_text_field', (array) $category_names ) );
 	}
 
-	// Add style guidance.
-	$prompt_parts[] = 'Create a high-quality, professional image suitable for a blog post';
+	$prompt_parts[] = 'Style: ' . abcc_get_effective_image_style();
 
-	return implode( '. ', $prompt_parts );
+	// Text and logos in generated images are almost always garbled; keep them out.
+	$prompt_parts[] = 'Clean composition, natural lighting, no text, no watermarks, no logos';
+
+	$prompt_parts = array_filter(
+		array_map(
+			static function ( $part ) {
+				return rtrim( trim( (string) $part ), '.' );
+			},
+			$prompt_parts
+		),
+		'strlen'
+	);
+
+	return implode( '. ', $prompt_parts ) . '.';
 }

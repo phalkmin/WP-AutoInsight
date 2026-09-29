@@ -1,5 +1,36 @@
 == Full Changelog ==
 
+= 4.5.0 (Gaim) =
+
+**Added**
+* Provider fallback: under Connections → API Keys, pick a second provider and model to try when your primary hits a rate limit, an outage, or a network error. The post is retried once on the fallback and the generation log records "OpenAI failed (rate limit) → completed via Claude". Invalid keys and oversized prompts never fall back — those need your attention. Text generation only.
+* Per-keyword-group model and length: each group in Content → Keywords has a collapsed "Advanced" block where you can pick a different model or length for that group. Blank inherits the global setting; a model whose key is later removed silently falls back to the global model. Precedence: per-call override → group override → global default.
+* Image style: Media → Images gains an "Image style" preset (editorial photography, flat illustration, 3D render, minimalist line art, watercolor, cinematic, or a custom description). Every featured-image prompt now ends with a style clause and a fixed "no text, no watermarks, no logos" constraint.
+* "Remove saved key" beside each API key stored in the plugin. Confirms first; wp-config and WordPress Connectors keys are managed outside the plugin and are not affected.
+* Failed jobs show a one-line "what to do next" under the error message, in the log and on the dashboard.
+* Bulk Generate ends with a "Done: N created, M failed" summary and a link to the log; Topics "Run now" links to the log after queuing.
+* Settings that save on change now say "Saves automatically" next to the field.
+
+**Changed**
+* The wp-config.php key tip under each provider is collapsed behind "Advanced: store your key in wp-config.php".
+* Support links (Ko-fi, consulting) moved from the dashboard About card to Settings → Advanced. The About card shows the version without a codename.
+* The "Post from Audio" dashboard tile opens a new post in the editor, where the audio upload lives.
+* Bulk Generate shows a hint pointing at Content → Keywords when no keyword groups exist yet.
+* Provider logos in the setup wizard are labelled for screen readers.
+* Unexpected provider payloads are logged as JSON.
+* Provider health cards read the health option once per screen instead of once per provider (release-plan item "health snapshot cache" re-scoped: the snapshot was already cheap, so the read was hoisted instead of cached).
+
+**Fixed**
+* A blank model or zero length passed by an internal caller no longer overrides the global default.
+* Removed the goal-selection and first-post wizard steps and their AJAX handlers, unreachable since 4.3.
+
+**Developer**
+* Extension hooks (internal in 4.5, documented publicly in 4.6): actions `abcc_before_generate`, `abcc_after_generate`, `abcc_post_inserted`; filters `abcc_generation_prompt`, `abcc_generation_result`, `abcc_settings_schema`, `abcc_admin_tabs`, `abcc_fallback_backoff_us`; plus the existing `abcc_provider_registry`, `abcc_resolve_post_status`, `abcc_model_cost_estimate`. Hook contexts never contain API keys. Reference docblock in `includes/hooks.php`.
+* Admin tabs come from `abcc_get_admin_tabs()`; extensions can add a tab with an absolute partial path.
+* `abcc_generate_content_detailed()` now returns `fallback_from`, `served_provider`, `served_model`, and `attempt` alongside the 4.4 tuple.
+* `abcc_mark_job_failed()` accepts an error code (stored as `_abcc_job_error_code`); `abcc_get_job_data()` returns `nextStep`.
+* Test harness: `do_action()` / `did_action()` stubs; new `HooksTest`, `FallbackChainTest`, `GroupOverridesTest`, `ImageStyleTest`.
+
 = 4.4.0 =
 
 **Added**

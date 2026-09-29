@@ -219,7 +219,7 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 	}
 
 	if ( null === $text || ! is_string( $text ) ) {
-		abcc_debug_log( 'Unexpected ' . $label . ' response structure: ' . print_r( $data, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		abcc_debug_log( 'Unexpected ' . $label . ' response structure: ' . wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 		$result['error'] = new WP_Error( 'abcc_provider_parse_error', sprintf( 'Unexpected %s response structure', $label ) );
 		return $result;
 	}
@@ -507,7 +507,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 	$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 	if ( empty( $body['artifacts'] ) || ! is_array( $body['artifacts'] ) ) {
-		abcc_debug_log( 'Stability AI: Unexpected response format: ' . print_r( $body, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		abcc_debug_log( 'Stability AI: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 		return false;
 	}
 
@@ -663,7 +663,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 
 	// Look for image data in response.
 	if ( empty( $body['candidates'][0]['content']['parts'] ) ) {
-		abcc_debug_log( 'Gemini Image: Unexpected response format: ' . print_r( $body, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		abcc_debug_log( 'Gemini Image: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 		return false;
 	}
 

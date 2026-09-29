@@ -13,6 +13,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 $model_options = abcc_get_ai_model_options();
 $current_model = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 $templates     = abcc_get_setting( 'abcc_content_templates', array() );
+
+// Bulk runs on the keywords pasted below, but a site with no keyword groups
+// has nothing scheduled either — point first-time users at Keywords.
+$abcc_bulk_has_groups = false;
+foreach ( (array) abcc_get_setting( 'abcc_keyword_groups', array() ) as $abcc_bulk_group ) {
+	if ( ! empty( $abcc_bulk_group['keywords'] ) ) {
+		$abcc_bulk_has_groups = true;
+		break;
+	}
+}
 ?>
 <div class="tab-pane active">
 	<h2>
@@ -22,6 +32,30 @@ $templates     = abcc_get_setting( 'abcc_content_templates', array() );
 			<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
 		</a>
 	</h2>
+
+	<?php if ( ! $abcc_bulk_has_groups ) : ?>
+		<div class="abcc-empty-state">
+			<p>
+				<?php esc_html_e( 'No keyword groups configured yet. Bulk uses the keywords you paste below; for recurring posts, add a group first.', 'automated-blog-content-creator' ); ?>
+				<a href="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'page'   => 'automated-blog-content-creator-post',
+							'tab'    => 'content',
+							'subtab' => 'keywords',
+						),
+						admin_url( 'admin.php' )
+					)
+				);
+				?>
+							">
+					<?php esc_html_e( 'Go to Content → Keywords →', 'automated-blog-content-creator' ); ?>
+				</a>
+			</p>
+		</div>
+	<?php endif; ?>
 
 	<div class="abcc-bulk-form">
 		<div class="abcc-bulk-keywords">

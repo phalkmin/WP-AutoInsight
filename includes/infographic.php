@@ -62,7 +62,7 @@ function abcc_handle_create_infographic() {
 		);
 
 		// Generate description using existing content generation function.
-		$description_result = abcc_generate_content( $api_key, $description_prompt, $model, 300 );
+		$description_result = abcc_generate_content( $api_key, $description_prompt, $model, 300, array( 'source' => 'infographic' ) );
 
 		if ( ! $description_result || empty( $description_result ) ) {
 			throw new Exception( __( 'Failed to generate infographic description', 'automated-blog-content-creator' ) );

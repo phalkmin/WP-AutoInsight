@@ -132,3 +132,65 @@ function abcc_format_generation_error( $error, $context = array() ) {
 
 	return __( 'Content generation failed. Check Content → Generation Log for details.', 'automated-blog-content-creator' );
 }
+
+/**
+ * One-sentence "what to do next" for a generation error code.
+ *
+ * Companion to abcc_format_generation_error(): the message says what went
+ * wrong, this says where to click. Empty for codes with no clear next step.
+ *
+ * @since 4.5.0
+ * @param mixed $error   WP_Error or error-code string.
+ * @param array $context Optional 'provider' and 'model' (unused for now, kept for parity).
+ * @return string Plain text, or '' when there is no actionable step.
+ */
+function abcc_get_generation_error_next_step( $error, $context = array() ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- parity with abcc_format_generation_error().
+	$code = is_wp_error( $error ) ? $error->get_error_code() : (string) $error;
+
+	switch ( $code ) {
+		case 'abcc_no_api_key':
+		case 'abcc_provider_auth_error':
+			return __( 'Check your key under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'abcc_provider_rate_limited':
+			return __( 'Rate limit — wait a minute, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'abcc_provider_server_error':
+		case 'http_request_failed':
+			return __( 'Provider outage or network issue — retry later, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'context_overflow':
+			return __( 'Reduce the keywords or lower the length setting under Settings → General.', 'automated-blog-content-creator' );
+
+		case 'abcc_provider_http_error':
+		case 'abcc_unknown_provider':
+			return __( 'Pick a different model under Connections → API Keys.', 'automated-blog-content-creator' );
+	}
+
+	return '';
+}
+
+/**
+ * Remember the code of the most recent provider error in this request.
+ *
+ * abcc_openai_generate_post() throws formatted messages, which loses the
+ * machine code the job log needs for its next-step hint. The pipeline records
+ * the code here and the job runner reads it back after a failure.
+ *
+ * @since 4.5.0
+ * @param mixed $error WP_Error|null from the wrapper; null clears the memory.
+ * @return void
+ */
+function abcc_remember_generation_error( $error ) {
+	$GLOBALS['abcc_last_generation_error_code'] = is_wp_error( $error ) ? (string) $error->get_error_code() : '';
+}
+
+/**
+ * Code of the most recent provider error in this request ('' when none).
+ *
+ * @since 4.5.0
+ * @return string
+ */
+function abcc_get_last_generation_error_code() {
+	return isset( $GLOBALS['abcc_last_generation_error_code'] ) ? (string) $GLOBALS['abcc_last_generation_error_code'] : '';
+}

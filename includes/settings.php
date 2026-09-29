@@ -25,12 +25,45 @@ function abcc_get_default_content_template() {
 }
 
 /**
+ * Build the content templates array from the settings form arrays.
+ *
+ * Names and prompts are keyed by slug; the slug list only fixes the order.
+ * The built-in Default template is read-only and always present.
+ *
+ * @since 4.5.0
+ * @param array $slugs   Ordered template slugs.
+ * @param array $names   Template names keyed by slug.
+ * @param array $prompts Template prompts keyed by slug.
+ * @return array
+ */
+function abcc_sanitize_content_templates_input( $slugs, $names, $prompts ) {
+	$templates = array();
+	$names     = is_array( $names ) ? $names : array();
+	$prompts   = is_array( $prompts ) ? $prompts : array();
+
+	foreach ( (array) $slugs as $slug ) {
+		$slug = sanitize_key( (string) $slug );
+		if ( '' === $slug || 'default' === $slug ) {
+			continue;
+		}
+		$templates[ $slug ] = array(
+			'name'   => isset( $names[ $slug ] ) ? sanitize_text_field( (string) $names[ $slug ] ) : '',
+			'prompt' => isset( $prompts[ $slug ] ) ? sanitize_textarea_field( (string) $prompts[ $slug ] ) : '',
+		);
+	}
+
+	$templates['default'] = abcc_get_default_content_template();
+
+	return $templates;
+}
+
+/**
  * Get the versioned settings schema.
  *
  * @return array
  */
 function abcc_get_settings_schema() {
-	return array(
+	$schema = array(
 		'version'  => ABCC_VERSION,
 		'settings' => array(
 			'abcc_version'                    => array( 'default' => ABCC_VERSION ),
@@ -64,6 +97,10 @@ function abcc_get_settings_schema() {
 			),
 			'abcc_selected_post_types'        => array( 'default' => array( 'post' ) ),
 			'prompt_select'                   => array( 'default' => 'gpt-5.4-mini' ),
+			'abcc_fallback_chain'             => array(
+				'default'  => array(),
+				'sanitize' => 'abcc_sanitize_fallback_chain',
+			),
 			'abcc_composer_last_source'       => array(
 				'default'  => '',
 				'sanitize' => 'abcc_sanitize_composer_source',
@@ -80,6 +117,14 @@ function abcc_get_settings_schema() {
 			'openai_email_notifications'      => array( 'default' => false ),
 			'openai_generate_images'          => array( 'default' => true ),
 			'preferred_image_service'         => array( 'default' => 'auto' ),
+			'abcc_image_style'                => array(
+				'default'  => 'editorial photography',
+				'sanitize' => 'abcc_sanitize_image_style',
+			),
+			'abcc_image_style_custom'         => array(
+				'default'  => '',
+				'sanitize' => 'abcc_sanitize_image_style_custom',
+			),
 			'abcc_gemini_image_model'         => array( 'default' => 'gemini-2.5-flash-image' ),
 			'abcc_gemini_image_size'          => array( 'default' => '2K' ),
 			'abcc_openai_image_model'         => array( 'default' => 'gpt-image-1' ),
@@ -104,6 +149,10 @@ function abcc_get_settings_schema() {
 			'abcc_debug_logging'              => array( 'default' => false ),
 		),
 	);
+
+	// Extensions add keys under 'settings'; abcc_get_setting() and the
+	// export/import loops in admin.php pick them up with no other change.
+	return apply_filters( 'abcc_settings_schema', $schema );
 }
 
 /**

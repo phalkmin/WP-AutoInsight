@@ -86,19 +86,18 @@ class ABCC_Plugin {
 	}
 
 	/**
-	 * Setup prompt_ai capability for administrators.
+	 * Align the prompt_ai capability with the Permissions setting.
+	 *
+	 * Reactivation must not re-grant a role the admin has unchecked.
 	 *
 	 * @since 3.6.0
 	 */
 	public function setup_prompt_ai_capability() {
-		$roles_to_grant = array( 'administrator', 'editor' );
-
-		foreach ( $roles_to_grant as $role_name ) {
-			$role = get_role( $role_name );
-			if ( $role && ! $role->has_cap( 'prompt_ai' ) ) {
-				$role->add_cap( 'prompt_ai' );
-			}
+		if ( ! function_exists( 'abcc_sync_prompt_ai_capability' ) ) {
+			return;
 		}
+
+		abcc_sync_prompt_ai_capability( abcc_get_setting( 'abcc_allowed_roles', array( 'administrator', 'editor' ) ) );
 	}
 
 	/**
@@ -237,8 +236,17 @@ class ABCC_Plugin {
 			'abcc-topics',
 			'abccTopics',
 			array(
-				'nonce' => wp_create_nonce( 'abcc_topic_nonce' ),
-				'i18n'  => array(
+				'nonce'  => wp_create_nonce( 'abcc_topic_nonce' ),
+				'logUrl' => add_query_arg(
+					array(
+						'page'   => 'automated-blog-content-creator-post',
+						'tab'    => 'content',
+						'subtab' => 'log',
+					),
+					admin_url( 'admin.php' )
+				),
+				'i18n'   => array(
+					'viewLog'       => __( 'View log →', 'automated-blog-content-creator' ),
 					'addTopic'      => __( 'Add Topic', 'automated-blog-content-creator' ),
 					'editTopic'     => __( 'Edit Topic', 'automated-blog-content-creator' ),
 					'saving'        => __( 'Saving…', 'automated-blog-content-creator' ),

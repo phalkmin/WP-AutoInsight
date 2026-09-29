@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 $current_model    = abcc_get_setting( 'prompt_select', '' );
 $model_options    = abcc_get_ai_model_options();
 $wp_connectors_on = abcc_wp_ai_client_available();
+$health_rows      = get_option( 'abcc_provider_health', array() );
 
 // Build provider lists: text providers first, then image-only.
 $text_providers  = array_filter( abcc_get_provider_ids(), 'abcc_provider_supports_text_generation' );
@@ -53,7 +54,7 @@ $image_providers = array_filter(
 			$connector_key = $wp_connectors_on ? abcc_get_wp_ai_credential( $provider_id ) : null;
 			$saved_key     = abcc_get_provider_saved_api_key( $provider_id );
 			$has_connector = ! empty( $connector_key );
-			$snapshot      = abcc_get_provider_health_snapshot( $provider_id );
+			$snapshot      = abcc_get_provider_health_snapshot( $provider_id, $health_rows );
 			$last_v        = $snapshot['last_check'];
 			$source        = $snapshot['source'];
 
@@ -166,15 +167,23 @@ $image_providers = array_filter(
 								<button type="button" class="button abcc-validate-key" data-provider="<?php echo esc_attr( $provider_id ); ?>">
 									<?php esc_html_e( 'Validate', 'automated-blog-content-creator' ); ?>
 								</button>
-								<p class="description">
-									<?php
-									printf(
-										/* translators: %s: PHP constant name */
-										esc_html__( 'For extra security, add to wp-config.php: define(\'%s\', \'your-key\');', 'automated-blog-content-creator' ),
-										esc_html( $const )
-									);
-									?>
-								</p>
+								<?php if ( 'option' === $source ) : ?>
+									<button type="submit" name="abcc_remove_key" value="<?php echo esc_attr( $provider_id ); ?>" class="button-link-delete abcc-remove-key">
+										<?php esc_html_e( 'Remove saved key', 'automated-blog-content-creator' ); ?>
+									</button>
+								<?php endif; ?>
+								<details class="abcc-advanced-tip">
+									<summary><?php esc_html_e( 'Advanced: store your key in wp-config.php', 'automated-blog-content-creator' ); ?></summary>
+									<p class="description">
+										<?php
+										printf(
+											/* translators: %s: PHP constant name */
+											esc_html__( 'For extra security, add to wp-config.php: define(\'%s\', \'your-key\');', 'automated-blog-content-creator' ),
+											esc_html( $const )
+										);
+										?>
+									</p>
+								</details>
 							</td>
 						</tr>
 					</table>
@@ -247,13 +256,94 @@ $image_providers = array_filter(
 			</div>
 		<?php endforeach; ?>
 
+		<?php
+		// Fallback provider: one secondary slot, chosen from providers with a key
+		// other than the primary's. Suggested (not saved) when nothing is set.
+		$fallback_chain         = abcc_get_fallback_chain();
+		$fallback_saved         = ! empty( $fallback_chain[0] ) ? $fallback_chain[0] : array(
+			'provider' => '',
+			'model'    => '',
+		);
+		$fallback_primary       = abcc_get_provider_for_model( $current_model );
+		$fallback_choices       = array();
+		$fallback_is_suggestion = false;
+
+		foreach ( $model_options as $fb_pid => $fb_group ) {
+			if ( $fb_pid === $fallback_primary ) {
+				continue;
+			}
+			$fb_models = array();
+			foreach ( $fb_group['options'] as $fb_mid => $fb_mdata ) {
+				$fb_models[ $fb_mid ] = abcc_format_model_option_label( $fb_mid, $fb_mdata );
+			}
+			$fallback_choices[ $fb_pid ] = array(
+				'name'   => abcc_get_provider( $fb_pid )['name'],
+				'models' => $fb_models,
+			);
+		}
+
+		if ( '' === $fallback_saved['provider'] && ! empty( $fallback_choices ) ) {
+			$fb_first               = array_keys( $fallback_choices )[0];
+			$fallback_saved         = array(
+				'provider' => $fb_first,
+				'model'    => abcc_get_provider_default_model( $fb_first ),
+			);
+			$fallback_is_suggestion = true;
+		}
+
+		$fallback_models_map = array();
+		foreach ( $fallback_choices as $fb_pid => $fb_choice ) {
+			$fallback_models_map[ $fb_pid ] = $fb_choice['models'];
+		}
+		$fallback_selected_models = isset( $fallback_choices[ $fallback_saved['provider'] ] )
+			? $fallback_choices[ $fallback_saved['provider'] ]['models']
+			: array();
+		?>
+		<div class="abcc-provider-card abcc-fallback-card">
+			<div class="abcc-provider-card__header">
+				<strong class="abcc-provider-name"><?php esc_html_e( 'If my primary provider fails, also try…', 'automated-blog-content-creator' ); ?></strong>
+				<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Used only for text generation. Images keep their own provider settings.', 'automated-blog-content-creator' ) ) ); ?>
+			</div>
+			<?php if ( empty( $fallback_choices ) ) : ?>
+				<p class="description">
+					<?php esc_html_e( 'Add a second provider\'s key above to enable fallback. When the primary hits a rate limit, an outage, or a network error, the post is retried once on the fallback.', 'automated-blog-content-creator' ); ?>
+				</p>
+			<?php else : ?>
+				<div class="abcc-fallback-row">
+					<label for="abcc_fallback_provider"><?php esc_html_e( 'Provider', 'automated-blog-content-creator' ); ?></label>
+					<select id="abcc_fallback_provider" name="abcc_fallback_provider">
+						<option value="" <?php selected( '', $fallback_saved['provider'] ); ?>><?php esc_html_e( 'Nothing — fail immediately', 'automated-blog-content-creator' ); ?></option>
+						<?php foreach ( $fallback_choices as $fb_pid => $fb_choice ) : ?>
+							<option value="<?php echo esc_attr( $fb_pid ); ?>" <?php selected( $fb_pid, $fallback_saved['provider'] ); ?>><?php echo esc_html( $fb_choice['name'] ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<span class="abcc-fallback-model" <?php echo empty( $fallback_selected_models ) ? 'style="display:none"' : ''; ?>>
+						<label for="abcc_fallback_model"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></label>
+						<select id="abcc_fallback_model" name="abcc_fallback_model"
+							data-models="<?php echo esc_attr( wp_json_encode( $fallback_models_map ) ); ?>"
+							<?php disabled( empty( $fallback_selected_models ) ); ?>>
+							<?php foreach ( $fallback_selected_models as $fb_mid => $fb_label ) : ?>
+								<option value="<?php echo esc_attr( $fb_mid ); ?>" <?php selected( $fb_mid, $fallback_saved['model'] ); ?>><?php echo esc_html( $fb_label ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</span>
+				</div>
+				<?php if ( $fallback_is_suggestion ) : ?>
+					<p class="description"><?php esc_html_e( 'Suggested from your saved keys — nothing is active until you save.', 'automated-blog-content-creator' ); ?></p>
+				<?php endif; ?>
+				<p class="description">
+					<?php esc_html_e( 'Fallback kicks in for rate limits, provider outages, and network errors. It does not retry invalid keys or prompts that are too long — those need your attention.', 'automated-blog-content-creator' ); ?>
+				</p>
+			<?php endif; ?>
+		</div>
+
 			<?php if ( ! empty( $image_providers ) ) : ?>
 				<h2><?php esc_html_e( 'Image-only Providers', 'automated-blog-content-creator' ); ?></h2>
 				<?php
 				foreach ( $image_providers as $provider_id ) :
 					$provider  = abcc_get_provider( $provider_id );
 					$saved_key = abcc_get_provider_saved_api_key( $provider_id );
-					$snapshot  = abcc_get_provider_health_snapshot( $provider_id );
+					$snapshot  = abcc_get_provider_health_snapshot( $provider_id, $health_rows );
 					$last_v    = $snapshot['last_check'];
 					$source    = $snapshot['source'];
 					$const     = abcc_get_provider_constant_name( $provider_id );
@@ -284,6 +374,11 @@ $image_providers = array_filter(
 						<button type="button" class="button abcc-validate-key" data-provider="<?php echo esc_attr( $provider_id ); ?>">
 							<?php esc_html_e( 'Validate', 'automated-blog-content-creator' ); ?>
 						</button>
+							<?php if ( 'option' === $source ) : ?>
+							<button type="submit" name="abcc_remove_key" value="<?php echo esc_attr( $provider_id ); ?>" class="button-link-delete abcc-remove-key">
+								<?php esc_html_e( 'Remove saved key', 'automated-blog-content-creator' ); ?>
+							</button>
+						<?php endif; ?>
 					<?php endif; ?>
 				</div>
 			<?php endforeach; ?>

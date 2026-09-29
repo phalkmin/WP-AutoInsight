@@ -2,8 +2,8 @@
 Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
-Tested up to: 7.0
-Stable tag: 4.4.0
+Tested up to: 7.1
+Stable tag: 4.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -27,6 +27,8 @@ Whether you're a small business keeping a blog active, an agency managing conten
 * **Choose the AI. Pay the AI directly.**
   - Supports OpenAI, Anthropic Claude, Google Gemini, and Perplexity models. Switch models anytime you want
   - Each model shows an estimated cost per post before you choose it
+  - Pick a fallback provider: if your primary is rate-limited or down, the post finishes on the second one
+  - Give any keyword group its own model or length; everything else inherits your defaults
   - Your API keys, their actual rates. No markup, no lock-in
 
 * **Nothing publishes without your approval**
@@ -37,7 +39,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
 * **Works with everything already on your site**
   - Native Gutenberg block output. Not an HTML blob in a classic editor
   - Yoast SEO and RankMath: focus keywords, meta descriptions, and social excerpts generated automatically
-  - Featured images via OpenAI GPT Image, Stability AI, or Gemini image generation
+  - Featured images via OpenAI GPT Image, Stability AI, or Gemini image generation, in the style you choose
 
 * **For developers**
   - Store API keys in wp-config.php for maximum security, or use WordPress 7.0's native Connectors API
@@ -243,6 +245,18 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.5.0 =
+* Provider fallback: pick a second provider under Connections → API Keys. When your primary hits a rate limit, an outage, or a network error, the post is retried once on the fallback and the log says which provider finished it. Invalid keys never fall back.
+* Per-keyword-group model and length: an "Advanced" block on each group lets you choose a different model or length for that group; blank inherits your global setting.
+* Image style: choose a look for featured images (editorial photography, flat illustration, 3D render, minimalist line art, watercolor, cinematic, or your own description). Prompts now also ask for no text, watermarks, or logos.
+* "Remove saved key" beside each stored API key, with confirmation.
+* Failed jobs show a one-line "what to do next"; Bulk Generate ends with a created/failed summary and a log link; Topics "Run now" links to the log.
+* Auto-saving fields are labelled "Saves automatically"; the wp-config key tip is tucked behind "Advanced"; support links moved to Settings → Advanced.
+* Fixed: the "Post from Audio" tile now opens the post editor where the upload lives; unreachable wizard steps removed; provider logos labelled for screen readers.
+* For developers: extension hooks (`abcc_before_generate`, `abcc_after_generate`, `abcc_post_inserted`, `abcc_generation_prompt`, `abcc_generation_result`, `abcc_settings_schema`, `abcc_admin_tabs`) — public documentation follows in 4.6. The `abcc_post_inserted` context now also carries `served_provider` / `served_model`.
+* Security: users whose role cannot publish a post type now get drafts from the Composer, matching the editor; generation jobs pin their draft/publish decision when queued, so deleting a Topic or changing the default while a job waits cannot publish a draft; unchecking Editors under Permissions now actually revokes their access.
+* Fixed: "Transcribe Only" no longer creates (and bills) a post; "Regenerate as New Draft" always produces a draft; the "Remove saved key", "Restart setup wizard", "Reset All Settings" and "Delete All Generation History" buttons now reliably submit their action (the form script was disabling the clicked button before the browser read it); adding a custom template no longer saves it empty; removing then adding a keyword group no longer overwrites a surviving group; keywords or tones with quotes or accents no longer break "Regenerate"; when a fallback provider writes the body, Perplexity citations are linked and the post records the model that actually wrote it.
 
 = 4.4.0 =
 * Content language: posts, titles, SEO metadata, and audio intros are written in your site's language automatically. Override it under Content → Keywords → Writing Style. Old custom templates without a {language} placeholder still come out right.

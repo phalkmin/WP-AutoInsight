@@ -119,57 +119,6 @@ function abcc_show_onboarding_page() {
 }
 
 /**
- * Get onboarding goals configuration.
- *
- * @since 3.1.0
- * @return array Array of goal configurations.
- */
-function abcc_get_onboarding_goals() {
-	return array(
-		'blogger'  => array(
-			'title'       => __( 'Personal/Business Blog', 'automated-blog-content-creator' ),
-			'description' => __( 'Create engaging blog posts for your audience', 'automated-blog-content-creator' ),
-			'settings'    => array(
-				'openai_tone'            => 'friendly',
-				'openai_char_limit'      => 300,
-				'openai_generate_images' => true,
-				'openai_generate_seo'    => true,
-			),
-		),
-		'business' => array(
-			'title'       => __( 'Business/Corporate Content', 'automated-blog-content-creator' ),
-			'description' => __( 'Professional content for business websites', 'automated-blog-content-creator' ),
-			'settings'    => array(
-				'openai_tone'            => 'professional',
-				'openai_char_limit'      => 400,
-				'openai_generate_images' => true,
-				'openai_generate_seo'    => true,
-			),
-		),
-		'news'     => array(
-			'title'       => __( 'News/Information Site', 'automated-blog-content-creator' ),
-			'description' => __( 'Quick, informative articles and updates', 'automated-blog-content-creator' ),
-			'settings'    => array(
-				'openai_tone'            => 'professional',
-				'openai_char_limit'      => 250,
-				'openai_generate_images' => false,
-				'openai_generate_seo'    => true,
-			),
-		),
-		'creative' => array(
-			'title'       => __( 'Creative/Entertainment', 'automated-blog-content-creator' ),
-			'description' => __( 'Fun, engaging content with personality', 'automated-blog-content-creator' ),
-			'settings'    => array(
-				'openai_tone'            => 'friendly',
-				'openai_char_limit'      => 350,
-				'openai_generate_images' => true,
-				'openai_generate_seo'    => true,
-			),
-		),
-	);
-}
-
-/**
  * Get icon for onboarding goal.
  *
  * @since 3.1.0
@@ -245,36 +194,6 @@ function abcc_check_existing_user_on_activation() {
 }
 
 /**
- * AJAX handler for goal selection.
- *
- * @since 3.1.0
- * @return void
- */
-function abcc_handle_onboarding_goal() {
-	check_ajax_referer( 'abcc_onboarding', 'nonce' );
-
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
-		return;
-	}
-
-	$goal  = isset( $_POST['goal'] ) ? sanitize_text_field( wp_unslash( $_POST['goal'] ) ) : '';
-	$goals = abcc_get_onboarding_goals();
-
-	if ( ! isset( $goals[ $goal ] ) ) {
-		wp_send_json_error( array( 'message' => 'Invalid goal selected' ) );
-	}
-
-	// Apply goal-based settings.
-	foreach ( $goals[ $goal ]['settings'] as $option => $value ) {
-		abcc_update_setting( $option, $value );
-	}
-
-	wp_send_json_success( array( 'message' => 'Goal configured successfully' ) );
-}
-add_action( 'wp_ajax_abcc_onboarding_goal', 'abcc_handle_onboarding_goal' );
-
-/**
  * AJAX handler for API key testing.
  *
  * @since 3.1.0
@@ -326,62 +245,6 @@ function abcc_handle_onboarding_test_api() {
 	}
 }
 add_action( 'wp_ajax_abcc_onboarding_test_api', 'abcc_handle_onboarding_test_api' );
-
-/**
- * AJAX handler for first post generation.
- *
- * @since 3.1.0
- * @return void
- */
-function abcc_handle_onboarding_first_post() {
-	check_ajax_referer( 'abcc_onboarding', 'nonce' );
-
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
-		return;
-	}
-
-	try {
-		$api_key       = abcc_check_api_key();
-		$keywords      = array( 'welcome', 'hello world', 'getting started' );
-		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
-		$tone          = abcc_get_setting( 'openai_tone', 'friendly' );
-		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
-
-		$post_id = abcc_openai_generate_post(
-			$api_key,
-			$keywords,
-			$prompt_select,
-			$tone,
-			false,
-			$char_limit
-		);
-
-		if ( is_wp_error( $post_id ) ) {
-			throw new Exception( $post_id->get_error_message() );
-		}
-
-		// Mark post as generated during onboarding.
-		update_post_meta( $post_id, '_abcc_generated', true );
-		update_post_meta( $post_id, '_abcc_onboarding_post', true );
-
-		// Mark onboarding as completed.
-		update_option( 'abcc_onboarding_completed', true );
-		set_transient( 'abcc_onboarding_just_completed', true, 300 );
-
-		wp_send_json_success(
-			array(
-				'message'  => 'First post created successfully!',
-				'post_id'  => $post_id,
-				'edit_url' => get_edit_post_link( $post_id, '' ),
-			)
-		);
-
-	} catch ( Exception $e ) {
-		wp_send_json_error( array( 'message' => $e->getMessage() ) );
-	}
-}
-add_action( 'wp_ajax_abcc_onboarding_first_post', 'abcc_handle_onboarding_first_post' );
 
 /**
  * AJAX handler for skipping onboarding.

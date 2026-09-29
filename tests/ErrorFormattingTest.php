@@ -118,3 +118,63 @@ abcc_test(
 		);
 	}
 );
+
+abcc_test(
+	'next-step hints exist for actionable codes and are empty otherwise',
+	function () {
+		$actionable = array(
+			'abcc_no_api_key',
+			'abcc_provider_auth_error',
+			'abcc_provider_rate_limited',
+			'abcc_provider_server_error',
+			'http_request_failed',
+			'context_overflow',
+		);
+		foreach ( $actionable as $code ) {
+			abcc_assert_true( '' !== abcc_get_generation_error_next_step( $code ), $code . ' needs a next step.' );
+			abcc_assert_same(
+				abcc_get_generation_error_next_step( $code ),
+				abcc_get_generation_error_next_step( new WP_Error( $code, 'x' ) ),
+				'WP_Error and string forms must agree for ' . $code
+			);
+		}
+		abcc_assert_same( '', abcc_get_generation_error_next_step( 'abcc_provider_parse_error' ) );
+		abcc_assert_same( '', abcc_get_generation_error_next_step( '' ) );
+		abcc_assert_same( '', abcc_get_generation_error_next_step( null ) );
+	}
+);
+
+abcc_test(
+	'a failed job stores the provider error code and exposes a next step',
+	function () {
+		$job_id                                     = 4321;
+		$GLOBALS['abcc_test_post_types'][ $job_id ] = ABCC_Job::POST_TYPE;
+
+		abcc_mark_job_failed( $job_id, 'OpenAI rejected the API key.', false, 'abcc_provider_auth_error' );
+
+		abcc_assert_same( 'abcc_provider_auth_error', get_post_meta( $job_id, '_abcc_job_error_code', true ) );
+
+		$data = abcc_get_job_data( $job_id );
+		abcc_assert_true( is_array( $data ) && '' !== $data['nextStep'], 'Job data must carry the next-step hint.' );
+	}
+);
+
+abcc_test(
+	'the last provider error code survives the formatted exception in generate_post',
+	function () {
+		$GLOBALS['abcc_test_options'] = array(
+			'openai_generate_seo'    => false,
+			'openai_generate_images' => false,
+		);
+		$GLOBALS['abcc_http_queue'][] = array(
+			'response' => array( 'code' => 401 ),
+			'body'     => '{"error":"nope"}',
+		);
+
+		$result = abcc_openai_generate_post( 'sk-bad', array( 'alpha' ), 'gpt-4.1-mini-2025-04-14', 'default', false, 200, 'post', array() );
+
+		abcc_assert_true( is_wp_error( $result ) );
+		$data = $result->get_error_data();
+		abcc_assert_same( 'abcc_provider_auth_error', $data['code'] );
+	}
+);

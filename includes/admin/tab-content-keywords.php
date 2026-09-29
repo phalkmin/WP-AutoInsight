@@ -11,6 +11,62 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Variables from admin.php: $keyword_groups, $content_templates, $tone, $custom_tone_value.
+
+// Per-group "Advanced" overrides. Only models the user can call are offered;
+// the "Use default" labels show the current globals so inheritance is visible.
+$abcc_group_model_choices = abcc_get_available_text_model_options();
+$abcc_global_model_label  = abcc_get_model_display_name( abcc_get_setting( 'prompt_select', '' ) );
+$abcc_global_char_limit   = (int) abcc_get_setting( 'openai_char_limit', 200 );
+
+/**
+ * Render the Advanced block for one keyword group.
+ *
+ * @param string $index_attr Index (or "__INDEX__" for the JS template).
+ * @param array  $group      Group data.
+ * @return void
+ */
+$abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group_model_choices, $abcc_global_model_label, $abcc_global_char_limit ) {
+	$group_model = isset( $group['model'] ) ? (string) $group['model'] : '';
+	$group_limit = isset( $group['char_limit'] ) ? (int) $group['char_limit'] : 0;
+	$is_open     = '' !== $group_model || $group_limit > 0;
+	?>
+	<details class="abcc-group-advanced" <?php echo $is_open ? 'open' : ''; ?>>
+		<summary><?php esc_html_e( 'Advanced', 'automated-blog-content-creator' ); ?></summary>
+		<div class="abcc-group-advanced-fields">
+			<div class="abcc-group-advanced-field">
+				<label class="abcc-field-label" for="abcc_group_model_<?php echo esc_attr( $index_attr ); ?>"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></label>
+				<select id="abcc_group_model_<?php echo esc_attr( $index_attr ); ?>" name="abcc_group_model[<?php echo esc_attr( $index_attr ); ?>]">
+					<option value="" <?php selected( '', $group_model ); ?>>
+						<?php
+						printf(
+							/* translators: %s: current global model name */
+							esc_html__( 'Use default (%s)', 'automated-blog-content-creator' ),
+							esc_html( $abcc_global_model_label )
+						);
+						?>
+					</option>
+					<?php foreach ( $abcc_group_model_choices as $choice_group ) : ?>
+						<optgroup label="<?php echo esc_attr( $choice_group['group'] ); ?>">
+							<?php foreach ( $choice_group['options'] as $choice_id => $choice_data ) : ?>
+								<option value="<?php echo esc_attr( $choice_id ); ?>" <?php selected( $choice_id, $group_model ); ?>><?php echo esc_html( abcc_format_model_option_label( $choice_id, $choice_data ) ); ?></option>
+							<?php endforeach; ?>
+						</optgroup>
+					<?php endforeach; ?>
+				</select>
+				<p class="description"><?php esc_html_e( 'Only providers with a saved key are listed. Add a key under Connections → API Keys to see more.', 'automated-blog-content-creator' ); ?></p>
+			</div>
+			<div class="abcc-group-advanced-field">
+				<label class="abcc-field-label" for="abcc_group_char_limit_<?php echo esc_attr( $index_attr ); ?>"><?php esc_html_e( 'Length (tokens)', 'automated-blog-content-creator' ); ?></label>
+				<input type="number" id="abcc_group_char_limit_<?php echo esc_attr( $index_attr ); ?>" name="abcc_group_char_limit[<?php echo esc_attr( $index_attr ); ?>]"
+					min="0" max="4000" step="100" class="small-text"
+					value="<?php echo $group_limit > 0 ? esc_attr( $group_limit ) : ''; ?>"
+					placeholder="<?php echo esc_attr( sprintf( /* translators: %d: current global length */ __( 'Default (%d)', 'automated-blog-content-creator' ), $abcc_global_char_limit ) ); ?>">
+				<p class="description"><?php esc_html_e( '0 or blank = use the global setting.', 'automated-blog-content-creator' ); ?></p>
+			</div>
+		</div>
+	</details>
+	<?php
+};
 ?>
 <div class="tab-pane active">
 	<form method="post" action="">
@@ -50,11 +106,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 									<?php endforeach; ?>
 								</select>
 							</div>
+							<?php $abcc_render_group_advanced( (string) $index, (array) $group ); ?>
 						</div>
 					</div>
 				<?php endforeach; ?>
 			<?php endif; ?>
 		</div>
+		<template id="abcc-group-advanced-template"><?php $abcc_render_group_advanced( '__INDEX__', array() ); ?></template>
 
 		<button type="button" id="abcc-add-group" class="button">
 			<?php esc_html_e( '+ Add Group', 'automated-blog-content-creator' ); ?>
@@ -79,8 +137,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 					</div>
 					<input type="hidden" name="abcc_template_slug[]" value="<?php echo esc_attr( $tpl_slug ); ?>">
 					<?php if ( 'default' !== $tpl_slug ) : ?>
-						<input type="text" name="abcc_template_name[]" value="<?php echo esc_attr( $tpl['name'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'Template name', 'automated-blog-content-creator' ); ?>">
-						<textarea name="abcc_template_prompt[]" rows="3" class="large-text"><?php echo esc_textarea( $tpl['prompt'] ); ?></textarea>
+						<input type="text" name="abcc_template_name[<?php echo esc_attr( $tpl_slug ); ?>]" value="<?php echo esc_attr( $tpl['name'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'Template name', 'automated-blog-content-creator' ); ?>">
+						<textarea name="abcc_template_prompt[<?php echo esc_attr( $tpl_slug ); ?>]" rows="3" class="large-text"><?php echo esc_textarea( $tpl['prompt'] ); ?></textarea>
 					<?php else : ?>
 						<textarea rows="3" class="large-text" readonly><?php echo esc_textarea( $tpl['prompt'] ); ?></textarea>
 					<?php endif; ?>

@@ -1074,3 +1074,23 @@
 	max-width: 100%;
 	overflow-wrap: break-word;
 }
+
+/* Fallback provider (Connections → API Keys) and job-log fallback notes. */
+.abcc-job-note--fallback { color: #996800; }
+.abcc-fallback-card .abcc-fallback-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 8px 0; }
+.abcc-fallback-card .abcc-fallback-row label { font-weight: 600; }
+
+/* Keyword group → Advanced (per-group model / length overrides). */
+.abcc-group-advanced { grid-column: 1 / -1; flex-basis: 100%; margin-top: 8px; }
+.abcc-group-advanced summary { cursor: pointer; font-weight: 600; }
+.abcc-group-advanced-fields { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 8px; }
+.abcc-group-advanced-field { min-width: 220px; }
+
+/* Quick wins (4.5): empty state, autosave hints, job next-step, support card, advanced tips. */
+.abcc-empty-state { background: #f6f7f7; border: 1px dashed #c3c4c7; border-radius: 4px; padding: 12px 16px; margin: 0 0 16px; }
+.abcc-autosave-hint { display: inline-block; margin-left: 8px; color: #646970; font-size: 12px; font-style: italic; }
+.abcc-job-next-step { color: #2271b1; }
+.abcc-support-card ul.abcc-about-links { margin: 8px 0 0; }
+.abcc-advanced-tip { margin-top: 8px; }
+.abcc-advanced-tip summary { cursor: pointer; color: #646970; font-size: 13px; }
+.abcc-remove-key { margin-left: 8px; }

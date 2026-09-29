@@ -113,10 +113,10 @@ function abcc_current_user_can_prompt() {
 		return false;
 	}
 
-	// Priority 1: The plugin-defined 'prompt_ai' capability, granted to
-	// administrator and editor roles on activation (see
-	// ABCC_Plugin::setup_prompt_ai_capability). Third-party role managers
-	// can extend this to other roles.
+	// Priority 1: The plugin-defined 'prompt_ai' capability. The plugin keeps
+	// it in sync with the Permissions tab for the built-in roles (see
+	// abcc_sync_prompt_ai_capability); third-party role managers can grant it
+	// to custom roles.
 	// phpcs:ignore WordPress.WP.Capabilities.Unknown -- Plugin-defined capability registered at activation.
 	if ( current_user_can( 'prompt_ai' ) ) {
 		return true;
@@ -131,6 +131,88 @@ function abcc_current_user_can_prompt() {
 	}
 
 	return ! empty( array_intersect( $user->roles, $allowed_roles ) );
+}
+
+/**
+ * Built-in roles the Permissions tab manages the prompt_ai capability for.
+ *
+ * @since 4.5.0
+ * @return string[]
+ */
+function abcc_get_managed_prompt_roles() {
+	return array( 'administrator', 'editor', 'author', 'contributor' );
+}
+
+/**
+ * Grant or revoke prompt_ai on the built-in roles to match the allowed list.
+ *
+ * Custom roles are left alone so grants made by role managers survive.
+ *
+ * @since 4.5.0
+ * @param array $allowed_roles Role slugs allowed to use AI tools.
+ */
+function abcc_sync_prompt_ai_capability( $allowed_roles ) {
+	$allowed_roles   = array_map( 'sanitize_key', (array) $allowed_roles );
+	$allowed_roles[] = 'administrator';
+
+	foreach ( abcc_get_managed_prompt_roles() as $role_name ) {
+		$role = get_role( $role_name );
+		if ( ! $role ) {
+			continue;
+		}
+
+		if ( in_array( $role_name, $allowed_roles, true ) ) {
+			if ( ! $role->has_cap( 'prompt_ai' ) ) {
+				$role->add_cap( 'prompt_ai' );
+			}
+		} elseif ( $role->has_cap( 'prompt_ai' ) ) {
+			$role->remove_cap( 'prompt_ai' );
+		}
+	}
+}
+
+/**
+ * Resolve the capability a post type maps to for one of its cap slots.
+ *
+ * @since 4.5.0
+ * @param string $post_type Post type slug.
+ * @param string $slot      Cap slot, e.g. 'publish_posts' or 'create_posts'.
+ * @return string
+ */
+function abcc_get_post_type_cap( $post_type, $slot ) {
+	$pto = get_post_type_object( (string) $post_type );
+	if ( $pto && isset( $pto->cap->{$slot} ) && '' !== $pto->cap->{$slot} ) {
+		return (string) $pto->cap->{$slot};
+	}
+	return $slot;
+}
+
+/**
+ * Whether a user may create posts of the given type.
+ *
+ * @since 4.5.0
+ * @param string $post_type Post type slug.
+ * @param int    $user_id   Optional. 0 means the current user.
+ * @return bool
+ */
+function abcc_user_can_create_post_type( $post_type, $user_id = 0 ) {
+	$cap     = abcc_get_post_type_cap( $post_type, 'create_posts' );
+	$user_id = (int) $user_id;
+	return $user_id > 0 ? user_can( $user_id, $cap ) : current_user_can( $cap ); // phpcs:ignore WordPress.WP.Capabilities.Undetermined -- Mapped from the post type object.
+}
+
+/**
+ * Whether a user may publish posts of the given type.
+ *
+ * @since 4.5.0
+ * @param string $post_type Post type slug.
+ * @param int    $user_id   Optional. 0 means the current user.
+ * @return bool
+ */
+function abcc_user_can_publish_post_type( $post_type, $user_id = 0 ) {
+	$cap     = abcc_get_post_type_cap( $post_type, 'publish_posts' );
+	$user_id = (int) $user_id;
+	return $user_id > 0 ? user_can( $user_id, $cap ) : current_user_can( $cap ); // phpcs:ignore WordPress.WP.Capabilities.Undetermined -- Mapped from the post type object.
 }
 
 /**

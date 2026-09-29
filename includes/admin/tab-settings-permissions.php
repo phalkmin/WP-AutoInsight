@@ -44,6 +44,9 @@ $wp_connectors = abcc_wp_ai_client_available();
 				</label>
 			<?php endforeach; ?>
 		</fieldset>
+		<p class="description abcc-description-below">
+			<?php esc_html_e( 'Custom roles given the prompt_ai capability by a role manager plugin keep their access.', 'automated-blog-content-creator' ); ?>
+		</p>
 
 		<?php if ( $wp_connectors ) : ?>
 			<p class="description abcc-description-below">

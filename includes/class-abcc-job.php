@@ -66,6 +66,12 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 	$created_by = isset( $args['created_by'] ) ? (int) $args['created_by'] : get_current_user_id();
 	$run_id     = isset( $args['run_id'] ) ? sanitize_key( $args['run_id'] ) : '';
 
+	// Generation jobs carry their publication decision from here on; a topic
+	// deleted or a default flipped while the job waits must not change it.
+	if ( empty( $payload['type'] ) ) {
+		$payload = abcc_finalize_payload_post_status( $payload );
+	}
+
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_QUEUED );
 	update_post_meta( $job_id, '_abcc_job_payload', $payload );
 	update_post_meta( $job_id, '_abcc_job_source', $payload['source'] ?? 'manual' );
@@ -229,7 +235,7 @@ function abcc_process_generation_job( $job_id ) {
 			$regen          = abcc_run_seo_regen( $target_post_id, $model );
 
 			if ( is_wp_error( $regen ) ) {
-				abcc_mark_job_failed( $job_id, $regen->get_error_message(), $started );
+				abcc_mark_job_failed( $job_id, $regen->get_error_message(), $started, $regen->get_error_code() );
 				return;
 			}
 
@@ -245,7 +251,7 @@ function abcc_process_generation_job( $job_id ) {
 		$api_key = abcc_check_api_key( $payload['model'] ?? '' );
 
 		if ( empty( $api_key ) ) {
-			abcc_mark_job_failed( $job_id, __( 'API key not configured for the selected model.', 'automated-blog-content-creator' ), $started );
+			abcc_mark_job_failed( $job_id, __( 'API key not configured for the selected model.', 'automated-blog-content-creator' ), $started, 'abcc_no_api_key' );
 			return;
 		}
 
@@ -261,7 +267,10 @@ function abcc_process_generation_job( $job_id ) {
 		);
 
 		if ( is_wp_error( $result ) ) {
-			abcc_mark_job_failed( $job_id, $result->get_error_message(), $started );
+			// The provider code rides in error data; the top-level code is generic.
+			$error_data = $result->get_error_data();
+			$error_code = is_array( $error_data ) && ! empty( $error_data['code'] ) ? (string) $error_data['code'] : (string) $result->get_error_code();
+			abcc_mark_job_failed( $job_id, $result->get_error_message(), $started, $error_code );
 			return;
 		}
 
@@ -311,12 +320,14 @@ function abcc_append_job_log_note( $job_id, $note ) {
  * @param int         $job_id  Job ID.
  * @param string      $message Error message.
  * @param float|false $started Optional start timestamp.
+ * @param string      $code    Optional. Machine error code driving the next-step hint.
  * @return void
  */
-function abcc_mark_job_failed( $job_id, $message, $started = false ) {
+function abcc_mark_job_failed( $job_id, $message, $started = false, $code = '' ) {
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_FAILED );
 	update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
 	update_post_meta( $job_id, '_abcc_job_error', sanitize_text_field( $message ) );
+	update_post_meta( $job_id, '_abcc_job_error_code', sanitize_key( (string) $code ) );
 
 	if ( false !== $started ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( microtime( true ) - $started, 2 ) );
@@ -439,6 +450,7 @@ function abcc_render_job_log_rows( $args = array() ) {
 			$duration       = get_post_meta( $job->ID, '_abcc_job_duration', true );
 			$result_post_id = (int) get_post_meta( $job->ID, '_abcc_job_result_post_id', true );
 			$error_message  = get_post_meta( $job->ID, '_abcc_job_error', true );
+			$next_step      = abcc_get_generation_error_next_step( (string) get_post_meta( $job->ID, '_abcc_job_error_code', true ) );
 			$job_notes      = get_post_meta( $job->ID, '_abcc_job_notes', true );
 			$job_notes      = is_array( $job_notes ) ? $job_notes : array();
 			$created_at     = get_post_meta( $job->ID, '_abcc_job_created_at', true );
@@ -493,6 +505,9 @@ function abcc_render_job_log_rows( $args = array() ) {
 						</div>
 					<?php elseif ( ! empty( $error_message ) ) : ?>
 						<span class="abcc-job-error"><?php echo esc_html( $error_message ); ?></span>
+						<?php if ( '' !== $next_step ) : ?>
+							<br><small class="abcc-job-next-step"><?php echo esc_html( $next_step ); ?></small>
+						<?php endif; ?>
 						<br>
 						<button type="button" class="button-link abcc-copy-error" data-error="<?php echo esc_attr( $error_message ); ?>">
 							<?php esc_html_e( 'Copy error', 'automated-blog-content-creator' ); ?>
@@ -508,8 +523,12 @@ function abcc_render_job_log_rows( $args = array() ) {
 					<?php else : ?>
 						&mdash;
 					<?php endif; ?>
-					<?php foreach ( $job_notes as $job_note ) : ?>
-						<br><small class="abcc-job-note"><?php echo esc_html( $job_note ); ?></small>
+					<?php
+					foreach ( $job_notes as $job_note ) :
+						// Fallback notes carry the "→" from abcc_execute_fallback_chain().
+						$note_class = false !== strpos( (string) $job_note, '→' ) ? 'abcc-job-note abcc-job-note--fallback' : 'abcc-job-note';
+						?>
+						<br><small class="<?php echo esc_attr( $note_class ); ?>"><?php echo esc_html( $job_note ); ?></small>
 					<?php endforeach; ?>
 				</td>
 			</tr>
@@ -624,6 +643,7 @@ function abcc_get_job_data( $job_id ) {
 		'status'      => get_post_meta( $job_id, '_abcc_job_status', true ),
 		'statusLabel' => abcc_get_job_status_label( get_post_meta( $job_id, '_abcc_job_status', true ) ),
 		'message'     => get_post_meta( $job_id, '_abcc_job_error', true ),
+		'nextStep'    => abcc_get_generation_error_next_step( (string) get_post_meta( $job_id, '_abcc_job_error_code', true ) ),
 		'notes'       => is_array( $job_notes ) ? $job_notes : array(),
 		'post_id'     => $result_post_id,
 		'edit_url'    => $result_post_id ? get_edit_post_link( $result_post_id, 'raw' ) : '',

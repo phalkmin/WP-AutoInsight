@@ -79,6 +79,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</p>
 
 		<hr>
+		<div class="abcc-support-card">
+			<h3><?php esc_html_e( 'Support this plugin', 'automated-blog-content-creator' ); ?></h3>
+			<ul class="abcc-about-links">
+				<li>
+					<span class="dashicons dashicons-heart"></span>
+					<a href="https://ko-fi.com/phalkmin" target="_blank" rel="noopener">
+						<?php esc_html_e( 'Buy Me a Coffee (Ko-fi)', 'automated-blog-content-creator' ); ?>
+					</a>
+				</li>
+				<li>
+					<span class="dashicons dashicons-businessman"></span>
+					<a href="mailto:phalkmin@protonmail.com?subject=Consulting%20Inquiry">
+						<?php esc_html_e( 'Work With Me', 'automated-blog-content-creator' ); ?>
+					</a>
+				</li>
+			</ul>
+		</div>
+
+		<hr>
 		<div class="abcc-danger-zone">
 			<h3><?php esc_html_e( 'Danger Zone', 'automated-blog-content-creator' ); ?></h3>
 			<p>

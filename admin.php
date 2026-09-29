@@ -93,7 +93,7 @@ function abcc_get_tooltip_html( $text ) {
  * @return string
  */
 function abcc_get_current_tab() {
-	$allowed = array( 'dashboard', 'content', 'topics', 'media', 'connections', 'settings' );
+	$allowed = array_keys( abcc_get_admin_tabs() );
 	$tab     = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	return in_array( $tab, $allowed, true ) ? $tab : 'dashboard';
 }
@@ -195,38 +195,46 @@ function abcc_handle_settings_page_actions() {
 				// Handle Keyword Groups.
 				$keyword_groups = array();
 				if ( isset( $_POST['abcc_group_name'] ) && is_array( $_POST['abcc_group_name'] ) ) {
+					// Per-group model overrides may only name a model the user can call.
+					$available_group_models = array();
+					foreach ( abcc_get_available_text_model_options() as $model_group ) {
+						$available_group_models = array_merge( $available_group_models, array_keys( (array) $model_group['options'] ) );
+					}
+
 					foreach ( wp_unslash( $_POST['abcc_group_name'] ) as $index => $name ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-						$keywords_raw     = isset( $_POST['abcc_group_keywords'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_group_keywords'][ $index ] ) ) : '';
-						$keywords_array   = array_filter( array_map( 'trim', explode( "\n", $keywords_raw ) ) );
+						$keywords_raw   = isset( $_POST['abcc_group_keywords'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_group_keywords'][ $index ] ) ) : '';
+						$keywords_array = array_filter( array_map( 'trim', explode( "\n", $keywords_raw ) ) );
+
+						$group_model = isset( $_POST['abcc_group_model'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_group_model'][ $index ] ) ) : '';
+						if ( '' !== $group_model && ! in_array( $group_model, $available_group_models, true ) ) {
+							$group_model = '';
+						}
+						$group_char_limit = isset( $_POST['abcc_group_char_limit'][ $index ] ) ? absint( $_POST['abcc_group_char_limit'][ $index ] ) : 0;
+						if ( $group_char_limit > 0 ) {
+							$group_char_limit = min( 4000, max( 100, $group_char_limit ) );
+						}
+
 						$keyword_groups[] = array(
-							'name'     => sanitize_text_field( wp_unslash( $name ) ),
-							'keywords' => $keywords_array,
-							'category' => isset( $_POST['abcc_group_category'][ $index ] ) ? absint( $_POST['abcc_group_category'][ $index ] ) : 0,
-							'template' => isset( $_POST['abcc_group_template'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_group_template'][ $index ] ) ) : 'default',
+							'name'       => sanitize_text_field( wp_unslash( $name ) ),
+							'keywords'   => $keywords_array,
+							'category'   => isset( $_POST['abcc_group_category'][ $index ] ) ? absint( $_POST['abcc_group_category'][ $index ] ) : 0,
+							'template'   => isset( $_POST['abcc_group_template'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_group_template'][ $index ] ) ) : 'default',
+							'model'      => $group_model,
+							'char_limit' => $group_char_limit,
 						);
 					}
 				}
 				abcc_update_setting( 'abcc_keyword_groups', $keyword_groups );
 
-				// Handle Content Templates.
-				$content_templates = array();
-				if ( isset( $_POST['abcc_template_slug'] ) && is_array( $_POST['abcc_template_slug'] ) ) {
-					foreach ( wp_unslash( $_POST['abcc_template_slug'] ) as $index => $slug ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-						$template_slug = sanitize_key( wp_unslash( $slug ) );
-						// Default template is read-only — never overwrite it from POST data.
-						if ( empty( $template_slug ) || 'default' === $template_slug ) {
-							continue;
-						}
-						$content_templates[ $template_slug ] = array(
-							'name'   => isset( $_POST['abcc_template_name'][ $index ] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_template_name'][ $index ] ) ) : '',
-							'prompt' => isset( $_POST['abcc_template_prompt'][ $index ] ) ? sanitize_textarea_field( wp_unslash( $_POST['abcc_template_prompt'][ $index ] ) ) : '',
-						);
-					}
-				}
-				// Ensure default template always exists.
-				if ( ! isset( $content_templates['default'] ) ) {
-					$content_templates['default'] = abcc_get_default_content_template();
-				}
+				// Handle Content Templates. Fields are keyed by slug (the sanitizer
+				// cleans every value), so a read-only Default row cannot shift them.
+				// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				$content_templates = abcc_sanitize_content_templates_input(
+					isset( $_POST['abcc_template_slug'] ) ? (array) wp_unslash( $_POST['abcc_template_slug'] ) : array(),
+					isset( $_POST['abcc_template_name'] ) ? (array) wp_unslash( $_POST['abcc_template_name'] ) : array(),
+					isset( $_POST['abcc_template_prompt'] ) ? (array) wp_unslash( $_POST['abcc_template_prompt'] ) : array()
+				);
+				// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 				abcc_update_setting( 'abcc_content_templates', $content_templates );
 
 				if ( isset( $_POST['openai_tone'] ) ) {
@@ -251,8 +259,23 @@ function abcc_handle_settings_page_actions() {
 			case 'connections':
 				$subtab = isset( $_POST['abcc_subtab'] ) ? sanitize_key( wp_unslash( $_POST['abcc_subtab'] ) ) : 'api-keys';
 				if ( 'api-keys' === $subtab ) {
+					// "Remove saved key": clear the wp_options key for one provider and
+					// skip its normal save so a stray value in the field cannot re-add it.
+					$removed_provider = '';
+					if ( isset( $_POST['abcc_remove_key'] ) ) {
+						$removed_provider = sanitize_key( wp_unslash( $_POST['abcc_remove_key'] ) );
+						if ( in_array( $removed_provider, abcc_get_provider_ids(), true ) ) {
+							abcc_delete_provider_saved_api_key( $removed_provider );
+						} else {
+							$removed_provider = '';
+						}
+					}
+
 					// Save API keys for all providers using the registry.
 					foreach ( abcc_get_provider_ids() as $provider_id ) {
+						if ( $provider_id === $removed_provider ) {
+							continue;
+						}
 						$key_field = $provider_id . '_api_key';
 						if ( isset( $_POST[ $key_field ] ) ) {
 							$api_key = sanitize_text_field( wp_unslash( $_POST[ $key_field ] ) );
@@ -264,7 +287,23 @@ function abcc_handle_settings_page_actions() {
 					$selected_model = isset( $_POST['selected_model'] ) ? sanitize_text_field( wp_unslash( $_POST['selected_model'] ) ) : '';
 					if ( ! empty( $selected_model ) ) {
 						abcc_update_setting( 'prompt_select', $selected_model );
-						abcc_validate_selected_model();
+					}
+					// Always re-validate: a removed key may have orphaned the primary model.
+					abcc_validate_selected_model();
+
+					// Fallback provider (one slot). Only present when ≥2 providers have keys.
+					if ( isset( $_POST['abcc_fallback_provider'] ) ) {
+						$fallback_provider = sanitize_key( wp_unslash( $_POST['abcc_fallback_provider'] ) );
+						$fallback_model    = isset( $_POST['abcc_fallback_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_fallback_model'] ) ) : '';
+						$fallback_chain    = ( '' !== $fallback_provider && '' !== $fallback_model )
+							? array(
+								array(
+									'provider' => $fallback_provider,
+									'model'    => $fallback_model,
+								),
+							)
+							: array();
+						abcc_update_setting( 'abcc_fallback_chain', abcc_sanitize_fallback_chain( $fallback_chain ) );
 					}
 
 					// Perplexity options (also handled via auto-save, but accept form fallback).
@@ -308,6 +347,14 @@ function abcc_handle_settings_page_actions() {
 					abcc_update_setting( 'abcc_openai_image_quality', $openai_image_quality );
 					abcc_update_setting( 'abcc_stability_image_size', $stability_image_size );
 					abcc_update_setting( 'abcc_auto_alt_text', $auto_alt_text );
+
+					// Image style: a coupled pair (preset + custom text), submit-only.
+					if ( isset( $_POST['abcc_image_style'] ) ) {
+						abcc_update_setting( 'abcc_image_style', abcc_sanitize_image_style( sanitize_text_field( wp_unslash( $_POST['abcc_image_style'] ) ) ) );
+					}
+					if ( isset( $_POST['abcc_image_style_custom'] ) ) {
+						abcc_update_setting( 'abcc_image_style_custom', abcc_sanitize_image_style_custom( wp_unslash( $_POST['abcc_image_style_custom'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized by abcc_sanitize_image_style_custom().
+					}
 				} elseif ( 'audio' === $subtab ) {
 					$enable_audio           = isset( $_POST['abcc_enable_audio_transcription'] );
 					$supported_formats      = isset( $_POST['abcc_supported_audio_formats'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_supported_audio_formats'] ) ) : array();
@@ -342,7 +389,10 @@ function abcc_handle_settings_page_actions() {
 				} elseif ( 'permissions' === $subtab ) {
 					$allowed_roles   = isset( $_POST['abcc_allowed_roles'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_allowed_roles'] ) ) : array();
 					$allowed_roles[] = 'administrator';
-					abcc_update_setting( 'abcc_allowed_roles', array_unique( $allowed_roles ) );
+					$allowed_roles   = array_values( array_unique( $allowed_roles ) );
+					abcc_update_setting( 'abcc_allowed_roles', $allowed_roles );
+					// The activation-time prompt_ai grant must follow the checkboxes.
+					abcc_sync_prompt_ai_capability( $allowed_roles );
 
 				} elseif ( 'advanced' === $subtab ) {
 					if ( isset( $_POST['abcc_action'] ) ) {
@@ -434,7 +484,20 @@ function abcc_openai_text_settings_page() {
 			'nonce'       => wp_create_nonce( 'abcc_openai_generate_post' ),
 			'buttonNonce' => wp_create_nonce( 'abcc_admin_buttons' ),
 			'adminUrl'    => admin_url( 'post.php?' ),
+			'logUrl'      => add_query_arg(
+				array(
+					'page'   => 'automated-blog-content-creator-post',
+					'tab'    => 'content',
+					'subtab' => 'log',
+				),
+				admin_url( 'admin.php' )
+			),
 			'i18n'        => array(
+				'confirmRemoveKey'      => __( 'Remove this saved API key? Generation with this provider stops until you add a key again.', 'automated-blog-content-creator' ),
+				'savesAutomatically'    => __( 'Saves automatically', 'automated-blog-content-creator' ),
+				/* translators: 1: number of posts created, 2: number of failed posts */
+				'bulkSummary'           => __( 'Done: %1$s created, %2$s failed', 'automated-blog-content-creator' ),
+				'viewLog'               => __( 'View log →', 'automated-blog-content-creator' ),
 				/* translators: %d: number of posts to generate */
 				'generateNPosts'        => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
 				'copied'                => __( 'Copied', 'automated-blog-content-creator' ),
@@ -472,15 +535,9 @@ function abcc_openai_text_settings_page() {
 
 		<nav class="nav-tab-wrapper">
 			<?php
-			$primary_tabs = array(
-				'dashboard'   => __( 'Dashboard', 'automated-blog-content-creator' ),
-				'content'     => __( 'Content', 'automated-blog-content-creator' ),
-				'topics'      => __( 'Topics', 'automated-blog-content-creator' ),
-				'media'       => __( 'Media', 'automated-blog-content-creator' ),
-				'connections' => __( 'Connections', 'automated-blog-content-creator' ),
-				'settings'    => __( 'Settings', 'automated-blog-content-creator' ),
-			);
-			foreach ( $primary_tabs as $slug => $label ) :
+			$primary_tabs = abcc_get_admin_tabs();
+			foreach ( $primary_tabs as $slug => $tab ) :
+				$label = isset( $tab['label'] ) ? (string) $tab['label'] : $slug;
 				$url   = esc_url(
 					add_query_arg(
 						array(
@@ -497,18 +554,11 @@ function abcc_openai_text_settings_page() {
 
 		<div class="tab-content">
 			<?php
-			if ( 'dashboard' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-dashboard.php';
-			} elseif ( 'content' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-content.php';
-			} elseif ( 'topics' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-topics.php';
-			} elseif ( 'media' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-media.php';
-			} elseif ( 'connections' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-connections.php';
-			} elseif ( 'settings' === $current_tab ) {
-				include plugin_dir_path( __FILE__ ) . 'includes/admin/tab-settings.php';
+			$tab_file = isset( $primary_tabs[ $current_tab ] )
+				? abcc_resolve_admin_tab_file( (array) $primary_tabs[ $current_tab ] )
+				: '';
+			if ( '' !== $tab_file ) {
+				include $tab_file;
 			}
 			?>
 		</div>

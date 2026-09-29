@@ -466,13 +466,18 @@ function abcc_get_provider_credential_source( $provider ) {
 /**
  * Get the current provider health snapshot used by admin UI screens.
  *
- * @param string $provider Provider ID.
+ * @param string     $provider    Provider ID.
+ * @param array|null $health_rows Optional. Pre-fetched abcc_provider_health option so
+ *                                per-provider loops read it once instead of per card.
  * @return array
  */
-function abcc_get_provider_health_snapshot( $provider ) {
-	$source      = abcc_get_provider_credential_source( $provider );
-	$last_check  = get_transient( 'abcc_last_validation_' . $provider );
-	$health_rows = get_option( 'abcc_provider_health', array() );
+function abcc_get_provider_health_snapshot( $provider, $health_rows = null ) {
+	$source     = abcc_get_provider_credential_source( $provider );
+	$last_check = get_transient( 'abcc_last_validation_' . $provider );
+
+	if ( ! is_array( $health_rows ) ) {
+		$health_rows = get_option( 'abcc_provider_health', array() );
+	}
 
 	if ( false === $last_check && ! empty( $health_rows[ $provider ] ) ) {
 		$row       = $health_rows[ $provider ];
@@ -543,6 +548,23 @@ function abcc_set_provider_saved_api_key( $provider, $api_key ) {
 	}
 
 	return update_option( $option_name, $api_key );
+}
+
+/**
+ * Delete a provider API key stored in wp_options and forget its validation.
+ *
+ * Only wp_options keys are removable here; wp-config constants and WP
+ * Connectors credentials are managed outside the plugin.
+ *
+ * @since 4.5.0
+ * @param string $provider Provider ID.
+ * @return bool True when the option was cleared.
+ */
+function abcc_delete_provider_saved_api_key( $provider ) {
+	$cleared = abcc_set_provider_saved_api_key( $provider, '' );
+	delete_transient( 'abcc_last_validation_' . $provider );
+
+	return $cleared;
 }
 
 /**

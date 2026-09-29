@@ -125,13 +125,14 @@ function abcc_openai_generate_post_scheduled() {
 		$keywords = (array) $selected_group['keywords'];
 		$category = $selected_group['category'] ?? 0;
 		$template = $selected_group['template'] ?? 'default';
+		$params   = abcc_resolve_group_generation_params( (array) $selected_group );
 
 		$payload = abcc_build_generation_payload(
 			array(
 				'keywords'   => $keywords,
-				'model'      => $prompt_select,
+				'model'      => $params['model'],
 				'tone'       => $tone,
-				'char_limit' => $char_limit,
+				'char_limit' => $params['char_limit'],
 				'category'   => $category,
 				'template'   => $template,
 				'source'     => 'scheduled',

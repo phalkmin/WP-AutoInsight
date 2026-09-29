@@ -48,6 +48,40 @@ function abcc_resolve_post_status( $context = array() ) {
 }
 
 /**
+ * Pin the publication decision onto a payload before it is queued.
+ *
+ * The worker runs later under cron with no current user, so the topic
+ * override and the requester's capabilities are only knowable now. A user
+ * who cannot publish the post type gets a draft, as in the editor.
+ *
+ * @since 4.5.0
+ * @param array $payload Generation payload.
+ * @return array Payload with a resolved 'post_status'.
+ */
+function abcc_finalize_payload_post_status( $payload ) {
+	$status = abcc_resolve_post_status(
+		array(
+			'post_status' => isset( $payload['post_status'] ) ? $payload['post_status'] : '',
+			'force_draft' => ! empty( $payload['draft_only'] ),
+			'topic_id'    => isset( $payload['topic_id'] ) ? (int) $payload['topic_id'] : 0,
+			'source'      => isset( $payload['source'] ) ? (string) $payload['source'] : '',
+		)
+	);
+
+	$actor = get_current_user_id();
+	if ( 'publish' === $status && $actor > 0 ) {
+		$post_type = isset( $payload['post_type'] ) ? (string) $payload['post_type'] : 'post';
+		if ( ! abcc_user_can_publish_post_type( $post_type, $actor ) ) {
+			$status = 'draft';
+		}
+	}
+
+	$payload['post_status'] = $status;
+
+	return $payload;
+}
+
+/**
  * Builds a normalized generation payload with defaults.
  *
  * @since 3.6.0
@@ -68,6 +102,16 @@ function abcc_build_generation_payload( $args = array() ) {
 	);
 
 	$payload = wp_parse_args( $args, $defaults );
+
+	// Precedence: per-call override > group override > global default. A blank
+	// model or a zero char_limit means "not overridden" and falls through.
+	if ( '' === trim( (string) $payload['model'] ) ) {
+		$payload['model'] = $defaults['model'];
+	}
+	$payload['char_limit'] = (int) $payload['char_limit'];
+	if ( $payload['char_limit'] <= 0 ) {
+		$payload['char_limit'] = $defaults['char_limit'];
+	}
 
 	// Resolve the 'custom' tone keyword to the user's description.
 	if ( 'custom' === $payload['tone'] ) {
@@ -169,28 +213,71 @@ function abcc_apply_composer_overrides( $payload, $overrides ) {
  * @return array
  */
 function abcc_build_group_source( $index, $group ) {
+	$params = abcc_resolve_group_generation_params( (array) $group );
+
 	return array(
-		'token'    => 'group:' . (int) $index,
-		'type'     => 'group',
-		'keywords' => (array) $group['keywords'],
-		'category' => isset( $group['category'] ) ? (int) $group['category'] : 0,
-		'template' => isset( $group['template'] ) ? $group['template'] : 'default',
-		'topic_id' => 0,
-		'prompt'   => '',
-		'label'    => isset( $group['name'] ) ? $group['name'] : ( 'Group ' . ( (int) $index + 1 ) ),
+		'token'      => 'group:' . (int) $index,
+		'type'       => 'group',
+		'keywords'   => (array) $group['keywords'],
+		'category'   => isset( $group['category'] ) ? (int) $group['category'] : 0,
+		'template'   => isset( $group['template'] ) ? $group['template'] : 'default',
+		'model'      => $params['model'],
+		'char_limit' => $params['char_limit'],
+		'topic_id'   => 0,
+		'prompt'     => '',
+		'label'      => isset( $group['name'] ) ? $group['name'] : ( 'Group ' . ( (int) $index + 1 ) ),
+	);
+}
+
+/**
+ * Resolve a keyword group's effective model and char_limit, inheriting globals for blanks.
+ *
+ * A group model is honored only when its provider currently has a key — a
+ * removed key silently falls back to the global model rather than failing
+ * every scheduled post. char_limit is clamped to the settings slider range.
+ *
+ * @since 4.5.0
+ * @param array $group Keyword group (may lack the override keys — pre-4.5 data).
+ * @return array{model: string, char_limit: int}
+ */
+function abcc_resolve_group_generation_params( array $group ) {
+	$model      = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$char_limit = (int) abcc_get_setting( 'openai_char_limit', 200 );
+
+	$override_model = isset( $group['model'] ) ? trim( (string) $group['model'] ) : '';
+	if ( '' !== $override_model ) {
+		$provider = abcc_get_provider_for_model( $override_model );
+		if ( '' !== $provider && '' !== (string) abcc_get_provider_api_key( $provider ) ) {
+			$model = $override_model;
+		}
+	}
+
+	$override_limit = isset( $group['char_limit'] ) ? (int) $group['char_limit'] : 0;
+	if ( $override_limit > 0 ) {
+		$char_limit = min( 4000, max( 100, $override_limit ) );
+	}
+
+	return array(
+		'model'      => (string) $model,
+		'char_limit' => $char_limit,
 	);
 }
 
 /**
  * Build the tracking meta written to generated posts.
  *
- * @param array $payload Generation payload.
+ * _abcc_model records the model that wrote the body (a fallback may have
+ * served it); the JSON params keep the requested model so regeneration
+ * retries the same primary.
+ *
+ * @param array  $payload      Generation payload.
+ * @param string $served_model Optional. Model that produced the body.
  * @return array
  */
-function abcc_build_generation_tracking_meta( $payload ) {
+function abcc_build_generation_tracking_meta( $payload, $served_model = '' ) {
 	return array(
 		'_abcc_generated'         => '1',
-		'_abcc_model'             => $payload['model'],
+		'_abcc_model'             => '' !== (string) $served_model ? (string) $served_model : $payload['model'],
 		'_abcc_generation_params' => wp_json_encode(
 			array(
 				'keywords'      => (array) $payload['keywords'],
@@ -269,6 +356,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$template    = $payload['template'];
 		$source      = $payload['source'];
 
+		// Shared by every provider call this post makes; hooks and fallback
+		// notes key off job_id, the body call carries the payload source.
+		$call_context = array(
+			'job_id' => isset( $options['job_id'] ) ? (int) $options['job_id'] : 0,
+			'source' => $source,
+		);
+
 		if ( true === $generate_seo ) {
 			// Generate title and SEO data.
 			$title_and_seo = abcc_generate_title_and_seo(
@@ -278,13 +372,14 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				array(
 					'site_name'        => get_bloginfo( 'name' ),
 					'site_description' => get_bloginfo( 'description' ),
-				)
+				),
+				$call_context
 			);
 			$title         = $title_and_seo['title'];
 			$seo_data      = $title_and_seo['seo_data'];
 		} else {
 			// Just generate a title.
-			$title    = abcc_generate_title( $api_key, $focus_keywords, $prompt_select );
+			$title    = abcc_generate_title( $api_key, $focus_keywords, $prompt_select, $call_context );
 			$seo_data = array();
 		}
 
@@ -303,9 +398,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				// Topic Library: a topic's own prompt replaces the stored template.
 				'custom_prompt' => isset( $options['prompt'] ) ? (string) $options['prompt'] : '',
 			),
-			array(
-				'job_id' => isset( $options['job_id'] ) ? (int) $options['job_id'] : 0,
-			)
+			$call_context
 		);
 
 		$content_array = $generation_result['content'];
@@ -332,6 +425,7 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 					'model'   => $prompt_select,
 					'api_key' => $api_key,
 					'title'   => $title,
+					'job_id'  => $call_context['job_id'],
 				)
 			);
 
@@ -348,9 +442,13 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			abcc_debug_log( 'Truncation repair: ' . $repair_note );
 		}
 
+		// A fallback may have written the body; citations and tracking follow
+		// the provider that actually answered.
+		$served_model    = ! empty( $generation_result['served_model'] ) ? (string) $generation_result['served_model'] : $prompt_select;
+		$served_provider = ! empty( $generation_result['served_provider'] ) ? (string) $generation_result['served_provider'] : abcc_get_provider_for_model( $prompt_select );
+
 		// Process Perplexity citations if applicable.
-		$citation_provider = abcc_get_provider_for_model( $prompt_select );
-		if ( abcc_provider_supports_citations( $citation_provider ) ) {
+		if ( abcc_provider_supports_citations( $served_provider ) ) {
 			$generation_id = abcc_citation_transient_key( $options );
 			$citations     = get_transient( $generation_id );
 			if ( ! empty( $citations ) ) {
@@ -388,13 +486,34 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		if ( ! isset( $post_data['meta_input'] ) ) {
 			$post_data['meta_input'] = array();
 		}
-		$post_data['meta_input'] = array_merge( $post_data['meta_input'], abcc_build_generation_tracking_meta( $payload ) );
+		$post_data['meta_input'] = array_merge( $post_data['meta_input'], abcc_build_generation_tracking_meta( $payload, $served_model ) );
 
-		$post_id = wp_insert_post( $post_data, true );
+		// wp_insert_post() expects slashed input and unslashes every field,
+		// meta_input included; unslashed JSON with escaped quotes would break.
+		$post_id = wp_insert_post( wp_slash( $post_data ), true );
 
 		if ( is_wp_error( $post_id ) ) {
 			throw new Exception( $post_id->get_error_message() );
 		}
+
+		do_action(
+			'abcc_post_inserted',
+			(int) $post_id,
+			abcc_hook_safe_context(
+				array_merge(
+					$call_context,
+					array(
+						'provider'        => abcc_get_provider_for_model( $prompt_select ),
+						'model'           => $prompt_select,
+						'served_provider' => $served_provider,
+						'served_model'    => $served_model,
+						'char_limit'      => (int) $char_limit,
+						'post_id'         => (int) $post_id,
+						'post_type'       => $post_type,
+					)
+				)
+			)
+		);
 
 		if ( abcc_get_setting( 'openai_generate_images', true ) ) {
 			try {
@@ -443,7 +562,11 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		return $post_id;
 
 	} catch ( Exception $e ) {
-		return new WP_Error( 'post_generation_failed', $e->getMessage() );
+		return new WP_Error(
+			'post_generation_failed',
+			$e->getMessage(),
+			array( 'code' => abcc_get_last_generation_error_code() )
+		);
 	}
 }
 
@@ -552,7 +675,7 @@ function abcc_trim_to_content_boundary( $lines ) {
  *
  * @since 4.4.0
  * @param array $lines   Truncated content lines.
- * @param array $context Requires 'model', 'api_key'; optional 'title'.
+ * @param array $context Requires 'model', 'api_key'; optional 'title', 'job_id'.
  * @return array array( 'lines' => array, 'repaired' => bool )
  */
 function abcc_repair_truncated_content( $lines, $context ) {
@@ -576,7 +699,16 @@ function abcc_repair_truncated_content( $lines, $context ) {
 		implode( "\n", $trimmed )
 	);
 
-	$conclusion = abcc_generate_content( $api_key, $prompt, $model, 200 );
+	$conclusion = abcc_generate_content(
+		$api_key,
+		$prompt,
+		$model,
+		200,
+		array(
+			'job_id' => isset( $context['job_id'] ) ? (int) $context['job_id'] : 0,
+			'source' => 'repair',
+		)
+	);
 
 	if ( false === $conclusion || ! is_array( $conclusion ) || empty( $conclusion ) ) {
 		// A failed conclusion is not a failed post — return the trimmed article.
@@ -629,30 +761,66 @@ function abcc_repair_truncated_content( $lines, $context ) {
  * @param string $service    Model identifier.
  * @param int    $char_limit Requested tokens.
  * @param array  $context    Optional. 'job_id' keys the citation transient.
- * @return array array( 'content', 'usage', 'truncated', 'error', 'raw' )
+ * @return array array( 'content', 'usage', 'truncated', 'error', 'raw',
+ *               'fallback_from', 'served_provider', 'served_model', 'attempt' )
  */
 function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit, $context = array() ) {
 	$provider = abcc_get_model_provider( $service );
 
-	$result = abcc_call_provider_api(
+	// One credential-free context per logical generation; every hook below
+	// receives this same array so extensions can correlate before/after.
+	$hook_context = abcc_hook_safe_context(
+		array_merge(
+			(array) $context,
+			array(
+				'provider'   => $provider,
+				'model'      => $service,
+				'char_limit' => (int) $char_limit,
+			)
+		)
+	);
+
+	do_action( 'abcc_before_generate', $hook_context );
+
+	$prompt = apply_filters( 'abcc_generation_prompt', $prompt, $hook_context );
+
+	$result = abcc_execute_fallback_chain(
 		$provider,
 		$service,
 		$prompt,
 		array(
 			'api_key'    => $api_key,
 			'max_tokens' => $char_limit,
-		)
+		),
+		$hook_context
 	);
+
+	// A fallback may have served the request; hooks and the citation stash
+	// need the provider that actually answered.
+	$hook_context['attempt']         = (int) $result['attempt'];
+	$hook_context['served_provider'] = (string) $result['served_provider'];
+	$hook_context['served_model']    = (string) $result['served_model'];
+
+	abcc_remember_generation_error( $result['error'] );
 
 	// Perplexity returns citations alongside the text. Stash them for the
 	// post-assembly step, keyed so concurrent jobs cannot collide.
-	if ( abcc_provider_supports_citations( $provider ) && ! is_wp_error( $result['error'] ) ) {
+	if ( abcc_provider_supports_citations( $result['served_provider'] ) && ! is_wp_error( $result['error'] ) ) {
 		$citations = isset( $result['raw']['citations'] ) ? (array) $result['raw']['citations'] : array();
 
 		if ( ! empty( $citations ) ) {
 			set_transient( abcc_citation_transient_key( $context ), $citations, 300 );
 		}
 	}
+
+	// A filter that returns something other than the tuple would crash every
+	// caller's is_wp_error( $result['error'] ) check; keep the original then.
+	$filtered = apply_filters( 'abcc_generation_result', $result, $hook_context );
+	if ( is_array( $filtered ) && array_key_exists( 'content', $filtered ) && array_key_exists( 'error', $filtered ) ) {
+		$result = $filtered;
+	}
+
+	do_action( 'abcc_after_generate', $hook_context, $result );
 
 	return $result;
 }
@@ -664,10 +832,11 @@ function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limi
  * @param string $prompt Content prompt
  * @param string $service AI service to use
  * @param int    $char_limit Character limit
+ * @param array  $context    Optional. Generation context ('job_id', 'source').
  * @return array|false
  */
-function abcc_generate_content( $api_key, $prompt, $service, $char_limit ) {
-	$result = abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit );
+function abcc_generate_content( $api_key, $prompt, $service, $char_limit, $context = array() ) {
+	$result = abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit, $context );
 
 	return is_wp_error( $result['error'] ) ? false : $result['content'];
 }
@@ -740,10 +909,12 @@ function abcc_extract_generated_title( $lines ) {
  * @param string $api_key API key for the selected service
  * @param array  $keywords Keywords to focus the title on
  * @param string $prompt_select Which AI service to use
+ * @param array  $context Optional. Generation context ('job_id').
  * @return string The generated title
  */
-function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
+function abcc_generate_title( $api_key, $keywords, $prompt_select, $context = array() ) {
 	$language = abcc_resolve_content_language();
+	$context  = array_merge( (array) $context, array( 'source' => 'title' ) );
 
 	$prompt  = sprintf(
 		'Create a blog post title in %1$s about: %2$s. ',
@@ -754,7 +925,7 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select ) {
 	$prompt .= 'Respond with only the title itself on a single line — no introduction, no list of alternatives, no numbering, and no quotation marks.';
 
 	// Use a small token limit for this call - 50 tokens should be plenty for a title
-	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 50 );
+	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 50, $context );
 	$result   = is_wp_error( $detailed['error'] ) ? false : $detailed['content'];
 
 	if ( false === $result || empty( $result ) ) {

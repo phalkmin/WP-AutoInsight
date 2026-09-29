@@ -17,6 +17,8 @@ $openai_quality    = abcc_get_setting( 'abcc_openai_image_quality', 'medium' );
 $gemini_model      = abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
 $gemini_size       = abcc_get_setting( 'abcc_gemini_image_size', '2K' );
 $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' );
+$image_style       = abcc_sanitize_image_style( abcc_get_setting( 'abcc_image_style', 'editorial photography' ) );
+$image_style_text  = abcc_get_setting( 'abcc_image_style_custom', '' );
 ?>
 <div class="tab-pane active">
 	<form method="post" action="">
@@ -63,6 +65,25 @@ $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' 
 							</label>
 						<?php endforeach; ?>
 					</fieldset>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row">
+					<label for="abcc_image_style"><?php esc_html_e( 'Image Style', 'automated-blog-content-creator' ); ?></label>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Appended to every featured-image prompt as "Style: …". Pick a preset or describe your own look.', 'automated-blog-content-creator' ) ) ); ?>
+				</th>
+				<td>
+					<select id="abcc_image_style" name="abcc_image_style">
+						<?php foreach ( abcc_get_image_style_options() as $style_slug => $style_label ) : ?>
+							<option value="<?php echo esc_attr( $style_slug ); ?>" <?php selected( $image_style, $style_slug ); ?>><?php echo esc_html( $style_label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<div id="abcc-image-style-custom-wrapper" class="abcc-mt-8"<?php echo 'custom' !== $image_style ? ' style="display:none;"' : ''; ?>>
+						<input type="text" id="abcc_image_style_custom" name="abcc_image_style_custom" class="regular-text" maxlength="200"
+							value="<?php echo esc_attr( $image_style_text ); ?>"
+							placeholder="<?php esc_attr_e( 'vintage travel poster, muted palette', 'automated-blog-content-creator' ); ?>">
+						<p class="description"><?php esc_html_e( 'Describe the look you want, e.g. "vintage travel poster, muted palette". Saved with the form.', 'automated-blog-content-creator' ); ?></p>
+					</div>
 				</td>
 			</tr>
 		</table>

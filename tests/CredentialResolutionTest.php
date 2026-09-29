@@ -43,3 +43,18 @@ abcc_test(
 		);
 	}
 );
+
+abcc_test(
+	'removing a saved key clears the option and its validation transient',
+	function () {
+		abcc_set_provider_saved_api_key( 'gemini', 'option-gemini-key' );
+		set_transient( 'abcc_last_validation_gemini', array( 'status' => 'verified' ), 60 );
+		abcc_assert_same( 'option', abcc_get_provider_credential_source( 'gemini' ) );
+
+		abcc_delete_provider_saved_api_key( 'gemini' );
+
+		abcc_assert_same( '', abcc_get_provider_saved_api_key( 'gemini' ) );
+		abcc_assert_same( 'none', abcc_get_provider_credential_source( 'gemini' ) );
+		abcc_assert_false( get_transient( 'abcc_last_validation_gemini' ), 'Validation transient must be forgotten.' );
+	}
+);

@@ -160,3 +160,21 @@ abcc_test(
 		$_POST = array();
 	}
 );
+
+abcc_test(
+	'autosave rejects the fallback chain (array setting, submit-only)',
+	function () {
+		$_POST = array(
+			'key'   => 'abcc_fallback_chain',
+			'value' => 'claude',
+			'nonce' => 'x',
+		);
+
+		abcc_handle_autosave_setting();
+
+		abcc_assert_false( $GLOBALS['abcc_test_last_json']['success'], 'abcc_fallback_chain must not be autosavable.' );
+		abcc_assert_same( array(), abcc_get_setting( 'abcc_fallback_chain', array() ), 'Value must be untouched.' );
+
+		$_POST = array();
+	}
+);

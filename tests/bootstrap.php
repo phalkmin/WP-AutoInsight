@@ -121,6 +121,25 @@ function apply_filters($hook, $value, ...$args) {
 	return $value;
 }
 function add_action($hook, $callback) { $GLOBALS['abcc_test_actions'][ $hook ][] = $callback; }
+$GLOBALS['abcc_test_fired_actions'] = array();
+function do_action( $hook, ...$args ) {
+	$GLOBALS['abcc_test_fired_actions'][] = array(
+		'hook' => $hook,
+		'args' => $args,
+	);
+	foreach ( $GLOBALS['abcc_test_actions'][ $hook ] ?? array() as $callback ) {
+		call_user_func( $callback, ...$args );
+	}
+}
+function did_action( $hook ) {
+	$count = 0;
+	foreach ( $GLOBALS['abcc_test_fired_actions'] as $fired ) {
+		if ( $fired['hook'] === $hook ) {
+			++$count;
+		}
+	}
+	return $count;
+}
 function current_user_can($cap, ...$args) {
 	// Per-object cap (e.g. current_user_can('edit_post', $post_id)): a test can
 	// mark specific post IDs as uneditable via $GLOBALS['abcc_test_uneditable_posts'].
@@ -171,9 +190,50 @@ function wp_json_encode($value) { return json_encode($value); }
 function sanitize_text_field($value) { return is_string($value) ? trim($value) : $value; }
 function sanitize_textarea_field($value) { return is_string($value) ? trim($value) : $value; }
 function sanitize_key($value) { return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $value)); }
-function wp_unslash($value) { return $value; }
+// Mirror core: wp_insert_post()/update_metadata() strip one level of slashes.
+function wp_unslash($value) {
+	if ( is_array( $value ) ) { return array_map( 'wp_unslash', $value ); }
+	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
+function wp_slash($value) {
+	if ( is_array( $value ) ) { return array_map( 'wp_slash', $value ); }
+	return is_string( $value ) ? addslashes( $value ) : $value;
+}
+function rest_sanitize_boolean($value) {
+	if ( is_string( $value ) ) { $value = strtolower( $value ); }
+	return in_array( $value, array( true, 1, '1', 'true', 'yes', 'on' ), true );
+}
+function user_can($user, $cap, ...$args) { return current_user_can( $cap, ...$args ); }
+function post_type_exists($post_type) { return in_array( $post_type, array( 'post', 'page' ), true ); }
+function get_post_type_object($post_type) {
+	if ( ! post_type_exists( $post_type ) ) { return null; }
+	$suffix            = 'page' === $post_type ? 'pages' : 'posts';
+	$pto               = new stdClass();
+	$pto->name         = $post_type;
+	$pto->cap          = new stdClass();
+	$pto->cap->publish_posts = 'publish_' . $suffix;
+	$pto->cap->create_posts  = 'edit_' . $suffix;
+	$pto->cap->edit_posts    = 'edit_' . $suffix;
+	return $pto;
+}
+class ABCC_Test_Role {
+	public $name;
+	public $capabilities = array();
+	public function __construct( $name, $caps = array() ) { $this->name = $name; $this->capabilities = $caps; }
+	public function has_cap( $cap ) { return ! empty( $this->capabilities[ $cap ] ); }
+	public function add_cap( $cap, $grant = true ) { $this->capabilities[ $cap ] = $grant; }
+	public function remove_cap( $cap ) { unset( $this->capabilities[ $cap ] ); }
+}
+// Built-in roles always exist; tests seed caps via $GLOBALS['abcc_test_roles'].
+function get_role($name) {
+	if ( ! isset( $GLOBALS['abcc_test_roles'][ $name ] ) ) {
+		if ( ! in_array( $name, array( 'administrator', 'editor', 'author', 'contributor' ), true ) ) { return null; }
+		$GLOBALS['abcc_test_roles'][ $name ] = new ABCC_Test_Role( $name );
+	}
+	return $GLOBALS['abcc_test_roles'][ $name ];
+}
 function absint($value) { return abs((int) $value); }
-function get_current_user_id() { return 1; }
+function get_current_user_id() { return $GLOBALS['abcc_test_current_user_id'] ?? 1; }
 function get_locale() { return $GLOBALS['abcc_test_locale'] ?? 'en_US'; }
 function is_wp_error($thing) { return $thing instanceof WP_Error; }
 function wp_parse_args($args, $defaults = array()) { return array_merge($defaults, $args); }
@@ -228,7 +288,7 @@ function get_post_meta($post_id, $key = '', $single = false) {
 	}
 	return $single ? $meta : array( $meta );
 }
-function update_post_meta($post_id, $key, $value) { $GLOBALS['abcc_test_post_meta'][ (int) $post_id ][ $key ] = $value; return true; }
+function update_post_meta($post_id, $key, $value) { $GLOBALS['abcc_test_post_meta'][ (int) $post_id ][ $key ] = wp_unslash( $value ); return true; }
 function delete_post_meta($post_id, $key) { unset($GLOBALS['abcc_test_post_meta'][ (int) $post_id ][ $key ]); return true; }
 function get_post_type($post_id) { return $GLOBALS['abcc_test_post_types'][ (int) $post_id ] ?? false; }
 function wp_cache_delete($key, $group = '') { return true; }
@@ -261,6 +321,9 @@ function wp_insert_post($postarr, $wp_error = false) {
 	}
 
 	$id = ++$GLOBALS['abcc_test_next_post_id'];
+
+	// Core expects slashed input and unslashes fields and meta_input alike.
+	$postarr = wp_unslash( $postarr );
 
 	$post               = new stdClass();
 	$post->ID           = $id;
@@ -462,6 +525,8 @@ if ( ! defined( 'OPENAI_API' ) ) {
 }
 
 require_once dirname(__DIR__) . '/includes/settings.php';
+require_once dirname(__DIR__) . '/includes/hooks.php';
+require_once dirname(__DIR__) . '/includes/fallback.php';
 require_once dirname(__DIR__) . '/includes/providers.php';
 require_once dirname(__DIR__) . '/includes/api-keys.php';
 require_once dirname(__DIR__) . '/includes/token-handling.php';
@@ -480,6 +545,7 @@ require_once dirname(__DIR__) . '/includes/blocks.php';
 require_once dirname(__DIR__) . '/includes/audio.php';
 require_once dirname(__DIR__) . '/includes/class-abcc-job.php';
 require_once dirname(__DIR__) . '/includes/onboarding.php';
+require_once dirname(__DIR__) . '/includes/ajax-handlers.php';
 
 if ( ! function_exists( 'wp_check_filetype' ) ) {
 	function wp_check_filetype( $filename, $mimes = null ) {
@@ -669,12 +735,16 @@ function abcc_test_reset_state() {
 	$GLOBALS['abcc_test_transients']           = array();
 	$GLOBALS['abcc_test_post_meta']            = array();
 	$GLOBALS['abcc_test_filters']              = array();
+	$GLOBALS['abcc_test_actions']              = array();
+	$GLOBALS['abcc_test_fired_actions']        = array();
 	$GLOBALS['abcc_test_scheduled_events']     = array();
 	$GLOBALS['abcc_http_queue']                = array();
 	$GLOBALS['abcc_http_last_request']         = null;
 	$GLOBALS['abcc_test_last_json']            = null;
 	$GLOBALS['abcc_test_connectors']           = array();
 	$GLOBALS['abcc_test_current_user_caps']    = array();
+	$GLOBALS['abcc_test_current_user_id']      = 1;
+	$GLOBALS['abcc_test_roles']                = array();
 	$GLOBALS['abcc_test_current_user_roles']   = array( 'administrator' );
 	$GLOBALS['abcc_test_current_user_exists']  = true;
 	$GLOBALS['abcc_test_nonce_valid']          = true;

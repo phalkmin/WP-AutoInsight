@@ -38,6 +38,10 @@ function abcc_handle_create_post() {
 			throw new Exception( __( 'This post type is not enabled for manual generation.', 'automated-blog-content-creator' ) );
 		}
 
+		if ( ! abcc_user_can_create_post_type( $post_type ) ) {
+			throw new Exception( __( 'You do not have permission to create this post type.', 'automated-blog-content-creator' ) );
+		}
+
 		// Resolve the source. Priority: explicit 'source' token > legacy
 		// 'group_index' > sticky default. The resolver handles all fallbacks.
 		$token = '';
@@ -55,11 +59,14 @@ function abcc_handle_create_post() {
 		}
 
 		$payload_args = array(
-			'keywords'  => $source['keywords'],
-			'category'  => $source['category'],
-			'post_type' => $post_type,
-			'template'  => $source['template'],
-			'source'    => 'manual',
+			'keywords'   => $source['keywords'],
+			'category'   => $source['category'],
+			'post_type'  => $post_type,
+			'template'   => $source['template'],
+			'source'     => 'manual',
+			// Group overrides (blank/0 for topics → global defaults).
+			'model'      => $source['model'] ?? '',
+			'char_limit' => $source['char_limit'] ?? 0,
 		);
 		if ( 'topic' === $source['type'] ) {
 			$payload_args['prompt']   = $source['prompt'];
@@ -79,6 +86,11 @@ function abcc_handle_create_post() {
 		}
 		$payload = abcc_apply_composer_overrides( $payload, $overrides );
 
+		// Resolved here so the response can say when a requested Publish was
+		// downgraded; the queue applies the same resolution.
+		$requested_publish = isset( $payload['post_status'] ) && 'publish' === $payload['post_status'];
+		$payload           = abcc_finalize_payload_post_status( $payload );
+
 		$job_id = abcc_queue_generation_job( $payload );
 
 		if ( is_wp_error( $job_id ) ) {
@@ -89,10 +101,16 @@ function abcc_handle_create_post() {
 		// successful queue, never on validation failure.
 		abcc_update_setting( 'abcc_composer_last_source', $source['token'] );
 
+		$message = esc_html__( 'Generation job queued successfully.', 'automated-blog-content-creator' );
+		if ( $requested_publish && 'draft' === $payload['post_status'] ) {
+			$message = esc_html__( 'Generation job queued. Your role cannot publish this post type, so the post will be saved as a draft.', 'automated-blog-content-creator' );
+		}
+
 		wp_send_json_success(
 			array(
-				'message' => esc_html__( 'Generation job queued successfully.', 'automated-blog-content-creator' ),
-				'job_id'  => $job_id,
+				'message'     => $message,
+				'job_id'      => $job_id,
+				'post_status' => $payload['post_status'],
 			)
 		);
 
@@ -167,7 +185,7 @@ function abcc_handle_rewrite_post() {
 		);
 
 		// Generate new content.
-		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit );
+		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, array( 'source' => 'rewrite' ) );
 		$result   = is_wp_error( $detailed['error'] ) ? false : $detailed['content'];
 
 		if ( false === $result || empty( $result ) ) {
@@ -443,6 +461,8 @@ function abcc_handle_regenerate_post() {
 				'category'   => $params['category'] ?? 0,
 				'template'   => $params['template'] ?? 'default',
 				'source'     => 'regenerate',
+				// The button promises a new draft regardless of the global default.
+				'draft_only' => true,
 			)
 		);
 		$job_id  = abcc_queue_generation_job( $payload );

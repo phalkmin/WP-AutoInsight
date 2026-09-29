@@ -171,7 +171,7 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 
 	if ( 'full_rewrite' === $mode ) {
 		$prompt = abcc_audio_build_rewrite_prompt( $transcript, $options );
-		$raw    = abcc_generate_content( $gen_key, $prompt, $model, $char_limit );
+		$raw    = abcc_generate_content( $gen_key, $prompt, $model, $char_limit, array( 'source' => 'audio' ) );
 
 		// Filter out blank lines; treat false or all-empty result as failure.
 		$lines = is_array( $raw ) ? array_values(
@@ -195,7 +195,7 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 
 	if ( 'transcript_plus_intro' === $mode ) {
 		$prompt = abcc_audio_build_intro_prompt( $transcript, $options );
-		$lines  = abcc_generate_content( $gen_key, $prompt, $model, $char_limit );
+		$lines  = abcc_generate_content( $gen_key, $prompt, $model, $char_limit, array( 'source' => 'audio' ) );
 
 		if ( ! empty( $lines ) ) {
 			$title = abcc_audio_clean_title( array_shift( $lines ) );
@@ -256,6 +256,23 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 	if ( is_wp_error( $post_id ) ) {
 		return $post_id;
 	}
+
+	do_action(
+		'abcc_post_inserted',
+		(int) $post_id,
+		abcc_hook_safe_context(
+			array(
+				'provider'      => abcc_get_provider_for_model( $model ),
+				'model'         => $model,
+				'char_limit'    => $char_limit,
+				'source'        => 'audio',
+				'post_id'       => (int) $post_id,
+				'post_type'     => 'post',
+				'audio_mode'    => $mode,
+				'attachment_id' => isset( $options['attachment_id'] ) ? (int) $options['attachment_id'] : 0,
+			)
+		)
+	);
 
 	if ( $rewrite_failed ) {
 		update_post_meta( $post_id, '_abcc_audio_rewrite_failed', '1' );
@@ -400,7 +417,8 @@ function abcc_handle_audio_transcription() {
 	}
 
 	$attachment_id = isset( $_POST['attachment_id'] ) ? absint( $_POST['attachment_id'] ) : 0;
-	$create_post   = isset( $_POST['create_post'] ) ? (bool) $_POST['create_post'] : false;
+	// jQuery posts booleans as the strings "true"/"false"; (bool) "false" is true.
+	$create_post = isset( $_POST['create_post'] ) && rest_sanitize_boolean( wp_unslash( $_POST['create_post'] ) );
 
 	if ( ! $attachment_id ) {
 		wp_send_json_error( array( 'message' => __( 'Invalid attachment ID', 'automated-blog-content-creator' ) ) );

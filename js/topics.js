@@ -119,7 +119,20 @@
 
 			post( 'abcc_topic_run_now', { topic_id: $link.data( 'topic-id' ) } )
 				.done( function ( response ) {
-					$link.text( response.success ? abccTopics.i18n.queued : abccTopics.i18n.error );
+					if ( ! response.success ) {
+						$link.text( abccTopics.i18n.error );
+						return;
+					}
+
+					$link.text( abccTopics.i18n.queued );
+
+					if ( abccTopics.logUrl && ! $link.next( '.abcc-topic-log-link' ).length ) {
+						$link.after(
+							$( '<span class="abcc-topic-log-link">' )
+								.text( ' \u2014 ' )
+								.append( $( '<a>' ).attr( 'href', abccTopics.logUrl ).text( abccTopics.i18n.viewLog ) )
+						);
+					}
 				} )
 				.fail( function () {
 					$link.text( abccTopics.i18n.error );

@@ -89,9 +89,11 @@ function abcc_get_seo_meta_fields( $seo_data ) {
  * @param array  $keywords Keywords to focus the article on.
  * @param string $prompt_select Which AI service to use.
  * @param array  $site_info Site information.
+ * @param array  $context   Optional. Generation context ('job_id').
  * @return array Title and SEO data.
  */
-function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info ) {
+function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info, $context = array() ) {
+	$context      = array_merge( (array) $context, array( 'source' => 'seo' ) );
 	$site_context = '';
 	if ( ! empty( $site_info['site_name'] ) ) {
 		$site_context = "This post is for a site called '{$site_info['site_name']}'";
@@ -117,7 +119,7 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
     }';
 
 	// Use a small token limit for this call - 300 tokens should be plenty for JSON.
-	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 300 );
+	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 300, $context );
 	$result   = is_array( $detailed['content'] ) && ! empty( $detailed['content'] ) ? $detailed['content'] : false;
 	if ( false === $result ) {
 		throw new Exception(
@@ -132,7 +134,7 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 		);
 	}
 
-	return abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select );
+	return abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select, $context );
 }
 
 /**
@@ -219,9 +221,10 @@ function abcc_parse_seo_json( $raw ) {
  * @param array        $keywords      Keywords.
  * @param string       $api_key       API key used for fallback title generation.
  * @param string       $prompt_select Model identifier.
+ * @param array        $context       Optional. Generation context ('job_id').
  * @return array
  */
-function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select ) {
+function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key, $prompt_select, $context = array() ) {
 
 	// Join lines if result is an array.
 	$raw_response = is_array( $result ) ? implode( "\n", $result ) : $result;
@@ -283,7 +286,7 @@ function abcc_extract_title_and_seo_from_response( $result, $keywords, $api_key,
 
 	// Final Fallbacks.
 	if ( empty( $title ) ) {
-		$title = abcc_generate_title( $api_key, $keywords, $prompt_select );
+		$title = abcc_generate_title( $api_key, $keywords, $prompt_select, $context );
 	}
 
 	if ( empty( $seo_data['meta_description'] ) ) {

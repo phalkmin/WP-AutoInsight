@@ -40,9 +40,10 @@ $recent_jobs = get_posts(
 // States: connected (validated ≤24h ago) | stale (key exists, never checked or >24h) | failed (last check failed) | no_key
 $providers      = abcc_get_provider_ids();
 $provider_cards = array();
+$health_rows    = get_option( 'abcc_provider_health', array() );
 foreach ( $providers as $provider_id ) {
 	$provider = abcc_get_provider( $provider_id );
-	$snapshot = abcc_get_provider_health_snapshot( $provider_id );
+	$snapshot = abcc_get_provider_health_snapshot( $provider_id, $health_rows );
 
 	$provider_cards[] = array(
 		'id'     => $provider_id,
@@ -342,19 +343,15 @@ foreach ( $provider_cards as $card ) {
 		</a>
 		<a class="abcc-tile" href="
 		<?php
-		echo esc_url(
-			add_query_arg(
-				array(
-					'page'   => $page_slug,
-					'tab'    => 'media',
-					'subtab' => 'audio',
-				)
-			)
-		);
+		// The audio upload lives in the post editor's WP-AutoInsight Tools box,
+		// so the tile opens a new post of the first enabled post type.
+		$abcc_audio_post_types = (array) abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
+		$abcc_audio_post_type  = ! empty( $abcc_audio_post_types ) ? (string) reset( $abcc_audio_post_types ) : 'post';
+		echo esc_url( admin_url( 'post' === $abcc_audio_post_type ? 'post-new.php' : 'post-new.php?post_type=' . $abcc_audio_post_type ) );
 		?>
 		">
 			<span class="abcc-tile__name"><?php esc_html_e( 'Post from Audio', 'automated-blog-content-creator' ); ?></span>
-			<span class="abcc-tile__state abcc-tile__state--new"><?php esc_html_e( 'New in 4.3', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state"><?php esc_html_e( 'Upload in the post editor', 'automated-blog-content-creator' ); ?></span>
 		</a>
 		<a class="abcc-tile" href="
 		<?php
@@ -571,7 +568,7 @@ foreach ( $provider_cards as $card ) {
 				<?php
 				printf(
 					/* translators: %s: version number */
-					esc_html__( 'Version %s (Fourze)', 'automated-blog-content-creator' ),
+					esc_html__( 'Version %s', 'automated-blog-content-creator' ),
 					esc_html( ABCC_VERSION )
 				);
 				?>
@@ -593,18 +590,6 @@ foreach ( $provider_cards as $card ) {
 					<span class="dashicons dashicons-admin-site-alt3"></span>
 					<a href="https://github.com/phalkmin/wp-autoinsight" target="_blank" rel="noopener">
 						<?php esc_html_e( 'GitHub', 'automated-blog-content-creator' ); ?>
-					</a>
-				</li>
-				<li>
-					<span class="dashicons dashicons-heart"></span>
-					<a href="https://ko-fi.com/phalkmin" target="_blank" rel="noopener">
-						<?php esc_html_e( 'Buy Me a Coffee (Ko-fi)', 'automated-blog-content-creator' ); ?>
-					</a>
-				</li>
-				<li>
-					<span class="dashicons dashicons-businessman"></span>
-					<a href="mailto:phalkmin@protonmail.com?subject=Consulting%20Inquiry">
-						<?php esc_html_e( 'Work With Me', 'automated-blog-content-creator' ); ?>
 					</a>
 				</li>
 			</ul>
