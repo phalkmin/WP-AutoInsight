@@ -431,6 +431,11 @@ function abcc_queue_topic_generation( $topic_id ) {
 function abcc_run_topic_schedules( $now = 0 ) {
 	$now = $now > 0 ? (int) $now : time();
 
+	// Site turned AI off: leave next_run alone so topics resume when it is back on.
+	if ( ! abcc_site_ai_enabled() ) {
+		return 0;
+	}
+
 	// Re-entry guard: cron glitches can fire the hook in quick succession.
 	$last_sweep = (int) abcc_get_setting( 'abcc_topics_last_sweep', 0 );
 	if ( $now - $last_sweep < 5 * MINUTE_IN_SECONDS ) {

@@ -52,13 +52,15 @@ function abcc_resolve_post_status( $context = array() ) {
  *
  * The worker runs later under cron with no current user, so the topic
  * override and the requester's capabilities are only knowable now. A user
- * who cannot publish the post type gets a draft, as in the editor.
+ * who cannot publish the post type gets a draft, as in the editor. With no
+ * current user (cron, WP-CLI), the job's author is the one checked.
  *
  * @since 4.5.0
- * @param array $payload Generation payload.
+ * @param array $payload   Generation payload.
+ * @param int   $author_id Optional. User the post is attributed to; used when no user is logged in. @since 4.5.1.
  * @return array Payload with a resolved 'post_status'.
  */
-function abcc_finalize_payload_post_status( $payload ) {
+function abcc_finalize_payload_post_status( $payload, $author_id = 0 ) {
 	$status = abcc_resolve_post_status(
 		array(
 			'post_status' => isset( $payload['post_status'] ) ? $payload['post_status'] : '',
@@ -69,6 +71,9 @@ function abcc_finalize_payload_post_status( $payload ) {
 	);
 
 	$actor = get_current_user_id();
+	if ( $actor <= 0 ) {
+		$actor = (int) $author_id;
+	}
 	if ( 'publish' === $status && $actor > 0 ) {
 		$post_type = isset( $payload['post_type'] ) ? (string) $payload['post_type'] : 'post';
 		if ( ! abcc_user_can_publish_post_type( $post_type, $actor ) ) {

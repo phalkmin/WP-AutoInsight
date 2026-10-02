@@ -100,16 +100,26 @@ function abcc_get_provider_api_key( $provider ) {
 }
 
 /**
+ * Whether the site allows AI features (WP 7.0+ site-level toggle).
+ *
+ * Background workers have no user to check, so they call this directly.
+ * Always true where wp_supports_ai() does not exist.
+ *
+ * @since 4.5.1
+ * @return bool
+ */
+function abcc_site_ai_enabled() {
+	return ! function_exists( 'wp_supports_ai' ) || wp_supports_ai();
+}
+
+/**
  * Check if the current user has permission to prompt AI.
  *
  * @since 3.6.0
  * @return bool
  */
 function abcc_current_user_can_prompt() {
-	// WP 7.0+ site-level AI toggle. If the site admin has disabled AI at
-	// the WordPress level, plugin features are inactive. On WP 6.9 the
-	// function does not exist, so this check is a no-op.
-	if ( function_exists( 'wp_supports_ai' ) && ! wp_supports_ai() ) {
+	if ( ! abcc_site_ai_enabled() ) {
 		return false;
 	}
 

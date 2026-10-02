@@ -425,6 +425,11 @@ function abcc_handle_audio_transcription() {
 		return;
 	}
 
+	if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	try {
 		// Audio transcription always uses OpenAI Whisper — fetch the OpenAI key directly
 		// regardless of which text generation provider the user has selected.
@@ -507,6 +512,11 @@ function abcc_handle_create_post_from_transcript() {
 
 	if ( ! $attachment_id || empty( $transcript ) ) {
 		wp_send_json_error( array( 'message' => __( 'Missing required data', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
 		return;
 	}
 
@@ -704,6 +714,11 @@ function abcc_handle_audio_generate_post() {
 
 	if ( ! $attachment_id ) {
 		wp_send_json_error( array( 'message' => __( 'Invalid audio attachment.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
 		return;
 	}
 

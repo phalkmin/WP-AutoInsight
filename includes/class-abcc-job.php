@@ -69,7 +69,7 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 	// Generation jobs carry their publication decision from here on; a topic
 	// deleted or a default flipped while the job waits must not change it.
 	if ( empty( $payload['type'] ) ) {
-		$payload = abcc_finalize_payload_post_status( $payload );
+		$payload = abcc_finalize_payload_post_status( $payload, $created_by );
 	}
 
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_QUEUED );
@@ -91,18 +91,20 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 		// Caller (e.g. bulk-generate AJAX) processes the job itself; do not
 		// also schedule a cron worker that could claim it first.
 		abcc_process_generation_job( $job_id );
-	} elseif ( abcc_is_wp_cron_available() ) {
-		wp_schedule_single_event( time(), 'abcc_process_generation_job', array( $job_id ) );
+	} elseif ( abcc_should_defer_job_to_cron() ) {
+		$scheduled = wp_schedule_single_event( time(), 'abcc_process_generation_job', array( $job_id ) );
 
-		// Batch callers (bulk SEO, bulk generate) pass defer_spawn and call
-		// spawn_cron() once after the whole batch is queued. Spawning per job
-		// fires one loopback HTTP request per selected post.
-		if ( empty( $args['defer_spawn'] ) ) {
+		if ( ! $scheduled || is_wp_error( $scheduled ) ) {
+			abcc_append_job_log_note( $job_id, __( 'Background scheduling failed; ran immediately instead.', 'automated-blog-content-creator' ) );
+			abcc_process_generation_job( $job_id );
+		} elseif ( abcc_is_wp_cron_available() && empty( $args['defer_spawn'] ) ) {
+			// Batch callers (bulk SEO, bulk generate) pass defer_spawn and call
+			// spawn_cron() once after the whole batch is queued.
 			spawn_cron();
 		}
 	} else {
-		// WP-Cron is disabled (e.g. managed hosting with external cron). Process inline
-		// so generation still completes — the job record still tracks status normally.
+		// Page-load cron is off and this is an interactive request: nothing
+		// guarantees a cron runner exists, so finish the job now.
 		abcc_process_generation_job( $job_id );
 	}
 
@@ -116,6 +118,20 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
  */
 function abcc_is_wp_cron_available() {
 	return ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON );
+}
+
+/**
+ * Whether a queued job should run as its own cron event.
+ *
+ * Inside a cron request a runner exists even when DISABLE_WP_CRON is set
+ * (external cron hits wp-cron.php), so each job gets its own event instead
+ * of running back-to-back inside the topic sweep.
+ *
+ * @since 4.5.1
+ * @return bool
+ */
+function abcc_should_defer_job_to_cron() {
+	return abcc_is_wp_cron_available() || ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() );
 }
 
 /**
@@ -226,6 +242,12 @@ function abcc_process_generation_job( $job_id ) {
 
 	try {
 		$started = microtime( true );
+
+		// Jobs queued before the site turned AI off must not reach a provider.
+		if ( ! abcc_site_ai_enabled() ) {
+			abcc_mark_job_failed( $job_id, __( 'AI features are turned off for this site.', 'automated-blog-content-creator' ), $started, 'abcc_ai_disabled' );
+			return;
+		}
 
 		// SEO-regen jobs update an existing post in place.
 		// @since 4.3.0

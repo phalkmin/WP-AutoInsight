@@ -1,5 +1,16 @@
 == Full Changelog ==
 
+= 4.5.1 =
+
+**Fixed**
+* When a site administrator turns AI off in WordPress (7.0+), scheduled topics, legacy scheduling and already-queued jobs now stop too. Queued jobs fail with "AI features are turned off for this site" instead of calling a provider; topics resume on their normal schedule when AI is turned back on.
+* Settings migrations now run on every request type, not only on admin page loads. After an automatic update, a scheduled post can no longer run with new defaults before an administrator visits the dashboard.
+* On sites that run WP-Cron from a server cron job (`DISABLE_WP_CRON`), jobs queued by the topic sweep now run as separate background events instead of one after another inside the sweep. If WordPress refuses to schedule a job, it runs immediately and the log says so.
+
+**Security**
+* Scheduled jobs check the post author's publish capability: a topic created by a user who can no longer publish produces a draft.
+* Audio transcription and post-from-audio check that the user can edit the selected audio file.
+
 = 4.5.0 (Gaim) =
 
 **Added**

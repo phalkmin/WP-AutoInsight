@@ -84,6 +84,10 @@ function abcc_get_openai_event_schedule() {
  * @return bool|int Returns post ID on success, false if conditions aren't met or on failure
  */
 function abcc_openai_generate_post_scheduled() {
+	if ( ! abcc_site_ai_enabled() ) {
+		return false;
+	}
+
 	try {
 		// Get required parameters.
 		$tone          = abcc_get_setting( 'openai_tone', 'default' );

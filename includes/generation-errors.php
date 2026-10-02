@@ -165,6 +165,9 @@ function abcc_get_generation_error_next_step( $error, $context = array() ) { // 
 		case 'abcc_provider_http_error':
 		case 'abcc_unknown_provider':
 			return __( 'Pick a different model under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'abcc_ai_disabled':
+			return __( 'A site administrator turned AI off in WordPress settings. Turn it back on to resume generation.', 'automated-blog-content-creator' );
 	}
 
 	return '';

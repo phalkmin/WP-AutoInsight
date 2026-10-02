@@ -70,8 +70,9 @@ class ABCC_Plugin {
 		// Onboarding.
 		add_action( 'admin_init', 'abcc_check_existing_user_on_activation' );
 
-		// Migrations.
-		add_action( 'admin_init', array( $this, 'run_migrations' ) );
+		// Migrations run on init: after an auto-update, cron or WP-CLI can
+		// generate before any admin visit and must not see new defaults.
+		add_action( 'init', array( $this, 'run_migrations' ), 5 );
 
 		// Daily provider health check cron callback registration. The event
 		// itself is scheduled on activation, not on every request.
@@ -82,6 +83,10 @@ class ABCC_Plugin {
 	 * Run database migrations.
 	 */
 	public function run_migrations() {
+		if ( ABCC_VERSION === get_option( 'abcc_version' ) ) {
+			return;
+		}
+
 		abcc_run_settings_migrations();
 	}
 

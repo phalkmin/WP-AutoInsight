@@ -297,6 +297,9 @@ function register_post_type($post_type, $args = array()) { return true; }
 function wp_mail($to, $subject, $message) { return true; }
 $GLOBALS['abcc_test_scheduled_events'] = array();
 function wp_schedule_single_event($timestamp, $hook, $args = array()) {
+	if ( ! empty( $GLOBALS['abcc_test_schedule_fails'] ) ) {
+		return false;
+	}
 	$GLOBALS['abcc_test_scheduled_events'][] = array(
 		'timestamp' => $timestamp,
 		'hook'      => $hook,
@@ -304,6 +307,9 @@ function wp_schedule_single_event($timestamp, $hook, $args = array()) {
 	);
 	return true;
 }
+// Site-level AI toggle (WP 7.0+) and cron context, both driven per test.
+function wp_supports_ai() { return $GLOBALS['abcc_test_ai_supported'] ?? true; }
+function wp_doing_cron() { return ! empty( $GLOBALS['abcc_test_doing_cron'] ); }
 $GLOBALS['abcc_test_spawn_cron_calls'] = 0;
 function spawn_cron() {
 	++$GLOBALS['abcc_test_spawn_cron_calls'];
@@ -756,6 +762,9 @@ function abcc_test_reset_state() {
 		'schedule'  => false,
 	);
 	unset(
+		$GLOBALS['abcc_test_ai_supported'],
+		$GLOBALS['abcc_test_doing_cron'],
+		$GLOBALS['abcc_test_schedule_fails'],
 		$GLOBALS['abcc_test_force_insert_error'],
 		$GLOBALS['abcc_test_force_insert_error_once']
 	);

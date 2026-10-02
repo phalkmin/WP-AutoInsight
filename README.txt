@@ -3,7 +3,7 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.1
-Stable tag: 4.5.0
+Stable tag: 4.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
@@ -245,6 +245,12 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.5.1 =
+* Fixed: turning AI off in WordPress (7.0+) now also stops scheduled topics and queued jobs; they resume when AI is back on.
+* Fixed: after an automatic update, scheduled posts no longer run with new defaults before an administrator visits the dashboard.
+* Fixed: on sites using a server cron job, each scheduled post now runs as its own background job.
+* Security: scheduled posts become drafts when their author can no longer publish; audio tools check that you can edit the selected file.
 
 = 4.5.0 =
 * Provider fallback: pick a second provider under Connections → API Keys. When your primary hits a rate limit, an outage, or a network error, the post is retried once on the fallback and the log says which provider finished it. Invalid keys never fall back.
