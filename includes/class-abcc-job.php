@@ -135,21 +135,33 @@ function abcc_should_defer_job_to_cron() {
 }
 
 /**
- * Fail running jobs that appear abandoned after a crash or timeout.
+ * Fail jobs that appear abandoned: running past a timeout, or queued past
+ * the point where a worker could still be coming.
  *
- * @param int $older_than_seconds Age threshold.
+ * Queued jobs stall when the WP-Cron loopback is blocked. Batch runs
+ * (bulk SEO) legitimately queue hundreds at once, so they get a longer window.
+ *
+ * @param int       $older_than_seconds              Running-job age threshold.
+ * @param int       $queued_older_than_seconds       Queued-job threshold.
+ * @param int       $batch_queued_older_than_seconds Queued threshold for batch jobs (run_id or bulk SEO).
+ * @param bool|null $external_cron                   Whether DISABLE_WP_CRON hands jobs to an
+ *                                                   external cron; null reads the constant.
  * @return int Number of jobs recovered.
  */
-function abcc_recover_stale_running_jobs( $older_than_seconds = 900 ) {
+function abcc_recover_stale_running_jobs( $older_than_seconds = 900, $queued_older_than_seconds = 1800, $batch_queued_older_than_seconds = 10800, $external_cron = null ) {
+	// External cron cadence is unknown (often hourly), so every job gets the batch window.
+	$external_cron = null === $external_cron ? ! abcc_is_wp_cron_available() : (bool) $external_cron;
+
 	$jobs = get_posts(
 		array(
 			'post_type'      => ABCC_Job::POST_TYPE,
 			'post_status'    => 'publish',
 			'posts_per_page' => -1,
-			'meta_query'     => array(
+			'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Bounded hidden CPT.
 				array(
-					'key'   => '_abcc_job_status',
-					'value' => ABCC_Job::STATUS_RUNNING,
+					'key'     => '_abcc_job_status',
+					'value'   => array( ABCC_Job::STATUS_RUNNING, ABCC_Job::STATUS_QUEUED ),
+					'compare' => 'IN',
 				),
 			),
 		)
@@ -160,8 +172,10 @@ function abcc_recover_stale_running_jobs( $older_than_seconds = 900 ) {
 	}
 
 	$recovered = 0;
+	$spawned   = false;
 
 	foreach ( $jobs as $job ) {
+		$status     = get_post_meta( $job->ID, '_abcc_job_status', true );
 		$started_at = get_post_meta( $job->ID, '_abcc_job_started_at', true );
 		$reference  = $started_at ? $started_at : get_post_meta( $job->ID, '_abcc_job_created_at', true );
 
@@ -170,7 +184,44 @@ function abcc_recover_stale_running_jobs( $older_than_seconds = 900 ) {
 		}
 
 		$timestamp = strtotime( get_gmt_from_date( $reference ) );
-		if ( ! $timestamp || ( time() - $timestamp ) <= (int) $older_than_seconds ) {
+		if ( ! $timestamp ) {
+			continue;
+		}
+
+		if ( ABCC_Job::STATUS_QUEUED === $status ) {
+			// Bulk SEO jobs queued before 4.5.2 carry no run_id but are still a batch.
+			$is_batch  = '' !== (string) get_post_meta( $job->ID, '_abcc_job_run_id', true )
+				|| 'seo_regen' === get_post_meta( $job->ID, '_abcc_job_source', true );
+			$threshold = ( $is_batch || $external_cron ) ? (int) $batch_queued_older_than_seconds : (int) $queued_older_than_seconds;
+			if ( ( time() - $timestamp ) <= $threshold ) {
+				continue;
+			}
+			// First sighting re-spawns cron and waits: the request that found the job may be
+			// the one whose loopback is about to run it. Only a job still queued later fails.
+			$seen = (int) get_post_meta( $job->ID, '_abcc_job_stale_seen', true );
+			if ( ! $seen ) {
+				update_post_meta( $job->ID, '_abcc_job_stale_seen', time() );
+				if ( ! $spawned && abcc_is_wp_cron_available() && function_exists( 'spawn_cron' ) ) {
+					$spawned = true;
+					spawn_cron();
+				}
+				continue;
+			}
+			if ( ( time() - $seen ) < 2 * MINUTE_IN_SECONDS ) {
+				continue;
+			}
+			wp_clear_scheduled_hook( 'abcc_process_generation_job', array( $job->ID ) );
+			abcc_mark_job_failed(
+				$job->ID,
+				__( 'This job was queued but never started. The background runner may be disabled or WP-Cron may not be firing.', 'automated-blog-content-creator' ),
+				false,
+				'abcc_job_never_started'
+			);
+			++$recovered;
+			continue;
+		}
+
+		if ( ( time() - $timestamp ) <= (int) $older_than_seconds ) {
 			continue;
 		}
 
@@ -267,6 +318,7 @@ function abcc_process_generation_job( $job_id ) {
 			update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
 			update_post_meta( $job_id, '_abcc_job_result_post_id', $target_post_id );
 			delete_post_meta( $job_id, '_abcc_job_error' );
+			abcc_mark_job_succeeded_for_topic( abcc_get_job_topic_id( $job_id ) );
 			return;
 		}
 
@@ -280,7 +332,7 @@ function abcc_process_generation_job( $job_id ) {
 		$result = abcc_openai_generate_post(
 			$api_key,
 			(array) ( $payload['keywords'] ?? array() ),
-			$payload['model'] ?? abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' ),
+			$payload['model'] ?? abcc_get_setting( 'prompt_select', abcc_get_default_text_model() ),
 			$payload['tone'] ?? abcc_get_setting( 'openai_tone', 'default' ),
 			'scheduled' === ( $payload['source'] ?? '' ),
 			(int) ( $payload['char_limit'] ?? abcc_get_setting( 'openai_char_limit', 200 ) ),
@@ -303,6 +355,7 @@ function abcc_process_generation_job( $job_id ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
 		update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $result );
 		delete_post_meta( $job_id, '_abcc_job_error' );
+		abcc_mark_job_succeeded_for_topic( abcc_get_job_topic_id( $job_id ) );
 	} catch ( Throwable $throwable ) {
 		abcc_debug_log(
 			sprintf(
@@ -337,6 +390,32 @@ function abcc_append_job_log_note( $job_id, $note ) {
 }
 
 /**
+ * Topic a job was queued for, or 0.
+ *
+ * @since 4.5.2
+ * @param int $job_id Job ID.
+ * @return int
+ */
+function abcc_get_job_topic_id( $job_id ) {
+	$payload = get_post_meta( (int) $job_id, '_abcc_job_payload', true );
+	return is_array( $payload ) && ! empty( $payload['topic_id'] ) ? (int) $payload['topic_id'] : 0;
+}
+
+/**
+ * A topic's job finished: clear its failure streak.
+ *
+ * @since 4.5.2
+ * @param int $topic_id Topic ID.
+ * @return void
+ */
+function abcc_mark_job_succeeded_for_topic( $topic_id ) {
+	$topic_id = (int) $topic_id;
+	if ( $topic_id > 0 && function_exists( 'abcc_get_topic' ) && null !== abcc_get_topic( $topic_id ) ) {
+		update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', 0 );
+	}
+}
+
+/**
  * Mark a generation job as failed.
  *
  * @param int         $job_id  Job ID.
@@ -348,23 +427,71 @@ function abcc_append_job_log_note( $job_id, $note ) {
 function abcc_mark_job_failed( $job_id, $message, $started = false, $code = '' ) {
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_FAILED );
 	update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
-	update_post_meta( $job_id, '_abcc_job_error', sanitize_text_field( $message ) );
+	// Provider error text can echo the key; the stored copy is shown in the dashboard.
+	$stored_message = function_exists( 'abcc_redact_secrets' ) ? abcc_redact_secrets( (string) $message ) : (string) $message;
+	update_post_meta( $job_id, '_abcc_job_error', sanitize_text_field( str_replace( array( '→', '←' ), array( '>', '<' ), $stored_message ) ) );
 	update_post_meta( $job_id, '_abcc_job_error_code', sanitize_key( (string) $code ) );
 
 	if ( false !== $started ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( microtime( true ) - $started, 2 ) );
 	}
 
-	if ( 'scheduled' === get_post_meta( $job_id, '_abcc_job_source', true ) && abcc_get_setting( 'openai_email_notifications', false ) ) {
-		wp_mail(
-			get_option( 'admin_email' ),
-			__( 'Scheduled Post Generation Failed', 'automated-blog-content-creator' ),
-			sprintf(
-				/* translators: %s: Error message */
-				__( 'The scheduled post generation failed with error: %s', 'automated-blog-content-creator' ),
-				$message
-			)
+	$source = get_post_meta( $job_id, '_abcc_job_source', true );
+
+	// AI off, a missing key and a runner that never fired are site states, not
+	// the topic failing; they shouldn't burn through its auto-pause budget.
+	$counts_toward_pause = ! in_array( (string) $code, array( 'abcc_ai_disabled', 'abcc_no_api_key', 'abcc_job_never_started' ), true );
+	$topic_id            = abcc_get_job_topic_id( $job_id );
+	if ( $topic_id > 0 && $counts_toward_pause && function_exists( 'abcc_record_topic_failure' ) ) {
+		abcc_record_topic_failure( $topic_id, $message );
+	}
+
+	if ( in_array( $source, array( 'scheduled', 'topic' ), true ) && abcc_get_setting( 'openai_email_notifications', false ) ) {
+		abcc_send_job_failure_email( (string) $source, $topic_id, (string) $code, (string) $message );
+	}
+}
+
+/**
+ * E-mail the admin about a background failure, once per source, topic and code a day.
+ *
+ * A revoked key fails every run; one mail a day says it, 24 say nothing more.
+ *
+ * @since 4.5.2
+ * @param string $source   Job source ('scheduled' or 'topic').
+ * @param int    $topic_id Topic ID, or 0.
+ * @param string $code     Machine error code.
+ * @param string $message  Error message.
+ * @return void
+ */
+function abcc_send_job_failure_email( $source, $topic_id, $code, $message ) {
+	$dedupe_key = 'abcc_fail_mail_' . md5( $source . '|' . (int) $topic_id . '|' . $code );
+	if ( get_transient( $dedupe_key ) ) {
+		return;
+	}
+
+	$subject = __( 'Scheduled Post Generation Failed', 'automated-blog-content-creator' );
+	$topic   = ( 'topic' === $source && $topic_id > 0 && function_exists( 'abcc_get_topic' ) ) ? abcc_get_topic( $topic_id ) : null;
+	if ( ! empty( $topic['title'] ) ) {
+		$subject = sprintf(
+			/* translators: %s: topic name */
+			__( 'Topic post generation failed: %s', 'automated-blog-content-creator' ),
+			$topic['title']
 		);
+	}
+
+	$sent = wp_mail(
+		get_option( 'admin_email' ),
+		$subject,
+		sprintf(
+			/* translators: %s: Error message */
+			__( 'The scheduled post generation failed with error: %s', 'automated-blog-content-creator' ),
+			$message
+		)
+	);
+
+	// A failed send must not silence the next notice for a day.
+	if ( $sent ) {
+		set_transient( $dedupe_key, 1, DAY_IN_SECONDS );
 	}
 }
 
@@ -448,15 +575,27 @@ function abcc_render_job_log_rows( $args = array() ) {
 		);
 	}
 
+	// Non-admins see only the jobs they queued.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		if ( empty( $query_args['meta_query'] ) ) {
+			$query_args['meta_query'] = array();
+		}
+		$query_args['meta_query'][] = array(
+			'key'   => '_abcc_job_created_by',
+			'value' => (string) get_current_user_id(),
+		);
+	}
+
 	$jobs = get_posts( $query_args );
+
+	// Legacy rows list every author's posts, so only administrators get the fallback.
+	if ( empty( $jobs ) && empty( $args['status'] ) && empty( $args['run_id'] ) && current_user_can( 'manage_options' ) ) {
+		return abcc_render_legacy_history_rows( (int) $args['posts_per_page'] );
+	}
 
 	ob_start();
 
 	if ( empty( $jobs ) ) :
-		// No job records yet — fall back to legacy generated posts on unfiltered views.
-		if ( empty( $args['status'] ) && empty( $args['run_id'] ) ) {
-			return abcc_render_legacy_history_rows( (int) $args['posts_per_page'] );
-		}
 		?>
 		<tr>
 			<td colspan="8"><?php esc_html_e( 'No generation jobs found.', 'automated-blog-content-creator' ); ?></td>
@@ -486,7 +625,7 @@ function abcc_render_job_log_rows( $args = array() ) {
 				<td><?php echo esc_html( abcc_get_job_source_label( $source ) ); ?></td>
 				<td><small><?php echo esc_html( $model ? abcc_get_model_display_name( $model ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( ! empty( $keywords ) ? implode( ', ', $keywords ) : 'n/a' ); ?></small></td>
-				<td><small><?php echo esc_html( $template ? $template : 'default' ); ?></small></td>
+				<td><small><?php echo esc_html( abcc_get_content_template_name( $template ? $template : 'default' ) ); ?></small></td>
 				<td><small><?php echo esc_html( $created_at ? get_date_from_gmt( get_gmt_from_date( $created_at ), 'Y-m-d H:i' ) : 'n/a' ); ?></small></td>
 				<td>
 					<?php
@@ -534,14 +673,12 @@ function abcc_render_job_log_rows( $args = array() ) {
 						<button type="button" class="button-link abcc-copy-error" data-error="<?php echo esc_attr( $error_message ); ?>">
 							<?php esc_html_e( 'Copy error', 'automated-blog-content-creator' ); ?>
 						</button>
-						|
-						<?php
-						$subject = rawurlencode( __( 'WP-AutoInsight generation error', 'automated-blog-content-creator' ) );
-						$body    = rawurlencode( $error_message );
-						?>
-						<a href="mailto:phalkmin@protonmail.com?subject=<?php echo esc_attr( $subject ); ?>&body=<?php echo esc_attr( $body ); ?>">
-							<?php esc_html_e( 'Report this error', 'automated-blog-content-creator' ); ?>
-						</a>
+						<?php if ( abcc_should_offer_error_report( (string) get_post_meta( $job->ID, '_abcc_job_error_code', true ) ) ) : ?>
+							|
+							<a href="https://wordpress.org/support/plugin/automated-blog-content-creator/" target="_blank" rel="noopener noreferrer">
+								<?php esc_html_e( 'Report on the support forum', 'automated-blog-content-creator' ); ?>
+							</a>
+						<?php endif; ?>
 					<?php else : ?>
 						&mdash;
 					<?php endif; ?>
@@ -643,13 +780,43 @@ function abcc_render_legacy_history_rows( $limit = 10 ) {
 }
 
 /**
+ * Whether a user may read a job's status and log entry.
+ *
+ * Cron-created jobs carry the topic author or the scheduled-post author as
+ * created_by; administrators see every job.
+ *
+ * @since 4.5.2
+ * @param int $job_id  Job post ID.
+ * @param int $user_id Optional. 0 means the current user.
+ * @return bool
+ */
+function abcc_user_can_view_job( $job_id, $user_id = 0 ) {
+	$job_id  = absint( $job_id );
+	$user_id = $user_id > 0 ? (int) $user_id : get_current_user_id();
+
+	if ( ! $job_id || ABCC_Job::POST_TYPE !== get_post_type( $job_id ) ) {
+		return false;
+	}
+
+	if ( user_can( $user_id, 'manage_options' ) ) {
+		return true;
+	}
+
+	return $user_id > 0 && (int) get_post_meta( $job_id, '_abcc_job_created_by', true ) === $user_id;
+}
+
+/**
  * Return job data for AJAX polling.
  *
  * @param int $job_id Job ID.
  * @return array|null
  */
 function abcc_get_job_data( $job_id ) {
-	abcc_recover_stale_running_jobs();
+	// Pollers call this every second; one recovery sweep a minute is plenty.
+	if ( false === get_transient( 'abcc_job_recovery_ran' ) ) {
+		set_transient( 'abcc_job_recovery_ran', 1, MINUTE_IN_SECONDS );
+		abcc_recover_stale_running_jobs();
+	}
 
 	$job_id = absint( $job_id );
 
@@ -668,6 +835,6 @@ function abcc_get_job_data( $job_id ) {
 		'nextStep'    => abcc_get_generation_error_next_step( (string) get_post_meta( $job_id, '_abcc_job_error_code', true ) ),
 		'notes'       => is_array( $job_notes ) ? $job_notes : array(),
 		'post_id'     => $result_post_id,
-		'edit_url'    => $result_post_id ? get_edit_post_link( $result_post_id, 'raw' ) : '',
+		'edit_url'    => $result_post_id && current_user_can( 'edit_post', $result_post_id ) ? get_edit_post_link( $result_post_id, 'raw' ) : '',
 	);
 }

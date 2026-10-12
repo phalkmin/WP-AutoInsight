@@ -35,7 +35,7 @@ function abcc_run_seo_regen( $post_id, $model = '' ) {
 		);
 	}
 
-	$model   = ( '' !== $model ) ? $model : abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$model   = ( '' !== $model ) ? $model : abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 	$api_key = abcc_check_api_key( $model );
 	if ( empty( $api_key ) ) {
 		return new WP_Error(
@@ -65,10 +65,8 @@ function abcc_run_seo_regen( $post_id, $model = '' ) {
 	try {
 		$seo = abcc_generate_title_and_seo( $api_key, $keywords, $model, $site_info );
 	} catch ( Exception $e ) {
-		return new WP_Error(
-			'abcc_seo_regen_failed',
-			__( 'SEO generation failed.', 'automated-blog-content-creator' )
-		);
+		// abcc_generate_title_and_seo() already formats the message through abcc_format_generation_error().
+		return new WP_Error( 'abcc_seo_regen_failed', $e->getMessage() );
 	}
 
 	if ( empty( $seo ) || empty( $seo['seo_data'] ) ) {

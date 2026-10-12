@@ -147,7 +147,26 @@ function abcc_validate_topic_args( $args, $partial = false ) {
 	}
 
 	if ( isset( $args['provider_override'] ) ) {
-		$clean['provider_override'] = sanitize_text_field( $args['provider_override'] );
+		$override_model = sanitize_text_field( $args['provider_override'] );
+		if ( '' !== $override_model && ! abcc_is_valid_text_model( $override_model ) ) {
+			return new WP_Error( 'abcc_topic_invalid_model', __( 'That model is not available. Pick one from the list.', 'automated-blog-content-creator' ) );
+		}
+		$clean['provider_override'] = $override_model;
+	}
+
+	if ( isset( $args['keywords'] ) ) {
+		$raw_keywords      = is_array( $args['keywords'] ) ? $args['keywords'] : preg_split( '/\r?\n/', (string) $args['keywords'] );
+		$clean['keywords'] = array_values(
+			array_filter(
+				array_map(
+					static function ( $keyword ) {
+						return sanitize_text_field( trim( (string) $keyword ) );
+					},
+					(array) $raw_keywords
+				),
+				'strlen'
+			)
+		);
 	}
 
 	if ( isset( $args['target_post_type'] ) ) {
@@ -196,6 +215,7 @@ function abcc_create_topic( $args ) {
 	update_post_meta( $topic_id, '_abcc_topic_frequency', $clean['frequency'] );
 	update_post_meta( $topic_id, '_abcc_topic_post_status_override', $clean['post_status_override'] ?? '' );
 	update_post_meta( $topic_id, '_abcc_topic_provider_override', $clean['provider_override'] ?? '' );
+	update_post_meta( $topic_id, '_abcc_topic_keywords', $clean['keywords'] ?? array() );
 	update_post_meta( $topic_id, '_abcc_topic_target_post_type', $clean['target_post_type'] ?? 'post' );
 	update_post_meta( $topic_id, '_abcc_topic_author_id', isset( $clean['author_id'] ) ? $clean['author_id'] : get_current_user_id() );
 	update_post_meta( $topic_id, '_abcc_topic_last_run', 0 );
@@ -251,6 +271,7 @@ function abcc_update_topic( $topic_id, $args ) {
 	$meta_map = array(
 		'post_status_override' => '_abcc_topic_post_status_override',
 		'provider_override'    => '_abcc_topic_provider_override',
+		'keywords'             => '_abcc_topic_keywords',
 		'target_post_type'     => '_abcc_topic_target_post_type',
 		'author_id'            => '_abcc_topic_author_id',
 	);
@@ -367,6 +388,7 @@ function abcc_get_topic( $topic_id ) {
 		'frequency'            => get_post_meta( $topic_id, '_abcc_topic_frequency', true ),
 		'post_status_override' => get_post_meta( $topic_id, '_abcc_topic_post_status_override', true ),
 		'provider_override'    => get_post_meta( $topic_id, '_abcc_topic_provider_override', true ),
+		'keywords'             => array_values( array_filter( (array) get_post_meta( $topic_id, '_abcc_topic_keywords', true ), 'strlen' ) ),
 		'target_post_type'     => get_post_meta( $topic_id, '_abcc_topic_target_post_type', true ),
 		'author_id'            => (int) get_post_meta( $topic_id, '_abcc_topic_author_id', true ),
 		'last_run'             => (int) get_post_meta( $topic_id, '_abcc_topic_last_run', true ),
@@ -394,14 +416,14 @@ function abcc_queue_topic_generation( $topic_id ) {
 	}
 
 	$payload_args = array(
-		'keywords'  => array( $topic['title'] ),
+		'keywords'  => ! empty( $topic['keywords'] ) ? $topic['keywords'] : array( $topic['title'] ),
 		'prompt'    => $topic['prompt'],
 		'topic_id'  => $topic['id'],
 		'post_type' => $topic['target_post_type'] ? $topic['target_post_type'] : 'post',
 		'source'    => 'topic',
 	);
 
-	if ( ! empty( $topic['provider_override'] ) ) {
+	if ( ! empty( $topic['provider_override'] ) && abcc_is_valid_text_model( $topic['provider_override'] ) ) {
 		$payload_args['model'] = $topic['provider_override'];
 	}
 
@@ -476,7 +498,6 @@ function abcc_run_topic_schedules( $now = 0 ) {
 			update_post_meta( $topic_id, '_abcc_topic_last_run', $now );
 			update_post_meta( $topic_id, '_abcc_topic_next_run', abcc_calculate_next_run( $frequency, $now ) );
 			update_post_meta( $topic_id, '_abcc_topic_last_job_id', (int) $job_id );
-			update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', 0 );
 			++$queued;
 		} catch ( Throwable $throwable ) {
 			abcc_record_topic_failure( $topic_id, $throwable->getMessage() );
@@ -488,7 +509,7 @@ function abcc_run_topic_schedules( $now = 0 ) {
 add_action( 'abcc_run_topic_schedules', 'abcc_run_topic_schedules' );
 
 /**
- * Record a topic queue failure; auto-pause after 5 consecutive failures.
+ * Record a topic failure (queue or job); auto-pause after 5 consecutive failures.
  *
  * next_run is intentionally left unchanged so the next sweep retries.
  *
@@ -498,7 +519,13 @@ add_action( 'abcc_run_topic_schedules', 'abcc_run_topic_schedules' );
  * @return void
  */
 function abcc_record_topic_failure( $topic_id, $message ) {
-	error_log( sprintf( 'ABCC Topic [ID %d]: %s', $topic_id, $message ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Cron context; failures must reach the server log.
+	$log_message = function_exists( 'abcc_redact_secrets' ) ? abcc_redact_secrets( $message ) : $message;
+	error_log( sprintf( 'ABCC Topic [ID %d]: %s', $topic_id, $log_message ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Cron context; failures must reach the server log.
+
+	// A job can outlive its topic; a deleted topic gets no orphan meta.
+	if ( null === abcc_get_topic( $topic_id ) ) {
+		return;
+	}
 
 	$failures = (int) get_post_meta( $topic_id, '_abcc_topic_consecutive_failures', true ) + 1;
 	update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', $failures );
@@ -585,4 +612,42 @@ function abcc_get_topics( $args = array() ) {
 	}
 
 	return $topics;
+}
+
+/**
+ * Earliest upcoming run among active topics.
+ *
+ * @since 4.5.2
+ * @return array|null { topic_id, title, next_run } or null.
+ */
+function abcc_get_next_topic_run() {
+	$next = null;
+	foreach ( abcc_get_topics( array( 'post_status' => 'publish' ) ) as $topic ) {
+		if ( empty( $topic['active'] ) || empty( $topic['next_run'] ) ) {
+			continue;
+		}
+		if ( null === $next || (int) $topic['next_run'] < $next['next_run'] ) {
+			$next = array(
+				'topic_id' => (int) $topic['id'],
+				'title'    => (string) $topic['title'],
+				'next_run' => (int) $topic['next_run'],
+			);
+		}
+	}
+	return $next;
+}
+
+/**
+ * Whether a due topic has waited longer than one sweep cycle.
+ *
+ * The sweep is hourly, so a topic is due for up to an hour before it runs.
+ *
+ * @since 4.5.2
+ * @param int $next_run Topic next_run timestamp.
+ * @param int $now      Current timestamp; 0 means now.
+ * @return bool
+ */
+function abcc_topic_run_is_overdue( $next_run, $now = 0 ) {
+	$now = $now > 0 ? (int) $now : time();
+	return ( $now - (int) $next_run ) > ( HOUR_IN_SECONDS + 5 * MINUTE_IN_SECONDS );
 }

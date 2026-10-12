@@ -67,6 +67,46 @@ $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group
 	</details>
 	<?php
 };
+
+/**
+ * Render one keyword group; also feeds the JS "Add group" template.
+ *
+ * @param string $index_attr Index (or "__INDEX__" for the JS template).
+ * @param array  $group      Group data.
+ * @return void
+ */
+$abcc_render_group = function ( $index_attr, $group ) use ( $content_templates, $abcc_render_group_advanced ) {
+	?>
+		<div class="abcc-group-item" data-index="<?php echo esc_attr( $index_attr ); ?>">
+			<div class="abcc-group-header">
+				<input type="text" name="abcc_group_name[<?php echo esc_attr( $index_attr ); ?>]" value="<?php echo esc_attr( $group['name'] ?? '' ); ?>" class="abcc-group-name-input" placeholder="<?php esc_attr_e( 'Group Name', 'automated-blog-content-creator' ); ?>">
+				<span class="abcc-remove-item abcc-remove-group" title="<?php esc_attr_e( 'Remove Group', 'automated-blog-content-creator' ); ?>">&times; <?php esc_html_e( 'Remove', 'automated-blog-content-creator' ); ?></span>
+			</div>
+			<div class="abcc-group-body">
+				<div class="abcc-group-keywords">
+					<label class="abcc-field-label"><?php esc_html_e( 'Keywords (one per line)', 'automated-blog-content-creator' ); ?></label>
+					<textarea name="abcc_group_keywords[<?php echo esc_attr( $index_attr ); ?>]" rows="4" class="large-text"><?php echo esc_textarea( implode( "\n", (array) ( $group['keywords'] ?? array() ) ) ); ?></textarea>
+					<p class="description"><?php esc_html_e( 'One keyword from this group is picked at random for each generated post. Use {keyword} in your template to insert the chosen keyword, or {keywords} for the full comma-separated list.', 'automated-blog-content-creator' ); ?></p>
+				</div>
+				<div class="abcc-group-category">
+					<label class="abcc-field-label"><?php esc_html_e( 'Target Category', 'automated-blog-content-creator' ); ?></label>
+					<?php abcc_category_dropdown_single( $group['category'] ?? 0, "abcc_group_category[$index_attr]" ); ?>
+				</div>
+				<div class="abcc-group-template">
+					<label class="abcc-field-label"><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></label>
+					<select name="abcc_group_template[<?php echo esc_attr( $index_attr ); ?>]">
+						<?php foreach ( $content_templates as $tpl_slug => $tpl ) : ?>
+							<option value="<?php echo esc_attr( $tpl_slug ); ?>" <?php selected( $group['template'] ?? 'default', $tpl_slug ); ?>>
+								<?php echo esc_html( $tpl['name'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+				<?php $abcc_render_group_advanced( $index_attr, $group ); ?>
+			</div>
+		</div>
+	<?php
+};
 ?>
 <div class="tab-pane active">
 	<form method="post" action="">
@@ -81,38 +121,11 @@ $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group
 		<div id="abcc-keyword-groups-container" class="abcc-groups-container">
 			<?php if ( ! empty( $keyword_groups ) ) : ?>
 				<?php foreach ( $keyword_groups as $index => $group ) : ?>
-					<div class="abcc-group-item" data-index="<?php echo esc_attr( $index ); ?>">
-						<div class="abcc-group-header">
-							<input type="text" name="abcc_group_name[<?php echo esc_attr( $index ); ?>]" value="<?php echo esc_attr( $group['name'] ); ?>" class="abcc-group-name-input" placeholder="<?php esc_attr_e( 'Group Name', 'automated-blog-content-creator' ); ?>">
-							<span class="abcc-remove-item abcc-remove-group" title="<?php esc_attr_e( 'Remove Group', 'automated-blog-content-creator' ); ?>">&times; <?php esc_html_e( 'Remove', 'automated-blog-content-creator' ); ?></span>
-						</div>
-						<div class="abcc-group-body">
-							<div class="abcc-group-keywords">
-								<label class="abcc-field-label"><?php esc_html_e( 'Keywords (one per line)', 'automated-blog-content-creator' ); ?></label>
-								<textarea name="abcc_group_keywords[<?php echo esc_attr( $index ); ?>]" rows="4" class="large-text"><?php echo esc_textarea( implode( "\n", (array) $group['keywords'] ) ); ?></textarea>
-								<p class="description"><?php esc_html_e( 'One keyword from this group is picked at random for each generated post. Use {keyword} in your template to insert the chosen keyword, or {keywords} for the full comma-separated list.', 'automated-blog-content-creator' ); ?></p>
-							</div>
-							<div class="abcc-group-category">
-								<label class="abcc-field-label"><?php esc_html_e( 'Target Category', 'automated-blog-content-creator' ); ?></label>
-								<?php abcc_category_dropdown_single( $group['category'] ?? 0, "abcc_group_category[$index]" ); ?>
-							</div>
-							<div class="abcc-group-template">
-								<label class="abcc-field-label"><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></label>
-								<select name="abcc_group_template[<?php echo esc_attr( $index ); ?>]">
-									<?php foreach ( $content_templates as $tpl_slug => $tpl ) : ?>
-										<option value="<?php echo esc_attr( $tpl_slug ); ?>" <?php selected( $group['template'] ?? 'default', $tpl_slug ); ?>>
-											<?php echo esc_html( $tpl['name'] ); ?>
-										</option>
-									<?php endforeach; ?>
-								</select>
-							</div>
-							<?php $abcc_render_group_advanced( (string) $index, (array) $group ); ?>
-						</div>
-					</div>
+					<?php $abcc_render_group( (string) $index, (array) $group ); ?>
 				<?php endforeach; ?>
 			<?php endif; ?>
 		</div>
-		<template id="abcc-group-advanced-template"><?php $abcc_render_group_advanced( '__INDEX__', array() ); ?></template>
+		<template id="abcc-group-template"><?php $abcc_render_group( '__INDEX__', array() ); ?></template>
 
 		<button type="button" id="abcc-add-group" class="button">
 			<?php esc_html_e( '+ Add Group', 'automated-blog-content-creator' ); ?>
@@ -169,7 +182,7 @@ $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group
 						<option value="custom" <?php selected( $tone, 'custom' ); ?>><?php esc_html_e( 'Custom…', 'automated-blog-content-creator' ); ?></option>
 					</select>
 					<div id="abcc-custom-tone-wrapper" class="abcc-mt-8"<?php echo 'custom' !== $tone ? ' style="display:none;"' : ''; ?>>
-						<input type="text" id="custom_tone" name="custom_tone" value="<?php echo esc_attr( $custom_tone_value ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'Describe your tone…', 'automated-blog-content-creator' ); ?>">
+						<input type="text" id="custom_tone" name="custom_tone" data-autosave-key="custom_tone" value="<?php echo esc_attr( $custom_tone_value ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'Describe your tone…', 'automated-blog-content-creator' ); ?>">
 					</div>
 				</td>
 			</tr>

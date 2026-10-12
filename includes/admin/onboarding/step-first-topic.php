@@ -57,7 +57,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</div>
 
 			<div class="abcc-step-actions">
-				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-3"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
+				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-3"><?php esc_html_e( 'Skip setup', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-secondary abcc-prev-step" data-goto="2"><?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-primary abcc-next-step" data-step="3" data-goto="4"><?php esc_html_e( 'Continue', 'automated-blog-content-creator' ); ?></button>
 			</div>

@@ -15,9 +15,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return void
  */
 function abcc_test_reset_topic_store() {
-	$GLOBALS['abcc_test_posts']      = array();
-	$GLOBALS['abcc_test_post_meta']  = array();
-	$GLOBALS['abcc_test_post_types'] = array();
+	$GLOBALS['abcc_test_posts']                             = array();
+	$GLOBALS['abcc_test_post_meta']                         = array();
+	$GLOBALS['abcc_test_post_types']                        = array();
 	$GLOBALS['abcc_test_options']['abcc_topics_last_sweep'] = 0;
 	unset( $GLOBALS['abcc_test_options']['abcc_topics_auto_paused'] );
 }
@@ -152,7 +152,7 @@ abcc_test(
 		$second_id = abcc_test_make_due_topic( $now - 10, 'Second (succeeds)' );
 
 		$GLOBALS['abcc_test_force_insert_error_once'] = true;
-		$queued = abcc_run_topic_schedules( $now );
+		$queued                                       = abcc_run_topic_schedules( $now );
 		unset( $GLOBALS['abcc_test_force_insert_error_once'] );
 
 		abcc_assert_same( 1, $queued, 'The healthy topic must still queue.' );
@@ -184,7 +184,7 @@ abcc_test(
 );
 
 abcc_test(
-	'run-now AJAX handler clears the consecutive-failure counter on success',
+	'run-now AJAX handler queues the job and records the run without touching the failure streak',
 	function () {
 		if ( ! function_exists( 'abcc_handle_topic_run_now' ) ) {
 			require dirname( __DIR__ ) . '/includes/ajax-handlers.php';
@@ -203,10 +203,10 @@ abcc_test(
 		$_POST = array();
 
 		abcc_assert_true( ! empty( $GLOBALS['abcc_test_last_json']['success'] ), 'Run-now must succeed.' );
-		abcc_assert_same(
-			0,
-			abcc_get_topic( $topic_id )['consecutive_failures'],
-			'A successful manual run must reset the auto-pause counter.'
-		);
+		abcc_assert_same( 4, abcc_get_topic( $topic_id )['consecutive_failures'], 'Queueing is not success; the streak waits for the job outcome.' );
+		abcc_assert_true( (int) get_post_meta( $topic_id, '_abcc_topic_last_run', true ) > 0, 'A manual run counts as the last run.' );
+
+		abcc_mark_job_succeeded_for_topic( $topic_id );
+		abcc_assert_same( 0, abcc_get_topic( $topic_id )['consecutive_failures'], 'The succeeded job resets the streak.' );
 	}
 );

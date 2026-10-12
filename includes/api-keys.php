@@ -31,6 +31,22 @@ function abcc_get_model_provider( $model = '' ) {
 }
 
 /**
+ * Admin URL of the WordPress Connectors screen.
+ *
+ * Core serves it at options-connectors.php; earlier builds used a Settings submenu page.
+ *
+ * @since 4.5.2
+ * @return string
+ */
+function abcc_get_connectors_url() {
+	if ( file_exists( ABSPATH . 'wp-admin/options-connectors.php' ) ) {
+		return admin_url( 'options-connectors.php' );
+	}
+
+	return admin_url( 'options-general.php?page=ai-connectors' );
+}
+
+/**
  * Retrieve a credential from WordPress 7.0 Connectors if available.
  *
  * Uses the Connectors API public functions and follows WP's documented
@@ -309,4 +325,41 @@ function abcc_determine_image_service( $text_model ) {
 		'service' => null,
 		'api_key' => null,
 	);
+}
+
+/**
+ * Mask API keys before a message reaches the server log.
+ *
+ * Provider error bodies echo the offending key; one choke point here covers
+ * every call site.
+ *
+ * @since 4.5.2
+ * @param string $message Log message.
+ * @return string
+ */
+function abcc_redact_secrets( $message ) {
+	$message = (string) $message;
+
+	// Keys this site actually has.
+	if ( function_exists( 'abcc_get_provider_ids' ) && function_exists( 'abcc_get_provider_api_key' ) ) {
+		foreach ( abcc_get_provider_ids() as $provider_id ) {
+			$key = (string) abcc_get_provider_api_key( $provider_id );
+			if ( strlen( $key ) >= 8 ) {
+				$message = str_replace( $key, '[redacted]', $message );
+			}
+		}
+	}
+
+	// Common key shapes, in case a body echoes a key that isn't ours.
+	$patterns = array(
+		'/(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_\-]{8,}/',
+		'/(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{8,}/',
+		'/(?<![A-Za-z0-9])AIza[0-9A-Za-z_\-]{20,}/',
+		'/(?<![A-Za-z0-9])pplx-[A-Za-z0-9]{8,}/',
+		'/(?<![A-Za-z0-9])(Bearer\s+)[A-Za-z0-9._~+\/\-]{8,}=*/i',
+		'/(?<![A-Za-z0-9])(key=)[^&\s"\']+/',
+	);
+	$replace  = array( '[redacted]', '[redacted]', '[redacted]', '[redacted]', '$1[redacted]', '$1[redacted]' );
+
+	return (string) preg_replace( $patterns, $replace, $message );
 }

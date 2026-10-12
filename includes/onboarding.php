@@ -63,27 +63,49 @@ function abcc_show_onboarding_page() {
 	wp_enqueue_style( 'abcc-onboarding-styles', plugins_url( '/css/onboarding.css', __DIR__ ), array(), ABCC_VERSION );
 	wp_enqueue_script( 'abcc-onboarding-scripts', plugins_url( '/js/onboarding.js', __DIR__ ), array( 'jquery', 'abcc-ui-script' ), ABCC_VERSION, true );
 
-		wp_localize_script(
-			'abcc-onboarding-scripts',
-			'abccOnboarding',
-			array(
-				'ajaxurl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'abcc_onboarding' ),
-				'i18n'    => array(
-					'testing'      => __( 'Testing connection...', 'automated-blog-content-creator' ),
-					'success'      => __( 'Connection successful!', 'automated-blog-content-creator' ),
-					'error'        => __( 'Connection failed. Please check your API key.', 'automated-blog-content-creator' ),
-					'generating'   => __( 'Generating your first post...', 'automated-blog-content-creator' ),
-					'welcome'      => __( 'Welcome to WP-AutoInsight!', 'automated-blog-content-creator' ),
-					/* translators: %s: Comma-separated list of connected AI providers. */
-					'connectedVia' => __( 'Connected via WordPress Connectors: %s', 'automated-blog-content-creator' ),
-					'confirmSkip'  => __( 'Are you sure you want to skip the setup? You can always configure WP-AutoInsight later in the settings.', 'automated-blog-content-creator' ),
-				),
-			)
-		);
+	// Provider IDs only; key values never reach the page.
+	$configured_providers = array();
+	foreach ( abcc_get_provider_ids() as $provider_id ) {
+		if ( ! empty( abcc_get_provider_api_key( $provider_id ) ) ) {
+			$configured_providers[] = $provider_id;
+		}
+	}
+
+	wp_localize_script(
+		'abcc-onboarding-scripts',
+		'abccOnboarding',
+		array(
+			'ajaxurl'             => admin_url( 'admin-ajax.php' ),
+			'nonce'               => wp_create_nonce( 'abcc_onboarding' ),
+			'configuredProviders' => $configured_providers,
+			'providerNames'       => wp_list_pluck( abcc_get_provider_registry(), 'name' ),
+			'i18n'                => array(
+				'testing'          => __( 'Testing connection...', 'automated-blog-content-creator' ),
+				'success'          => __( 'Connection successful!', 'automated-blog-content-creator' ),
+				'error'            => __( 'Connection failed. Please check your API key.', 'automated-blog-content-creator' ),
+				'keySaved'         => __( 'Key already saved', 'automated-blog-content-creator' ),
+				'enterKey'         => __( 'Please enter an API key', 'automated-blog-content-creator' ),
+				'test'             => __( 'Test', 'automated-blog-content-creator' ),
+				'testConnection'   => __( 'Test Connection', 'automated-blog-content-creator' ),
+				'finishing'        => __( 'Finishing...', 'automated-blog-content-creator' ),
+				'finish'           => __( 'Finish setup', 'automated-blog-content-creator' ),
+				'saveFailed'       => __( 'Could not save your choice. Please try again.', 'automated-blog-content-creator' ),
+				'topicFailed'      => __( 'Could not create the topic. Please try again.', 'automated-blog-content-creator' ),
+				'networkError'     => __( 'Network error. Please try again.', 'automated-blog-content-creator' ),
+				'leaveWarning'     => __( 'Are you sure you want to leave? Your onboarding progress will be lost.', 'automated-blog-content-creator' ),
+				/* translators: %s: Comma-separated list of connected AI providers. */
+				'connectedVia'     => __( 'Connected via WordPress Connectors: %s', 'automated-blog-content-creator' ),
+				'confirmSkip'      => __( 'Are you sure you want to skip the setup? You can always configure WP-AutoInsight later in the settings.', 'automated-blog-content-creator' ),
+				'connectorsActive' => __( '✓ Connectors Active', 'automated-blog-content-creator' ),
+				'copyKey'          => __( 'Copy API key', 'automated-blog-content-creator' ),
+			),
+		)
+	);
 
 	?>
 	<div class="wrap abcc-onboarding-wrap">
+		<?php // core common.js moves admin notices after the first .wrap h1 unless this marker exists, which lands them in the white-on-gradient header. ?>
+		<hr class="wp-header-end">
 		<div class="abcc-onboarding-container">
 			<!-- Header -->
 			<div class="abcc-onboarding-header">
@@ -221,28 +243,42 @@ function abcc_handle_onboarding_test_api() {
 
 	if ( empty( $api_key ) ) {
 		wp_send_json_error( array( 'message' => __( 'API key is required', 'automated-blog-content-creator' ) ) );
+		return;
 	}
 
 	$test_result = abcc_test_provider_connection( $provider, $api_key );
+	// A typed key is only a candidate until it passes; its failures must not mark a working key.
 	if ( is_wp_error( $test_result ) ) {
+		if ( $is_wp_config ) {
+			abcc_record_provider_validation( $provider, false, $test_result->get_error_message() );
+		}
 		wp_send_json_error( array( 'message' => $test_result->get_error_message() ) );
+		return;
 	}
 
-	if ( $test_result['success'] ) {
-		// Save the API key only if it's not from wp-config and provider is a known valid value.
-		if ( ! $is_wp_config && in_array( $provider, abcc_get_provider_ids(), true ) ) {
-			abcc_set_provider_saved_api_key( $provider, $api_key );
+	if ( empty( $test_result['success'] ) ) {
+		if ( $is_wp_config ) {
+			abcc_record_provider_validation( $provider, false, (string) ( $test_result['error'] ?? '' ) );
 		}
-
-		$first_model = abcc_get_provider_default_model( $provider );
-		if ( ! empty( $first_model ) ) {
-			abcc_update_setting( 'prompt_select', $first_model );
-		}
-
-		wp_send_json_success( array( 'message' => __( 'Connection successful!', 'automated-blog-content-creator' ) ) );
-	} else {
 		wp_send_json_error( array( 'message' => $test_result['error'] ) );
+		return;
 	}
+
+	abcc_record_provider_validation( $provider, true );
+
+	// Save the API key only if it's not from wp-config and provider is a known valid value.
+	if ( ! $is_wp_config && in_array( $provider, abcc_get_provider_ids(), true ) ) {
+		abcc_set_provider_saved_api_key( $provider, $api_key );
+	}
+
+	// Keep a model the site can already use; restart auto-tests wp-config keys.
+	$current_provider = abcc_get_provider_for_model( abcc_get_setting( 'prompt_select' ) );
+	$first_model      = abcc_get_provider_default_model( $provider );
+	if ( ! empty( $first_model ) && empty( abcc_get_provider_api_key( $current_provider ) ) ) {
+		abcc_update_setting( 'prompt_select', $first_model );
+	}
+
+	wp_send_json_success( array( 'message' => __( 'Connection successful!', 'automated-blog-content-creator' ) ) );
 }
 add_action( 'wp_ajax_abcc_onboarding_test_api', 'abcc_handle_onboarding_test_api' );
 
@@ -373,7 +409,7 @@ function abcc_test_openai_connection( $api_key ) {
 				),
 			),
 			array(
-				'model'      => 'gpt-4.1-mini',
+				'model'      => abcc_get_provider_connection_test_model( 'openai' ),
 				'max_tokens' => 5,
 			)
 		);
@@ -422,7 +458,7 @@ function abcc_test_claude_connection( $api_key ) {
 		);
 
 		$body = array(
-			'model'      => 'claude-haiku-4-5-20251001',
+			'model'      => abcc_get_provider_connection_test_model( 'claude' ),
 			'max_tokens' => 5,
 			'messages'   => array(
 				array(
@@ -501,7 +537,7 @@ function abcc_test_claude_connection( $api_key ) {
  * @return mixed Whether the connection test succeeded.
  */
 function abcc_test_gemini_connection( $api_key ) {
-	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+	$url      = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( abcc_get_provider_connection_test_model( 'gemini' ) ) . ':generateContent';
 	$response = wp_remote_post(
 		$url,
 		array(
@@ -590,7 +626,7 @@ function abcc_test_perplexity_connection( $api_key ) {
 				),
 				'body'    => wp_json_encode(
 					array(
-						'model'      => 'sonar',
+						'model'      => abcc_get_provider_connection_test_model( 'perplexity' ),
 						'max_tokens' => 5,
 						'messages'   => array(
 							array(

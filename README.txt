@@ -3,10 +3,12 @@ Contributors: phalkmin
 Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.1
-Stable tag: 4.5.1
+Requires PHP: 7.4
+Stable tag: 4.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Short Description: Publish AI-written content directly from WordPress, using your own OpenAI, Claude, Gemini, or Perplexity keys. No subscriptions. No surprises. You pay for exactly what you get.
+
+Writes posts on a schedule with your own OpenAI, Claude, Gemini or Perplexity keys, adds images and SEO metadata, and saves drafts for review.
 
 
 == Description ==
@@ -189,11 +191,11 @@ You can configure which post types show AI tools:
 
 = How secure are my API keys? =
 
-WP-AutoInsight prioritizes security:
-- Store API keys in wp-config.php for maximum security
-- Database storage is encrypted
-- Keys are never logged or transmitted unnecessarily
-- Use secure HTTPS connections for all API calls
+WP-AutoInsight keeps keys out of the places they usually leak:
+- Store API keys in wp-config.php (or WordPress Connectors on WordPress 7.x) so they never sit in the database; the Connections tab shows which source is in use
+- Keys saved through the settings screen are stored as plain WordPress options, like most plugins do; treat database backups accordingly
+- Keys are redacted from the debug log and never rendered back into the settings form
+- Every provider call uses HTTPS
 
 = What's the difference between the AI models? =
 
@@ -245,6 +247,21 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.5.2 =
+* Fixed: the setup wizard was stuck on an empty screen for new installs and on "Restart setup wizard" (broken since 4.3). The first step shows again, and providers with a saved key are recognized on restart.
+* Fixed: admin notices no longer show up as unreadable white text inside the wizard header.
+* Fixed: going back to the Topic step after creating a topic no longer leaves Continue disabled; restarting the wizard no longer resets your chosen model.
+* Fixed: "Manage at Settings → Connectors" links now open the WordPress 7.1 Connectors screen.
+* Fixed: the dashboard Composer could publish a post with Draft selected; its fields now show exactly what runs.
+* Fixed: Rewrite with AI no longer saves on the server or produces code fences and model notes; the result lands in the editor for you to review, save or undo.
+* Fixed: provider health now updates from the wizard test, the daily check and real generations; Validate works for wp-config and Connectors keys.
+* Fixed: Gemini 2.5 posts failing on hidden thinking tokens; Perplexity reasoning leaking into posts; code samples and lists flattened into paragraphs.
+* Fixed: featured-image alt text without an SEO plugin, visible image failure reasons, infographics attached without a loopback request and without replacing the featured image.
+* Fixed: topics gain optional focus keywords and local-time dates; auto-pause counts real failures; stuck "Queued" jobs are failed with a WP-Cron hint; bulk stops after a key error.
+* Fixed: restarting the wizard kept Publish; Reset keeps API keys; many copy, i18n and accessibility fixes.
+* Security: job status scoped to the creator; API keys redacted from debug logs.
+* Fixed: regressions found in the 2026-10-10 hunt, before the tag: bulk SEO jobs wrongly failed as stale, a false "WP-Cron has not fired" dashboard warning, three content-converter cases that lost text, health writes from typed keys, and a dozen smaller fixes.
 
 = 4.5.1 =
 * Fixed: turning AI off in WordPress (7.0+) now also stops scheduled topics and queued jobs; they resume when AI is back on.

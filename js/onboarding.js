@@ -12,6 +12,7 @@
 jQuery(document).ready(function ($) {
   var currentStep = 1;
   var connectedProvider = null;
+  var createdTopicSignature = null;
 
   // Collect numbered steps (exclude success screen).
   var $steps = $('.abcc-onboarding-step').not('.abcc-step-success');
@@ -21,8 +22,10 @@ jQuery(document).ready(function ($) {
   initOnboarding();
 
   function initOnboarding() {
+    updateStepDisplay();
     updateProgressBar();
     bindEvents();
+    markConfiguredProviders();
     // Check WP 7.0 Connectors on load (providers is step 1).
     abccCheckWP70Connectors();
     // Auto-test any wp-config keys visible on step 1.
@@ -111,6 +114,20 @@ jQuery(document).ready(function ($) {
     });
   }
 
+  // Providers with a stored key (restart flow) unlock Continue without a re-test.
+  function markConfiguredProviders() {
+    var configured = abccOnboarding.configuredProviders || [];
+    if (!configured.length) {
+      return;
+    }
+    $.each(configured, function (i, provider) {
+      showSuccess($("." + provider + "-status"), abccOnboarding.i18n.keySaved);
+      $(".abcc-api-provider[data-provider=\"" + provider + "\"]").addClass("connected");
+    });
+    connectedProvider = configured[0];
+    $("#abcc-next-step-2").prop("disabled", false);
+  }
+
   // -------------------------------------------------------------------------
   // WP 7.0 Connectors
   // -------------------------------------------------------------------------
@@ -134,7 +151,7 @@ jQuery(document).ready(function ($) {
         if (data.has_connectors && data.has_keys) {
           var providerNames = data.providers
             .map(function (provider) {
-              return provider.charAt(0).toUpperCase() + provider.slice(1);
+              return (abccOnboarding.providerNames && abccOnboarding.providerNames[provider]) || provider;
             })
             .join(", ");
 
@@ -157,7 +174,7 @@ jQuery(document).ready(function ($) {
     connectedProvider = "wp-connectors";
     // Enable step 1's Continue button (old hard-coded ID from step-providers.php).
     $("#abcc-next-step-2").prop("disabled", false);
-    $(this).text("✓ Connectors Active").prop("disabled", true);
+    $(this).text(abccOnboarding.i18n.connectorsActive).prop("disabled", true);
     $(".abcc-api-providers").slideUp();
   });
 
@@ -231,11 +248,11 @@ jQuery(document).ready(function ($) {
         } else {
           showStepError(response.data && response.data.message
             ? response.data.message
-            : 'Could not save selection. Please try again.');
+            : abccOnboarding.i18n.saveFailed);
         }
       },
       error: function () {
-        showStepError('Network error. Please try again.');
+        showStepError(abccOnboarding.i18n.networkError);
       },
     });
   }
@@ -255,6 +272,12 @@ jQuery(document).ready(function ($) {
     }
 
     var frequency = $('#abcc-first-topic-frequency').val() || 'weekly';
+    var signature = JSON.stringify([title, prompt, frequency]);
+    if (signature === createdTopicSignature) {
+      // Already created on an earlier pass (user came back with Back).
+      goToStep(targetStep);
+      return;
+    }
     var $btn = $('.abcc-next-step[data-step="3"]');
     $btn.prop('disabled', true);
 
@@ -269,18 +292,19 @@ jQuery(document).ready(function ($) {
         nonce: abccOnboarding.nonce,
       },
       success: function (response) {
+        $btn.prop('disabled', false);
         if (response.success) {
+          createdTopicSignature = signature;
           goToStep(targetStep);
         } else {
-          $btn.prop('disabled', false);
           showStepError(response.data && response.data.message
             ? response.data.message
-            : 'Could not create topic. Please try again.');
+            : abccOnboarding.i18n.topicFailed);
         }
       },
       error: function () {
         $btn.prop('disabled', false);
-        showStepError('Network error. Please try again.');
+        showStepError(abccOnboarding.i18n.networkError);
       },
     });
   }
@@ -292,7 +316,7 @@ jQuery(document).ready(function ($) {
   function handleFinish(e) {
     e.preventDefault();
     var $btn = $('#abcc-onboarding-finish');
-    $btn.prop('disabled', true).text('Finishing...');
+    $btn.prop('disabled', true).text(abccOnboarding.i18n.finishing);
 
     $.ajax({
       url: abccOnboarding.ajaxurl,
@@ -305,11 +329,13 @@ jQuery(document).ready(function ($) {
         if (response.success) {
           showSuccessStep();
         } else {
-          $btn.prop('disabled', false).text('Finish setup');
+          $btn.prop('disabled', false).text(abccOnboarding.i18n.finish);
+          showStepError((response.data && response.data.message) || abccOnboarding.i18n.saveFailed);
         }
       },
       error: function () {
-        $btn.prop('disabled', false).text('Finish setup');
+        $btn.prop('disabled', false).text(abccOnboarding.i18n.finish);
+        showStepError(abccOnboarding.i18n.networkError);
       },
     });
   }
@@ -324,17 +350,24 @@ jQuery(document).ready(function ($) {
       return;
     }
 
+    var $btn = $(e.currentTarget);
+    $btn.prop('disabled', true);
     $.ajax({
       url: abccOnboarding.ajaxurl,
       type: "POST",
-      data: {
-        action: "abcc_onboarding_skip",
-        nonce: abccOnboarding.nonce,
-      },
+      data: { action: "abcc_onboarding_skip", nonce: abccOnboarding.nonce },
       success: function (response) {
         if (response.success) {
+          removeUnloadListener();
           window.location.href = "?page=automated-blog-content-creator-post";
+          return;
         }
+        $btn.prop('disabled', false);
+        showStepError((response.data && response.data.message) || abccOnboarding.i18n.saveFailed);
+      },
+      error: function () {
+        $btn.prop('disabled', false);
+        showStepError(abccOnboarding.i18n.networkError);
       },
     });
   }
@@ -345,10 +378,16 @@ jQuery(document).ready(function ($) {
 
   function testApiConnection() {
     var $button   = $(this);
+    if ($button.prop("disabled")) {
+      return;
+    }
     var provider  = $button.data("provider");
     var isWpConfig = $button.data("wp-config") === true;
     var $input    = $("#" + provider + "-api-key");
     var $status   = $("." + provider + "-status");
+
+    // A manual click supersedes the pending debounced auto-test.
+    clearTimeout($input.data("autotest-timeout"));
 
     var apiKey = "";
     if (isWpConfig) {
@@ -356,13 +395,13 @@ jQuery(document).ready(function ($) {
     } else {
       apiKey = $input.val() ? $input.val().trim() : "";
       if (!apiKey) {
-        showError($status, "Please enter an API key");
+        showError($status, abccOnboarding.i18n.enterKey);
         return;
       }
     }
 
     $button.prop("disabled", true).text(abccOnboarding.i18n.testing);
-    abcc.showStatus($status, "Testing...");
+    abcc.showStatus($status, abccOnboarding.i18n.testing);
 
     $.ajax({
       url: abccOnboarding.ajaxurl,
@@ -385,7 +424,7 @@ jQuery(document).ready(function ($) {
         } else {
           showError(
             $status,
-            response.data.message || abccOnboarding.i18n.error
+            (response.data && response.data.message) || abccOnboarding.i18n.error
           );
         }
       },
@@ -394,11 +433,7 @@ jQuery(document).ready(function ($) {
       },
       complete: function () {
         $button.prop("disabled", false);
-        if (isWpConfig) {
-          $button.text("Test Connection");
-        } else {
-          $button.text("Test");
-        }
+        $button.text(isWpConfig ? abccOnboarding.i18n.testConnection : abccOnboarding.i18n.test);
       },
     });
   }
@@ -416,7 +451,8 @@ jQuery(document).ready(function ($) {
 
   function updateStepDisplay() {
     // Show only the nth numbered step (1-indexed); hide all others including success.
-    $steps.hide().eq(currentStep - 1).show();
+    $(".abcc-step-success").removeClass("active").hide();
+    $steps.removeClass("active").hide().eq(currentStep - 1).addClass("active").show();
   }
 
   function updateProgressBar() {
@@ -436,8 +472,8 @@ jQuery(document).ready(function ($) {
   }
 
   function showSuccessStep() {
-    $steps.hide();
-    $(".abcc-step-success").show();
+    $steps.removeClass("active").hide();
+    $(".abcc-step-success").addClass("active").show();
 
     $(".abcc-progress-fill").css("width", "100%");
     $(".abcc-step-indicators .abcc-step").removeClass("active").addClass("completed");
@@ -496,8 +532,9 @@ jQuery(document).ready(function ($) {
 
   $(document).on("keydown", function (e) {
     if (e.key !== "Enter") { return; }
-    // Textareas need Enter for newlines — never advance the step from one.
-    if ($(e.target).is("textarea")) { return; }
+    // Textareas need Enter for newlines; buttons, links and selects handle Enter natively.
+    if ($(e.target).is("textarea, button, a, select")) { return; }
+    if ($(".abcc-step-success").is(":visible")) { return; }
     if (currentStep === 1) {
       var $btn = $("#abcc-next-step-2");
       if ($btn.length && !$btn.prop("disabled")) {
@@ -534,8 +571,9 @@ jQuery(document).ready(function ($) {
 
     $container.on("success", function () {
       if (!$container.find(".abcc-copy-key").length) {
-        var $copyBtn = $(
-          '<button type="button" class="button button-small abcc-copy-key" title="Copy API key">📋</button>'
+        var $copyBtn = $('<button type="button" class="button button-small abcc-copy-key">📋</button>').attr(
+          "title",
+          abccOnboarding.i18n.copyKey
         );
         $container.append($copyBtn);
 
@@ -558,8 +596,7 @@ jQuery(document).ready(function ($) {
   var beforeUnloadHandler = function (e) {
     if (currentStep > 1 && currentStep <= totalSteps) {
       e.preventDefault();
-      e.returnValue =
-        "Are you sure you want to leave? Your onboarding progress will be lost.";
+      e.returnValue = abccOnboarding.i18n.leaveWarning;
       return e.returnValue;
     }
   };

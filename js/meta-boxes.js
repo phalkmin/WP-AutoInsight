@@ -12,6 +12,63 @@ jQuery( document ).ready( function ( $ ) {
 
 	var i18n = abccMetaBox.i18n;
 
+	function abccBlockEditorReady() {
+		return !! ( document.body.classList.contains( 'block-editor-page' ) && window.wp && wp.data && wp.blocks && wp.data.select( 'core/block-editor' ) && wp.data.dispatch( 'core/block-editor' ) );
+	}
+
+	function abccClassicEditor() {
+		if ( window.tinyMCE && tinyMCE.get( 'content' ) && ! tinyMCE.get( 'content' ).isHidden() ) {
+			return tinyMCE.get( 'content' );
+		}
+		return null;
+	}
+
+	// Reads what the user sees, including unsaved edits.
+	function abccGetEditorContent() {
+		if ( abccBlockEditorReady() && wp.data.select( 'core/editor' ) ) {
+			return wp.data.select( 'core/editor' ).getEditedPostContent();
+		}
+		var mce = abccClassicEditor();
+		if ( mce ) {
+			return mce.getContent();
+		}
+		var $textarea = $( '#content' );
+		return $textarea.length ? $textarea.val() : '';
+	}
+
+	// Replaces the editor content as an undoable, unsaved change.
+	function abccSetEditorContent( html ) {
+		if ( abccBlockEditorReady() ) {
+			var editor = wp.data.dispatch( 'core/block-editor' );
+			var ids    = wp.data.select( 'core/block-editor' ).getBlockOrder();
+			var blocks = wp.blocks.parse( html );
+			if ( ids.length ) {
+				editor.replaceBlocks( ids, blocks );
+			} else {
+				editor.insertBlocks( blocks );
+			}
+			return true;
+		}
+		var mce = abccClassicEditor();
+		if ( mce ) {
+			if ( mce.undoManager ) {
+				mce.undoManager.transact( function () {
+					mce.setContent( html );
+				} );
+			} else {
+				mce.setContent( html );
+			}
+			mce.setDirty( true );
+			return true;
+		}
+		var $textarea = $( '#content' );
+		if ( $textarea.length ) {
+			$textarea.val( html );
+			return true;
+		}
+		return false;
+	}
+
 	// ── Rewrite with AI ───────────────────────────────────────────────────────
 	$( '#abcc-rewrite-post' ).on( 'click', function () {
 		var $button = $( this );
@@ -31,14 +88,18 @@ jQuery( document ).ready( function ( $ ) {
 				action:  'abcc_rewrite_post',
 				post_id: $button.data( 'post-id' ),
 				nonce:   $button.data( 'nonce' ),
+				content: abccGetEditorContent(),
 			},
 			success: function ( response ) {
-				if ( response.success ) {
-					abcc.showStatus( $status, i18n.rewriteSuccess, 'success' );
-					setTimeout( function () { window.location.reload(); }, 1500 );
+				$button.prop( 'disabled', false ).text( i18n.rewriteBtn );
+				if ( ! response.success ) {
+					abcc.setError( $status, ( response.data && response.data.message ) || i18n.unknownError );
+					return;
+				}
+				if ( abccSetEditorContent( response.data.content ) ) {
+					abcc.showStatus( $status, i18n.rewriteApplied, 'success' );
 				} else {
-					abcc.setError( $status, response.data.message || i18n.unknownError );
-					$button.prop( 'disabled', false ).text( i18n.rewriteBtn );
+					abcc.setError( $status, i18n.rewriteNoEditor );
 				}
 			},
 			error: function () {
@@ -139,6 +200,7 @@ jQuery( document ).ready( function ( $ ) {
 			},
 			success: function ( response ) {
 				if ( response.success ) {
+					$button.prop( 'disabled', false ).text( i18n.infographicBtn );
 					var editUrl = ajaxurl.replace(
 						'admin-ajax.php',
 						'upload.php?item=' + parseInt( response.data.attachment_id, 10 )
@@ -149,7 +211,7 @@ jQuery( document ).ready( function ( $ ) {
 						.text( i18n.view );
 					var $editLink = $( '<a>' ).attr( 'href', editUrl ).text( i18n.edit );
 					var $msg = $( '<span>' )
-						.text( i18n.infographicSuccess + ' ' )
+						.text( ( response.data.message || i18n.infographicSuccess ) + ' ' )
 						.append( $viewLink, ' | ', $editLink );
 
 					abcc.showHtml( $status, $msg, 'success' );

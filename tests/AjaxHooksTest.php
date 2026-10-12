@@ -19,3 +19,29 @@ abcc_test(
 		abcc_assert_array_has_key( 'wp_ajax_abcc_audio_generate_post', $hooks, 'audio generate-post handler must be registered in audio.php' );
 	}
 );
+
+abcc_test(
+	'bulk single-generation error payload carries the machine code',
+	function () {
+		$GLOBALS['abcc_test_options']['prompt_select'] = 'gpt-5.4-mini';
+		$GLOBALS['abcc_test_last_json']                = null;
+		$GLOBALS['abcc_http_queue']                    = array();
+		for ( $i = 0; $i < 4; $i++ ) {
+			$GLOBALS['abcc_http_queue'][] = array(
+				'response' => array( 'code' => 401 ),
+				'body'     => '{"error":{"message":"Incorrect API key"}}',
+			);
+		}
+		$_POST = array(
+			'keyword' => 'alpha',
+			'draft'   => '1',
+		);
+
+		abcc_handle_bulk_generate_single();
+
+		abcc_assert_same( false, $GLOBALS['abcc_test_last_json']['success'] );
+		abcc_assert_same( 'abcc_provider_auth_error', $GLOBALS['abcc_test_last_json']['data']['code'] );
+		$_POST                      = array();
+		$GLOBALS['abcc_http_queue'] = array();
+	}
+);

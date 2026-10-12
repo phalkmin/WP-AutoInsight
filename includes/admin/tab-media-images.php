@@ -44,24 +44,31 @@ $image_style_text  = abcc_get_setting( 'abcc_image_style_custom', '' );
 			<tr>
 				<th scope="row">
 					<?php esc_html_e( 'Preferred Image Provider', 'automated-blog-content-creator' ); ?>
-					<?php echo wp_kses_post( abcc_get_tooltip_html( __( '"Auto" selects the best image provider based on your text model. OpenAI uses DALL-E 3, Google uses Gemini image generation, Stability AI is always available as a fallback.', 'automated-blog-content-creator' ) ) ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( '"Auto" picks the image provider that matches your text model, then falls back to any provider with a key. OpenAI uses GPT Image, Google uses Gemini image generation, Stability AI needs its own key.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
 				<td>
 					<fieldset>
 						<?php
 						$image_providers = array(
 							'auto'      => __( 'Auto (follows text model)', 'automated-blog-content-creator' ),
-							'openai'    => __( 'DALL-E (OpenAI)', 'automated-blog-content-creator' ),
+							'openai'    => __( 'OpenAI (GPT Image)', 'automated-blog-content-creator' ),
 							'gemini'    => __( 'Gemini (Google)', 'automated-blog-content-creator' ),
 							'stability' => __( 'Stability AI', 'automated-blog-content-creator' ),
 						);
 						foreach ( $image_providers as $value => $label ) :
+							$has_key = 'auto' === $value || '' !== (string) abcc_get_provider_api_key( $value );
+							// A saved choice stays selectable even without a key, or the user can't see it to change it.
+							$disabled = ! $has_key && $preferred_service !== $value;
 							?>
 							<label class="abcc-label-block">
 								<input type="radio" name="preferred_image_service" value="<?php echo esc_attr( $value ); ?>"
 									data-autosave-key="preferred_image_service"
-									<?php checked( $preferred_service, $value ); ?>>
+									<?php checked( $preferred_service, $value ); ?>
+									<?php disabled( $disabled ); ?>>
 								<?php echo esc_html( $label ); ?>
+								<?php if ( ! $has_key ) : ?>
+									<span class="description"><?php esc_html_e( '(no key — add one under Connections)', 'automated-blog-content-creator' ); ?></span>
+								<?php endif; ?>
 							</label>
 						<?php endforeach; ?>
 					</fieldset>
@@ -80,9 +87,10 @@ $image_style_text  = abcc_get_setting( 'abcc_image_style_custom', '' );
 					</select>
 					<div id="abcc-image-style-custom-wrapper" class="abcc-mt-8"<?php echo 'custom' !== $image_style ? ' style="display:none;"' : ''; ?>>
 						<input type="text" id="abcc_image_style_custom" name="abcc_image_style_custom" class="regular-text" maxlength="200"
+							aria-label="<?php esc_attr_e( 'Custom image style description', 'automated-blog-content-creator' ); ?>"
 							value="<?php echo esc_attr( $image_style_text ); ?>"
 							placeholder="<?php esc_attr_e( 'vintage travel poster, muted palette', 'automated-blog-content-creator' ); ?>">
-						<p class="description"><?php esc_html_e( 'Describe the look you want, e.g. "vintage travel poster, muted palette". Saved with the form.', 'automated-blog-content-creator' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Describe the look you want, e.g. "vintage travel poster, muted palette". Saved when you click Save Changes.', 'automated-blog-content-creator' ); ?></p>
 					</div>
 				</td>
 			</tr>

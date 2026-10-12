@@ -669,7 +669,7 @@
 .abcc-activity-item--succeeded .abcc-activity-icon { color: #00a32a; }
 .abcc-activity-item--failed    .abcc-activity-icon { color: #d63638; }
 .abcc-activity-title { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.abcc-activity-meta  { color: #646970; font-size: 12px; flex-shrink: 0; }
+.abcc-activity-meta { color: #646970; font-size: 12px; flex-shrink: 1; white-space: normal; }
 .abcc-activity-link  { flex-shrink: 0; font-size: 12px; }
 
 /* Provider health list */
@@ -813,6 +813,14 @@
    ========================================================= */
 .abcc-meta-box {
     padding: 4px 0;
+}
+
+.abcc-meta-notice {
+    background: #fcf9e8;
+    border-left: 4px solid #dba617;
+    padding: 8px 10px;
+    margin: 0 0 12px;
+    font-size: 12px;
 }
 
 .abcc-meta-section {
@@ -967,6 +975,9 @@
 	grid-template-columns: repeat(2, 1fr);
 	gap: 8px 20px;
 }
+.abcc-composer__fields[hidden] {
+	display: none;
+}
 .abcc-composer__field label {
 	display: block;
 	font-size: 11px;
@@ -1031,6 +1042,11 @@
 	border-color: #2271b1;
 	box-shadow: 0 1px 4px rgba(34, 113, 177, 0.15);
 }
+.abcc-tile--disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	pointer-events: none;
+}
 .abcc-tile__name {
 	display: block;
 	font-weight: 600;
@@ -1094,3 +1110,10 @@
 .abcc-advanced-tip { margin-top: 8px; }
 .abcc-advanced-tip summary { cursor: pointer; color: #646970; font-size: 13px; }
 .abcc-remove-key { margin-left: 8px; }
+
+@media screen and (max-width: 782px) {
+	.abcc-topic-form-wrap .form-table td { padding-right: 0; }
+	.abcc-topic-form-wrap .regular-text,
+	.abcc-topic-form-wrap .large-text,
+	.abcc-topic-form-wrap select { width: 100%; max-width: 100%; box-sizing: border-box; }
+}

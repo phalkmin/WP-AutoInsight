@@ -117,7 +117,7 @@ class ABCC_OpenAI_Client {
 	 */
 	public function create_chat_completion( $messages, $options = array() ) {
 		$default_options = array(
-			'model'             => 'gpt-4.1-mini',
+			'model'             => abcc_get_default_text_model(),
 			'temperature'       => 0.7,
 			'max_tokens'        => 800,
 			'top_p'             => 1,

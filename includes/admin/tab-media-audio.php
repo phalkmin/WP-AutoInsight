@@ -19,7 +19,7 @@ $available_formats = array(
 	'webm' => 'WebM',
 	'flac' => 'FLAC',
 );
-$current_lang      = abcc_get_setting( 'abcc_transcription_language', 'en' );
+$current_lang      = abcc_get_setting( 'abcc_transcription_language', 'auto' );
 $languages         = array(
 	'en'   => 'English',
 	'es'   => 'Spanish',
@@ -111,8 +111,8 @@ $languages         = array(
 		<div class="abcc-how-it-works">
 			<h3><?php esc_html_e( 'How it works', 'automated-blog-content-creator' ); ?></h3>
 			<ol>
-				<li><?php esc_html_e( 'Upload an audio file from any post editor.', 'automated-blog-content-creator' ); ?></li>
-				<li><?php esc_html_e( 'Choose "Transcribe only" or "Transcribe + Create Post".', 'automated-blog-content-creator' ); ?></li>
+				<li><?php esc_html_e( 'Upload an audio file to the Media Library and open it (Media → Library → the file).', 'automated-blog-content-creator' ); ?></li>
+				<li><?php esc_html_e( 'In the Save box, click "Create Post from Audio" or "Transcribe Only".', 'automated-blog-content-creator' ); ?></li>
 				<li><?php esc_html_e( 'The audio player is embedded in the generated post.', 'automated-blog-content-creator' ); ?></li>
 			</ol>
 			<p class="description"><?php esc_html_e( 'Audio files must be under 25MB (OpenAI Whisper limit). Longer files may take several minutes.', 'automated-blog-content-creator' ); ?></p>

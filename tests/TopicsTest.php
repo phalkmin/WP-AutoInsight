@@ -187,3 +187,32 @@ abcc_test(
 		abcc_assert_same( 'draft', abcc_resolve_topic_post_status( $topic_id ), 'Empty override must inherit the global setting.' );
 	}
 );
+
+abcc_test(
+	'topic list renders next and last run in site-local time',
+	function () {
+		if ( ! class_exists( 'WP_List_Table' ) ) {
+			class WP_List_Table {
+				public function __construct( $args = array() ) {}
+				public function row_actions( $actions ) {
+					return '';
+				}
+				protected function handle_row_actions( $item, $column_name, $primary ) {
+					return '';
+				}
+			}
+		}
+		require_once dirname( __DIR__ ) . '/includes/class-abcc-topics-list-table.php';
+
+		$table = new ABCC_Topics_List_Table();
+		$ts    = 1700000000; // 2023-11-14 22:13 UTC.
+		$row   = array(
+			'active'      => true,
+			'next_run'    => $ts,
+			'last_run'    => $ts,
+			'last_job_id' => 0,
+		);
+		abcc_assert_same( gmdate( 'Y-m-d H:i', $ts + 3 * HOUR_IN_SECONDS ), $table->column_next_run( $row ) );
+		abcc_assert_same( gmdate( 'Y-m-d H:i', $ts + 3 * HOUR_IN_SECONDS ), $table->column_last_run( $row ) );
+	}
+);

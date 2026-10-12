@@ -93,7 +93,7 @@ function abcc_openai_generate_post_scheduled() {
 		$tone          = abcc_get_setting( 'openai_tone', 'default' );
 		$auto_create   = abcc_get_setting( 'openai_auto_create', 'none' );
 		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
-		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+		$prompt_select = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 
 		// Schema default is '' (never configured) — treat it as disabled, same as 'none'.
 		if ( empty( $auto_create ) || 'none' === $auto_create ) {
@@ -186,6 +186,24 @@ function abcc_schedule_openai_event() {
 }
 
 /**
+ * Body of the "new post" notification. Built from admin_url(), since
+ * get_edit_post_link() returns nothing without a logged-in user (cron).
+ *
+ * @since 4.5.2
+ * @param int $post_id Post ID.
+ * @return string
+ */
+function abcc_build_post_notification_message( $post_id ) {
+	$post = get_post( $post_id );
+	return sprintf(
+		/* translators: %1$s: Post title, %2$s: Edit post URL */
+		__( "A new post \"%1\$s\" has been created automatically.\n\nYou can edit it here: %2\$s", 'automated-blog-content-creator' ),
+		$post ? $post->post_title : '',
+		admin_url( 'post.php?post=' . (int) $post_id . '&action=edit' )
+	);
+}
+
+/**
  * Send email notification about new post creation.
  *
  * @param int $post_id The ID of the created post.
@@ -205,12 +223,7 @@ function abcc_send_post_notification( $post_id ) {
 		$post->post_title
 	);
 
-	$message = sprintf(
-		/* translators: %1$s: Post title, %2$s: Edit post URL */
-		__( "A new post \"%1\$s\" has been created automatically.\n\nYou can edit it here: %2\$s", 'automated-blog-content-creator' ),
-		$post->post_title,
-		get_edit_post_link( $post_id, '' )
-	);
+	$message = abcc_build_post_notification_message( $post_id );
 
 	return wp_mail( $admin_email, $subject, $message );
 }

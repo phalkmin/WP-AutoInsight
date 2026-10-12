@@ -95,3 +95,38 @@ abcc_test(
 		}
 	}
 );
+
+abcc_test(
+	'markdown fences are dropped and code indentation inside pre survives the main path',
+	function () {
+		$result = abcc_filter_generated_content_lines(
+			array(
+				'```html',
+				'<p>Intro.</p>',
+				'<pre><code>def hi():',
+				'    print("hi")',
+				'',
+				'hi()</code></pre>',
+				'```',
+				'<p>Done.</p>',
+			)
+		);
+		abcc_assert_equals(
+			array( '<p>Intro.</p>', '<pre><code>def hi():', '    print("hi")', '', 'hi()</code></pre>', '<p>Done.</p>' ),
+			$result
+		);
+		$html = abcc_gutenberg_blocks( abcc_create_blocks( $result ) );
+		abcc_assert_true( false !== strpos( $html, "\n    print(" ), 'Indentation reaches the code block.' );
+		abcc_assert_false( false !== strpos( $html, '```' ), 'No fence text in the post.' );
+	}
+);
+
+abcc_test(
+	'a pre tag quoted in inline code does not switch the filter into code mode',
+	function () {
+		$result = abcc_filter_generated_content_lines(
+			array( '<p>Wrap code in the <code><pre></code> element.</p>', '', '```', '<p>Next.</p>' )
+		);
+		abcc_assert_equals( array( '<p>Wrap code in the <code><pre></code> element.</p>', '<p>Next.</p>' ), $result );
+	}
+);

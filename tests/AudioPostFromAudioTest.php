@@ -203,7 +203,7 @@ abcc_test(
 abcc_test(
 	'legacy transcript handler produces a post with v4.3 tracking meta',
 	function () {
-		$attachment_id = 4242;
+		$attachment_id                                     = 4242;
 		$GLOBALS['abcc_test_post_types'][ $attachment_id ] = 'attachment';
 		abcc_update_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
 		abcc_update_setting( 'openai_api_key', 'sk-test' );
@@ -223,5 +223,27 @@ abcc_test(
 			'' !== (string) get_post_meta( $post_id, '_abcc_model', true ),
 			'Legacy path must record the model used.'
 		);
+	}
+);
+
+abcc_test(
+	'transcript+intro with a failed AI call keeps the transcript, flags the failure, and uses the file name as title',
+	function () {
+		$GLOBALS['abcc_test_options'] = array(
+			'openai_api_key'           => 'sk-test',
+			'prompt_select'            => 'gpt-4.1-mini-2025-04-14',
+			'abcc_default_post_status' => 'draft',
+		);
+		$GLOBALS['abcc_http_queue'][] = array(
+			'response' => array( 'code' => 500 ),
+			'body'     => '{}',
+		);
+
+		$post_id = abcc_build_post_from_transcript( 'the spoken words', 'transcript_plus_intro', array( 'title_fallback' => 'episode-12.mp3' ) );
+
+		abcc_assert_true( ! is_wp_error( $post_id ) );
+		abcc_assert_same( '1', get_post_meta( $post_id, '_abcc_audio_rewrite_failed', true ) );
+		abcc_assert_same( 'episode-12.mp3', get_post( $post_id )->post_title );
+		abcc_assert_true( false !== strpos( get_post( $post_id )->post_content, 'the spoken words' ) );
 	}
 );

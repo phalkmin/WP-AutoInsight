@@ -10,6 +10,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Remember why the last image call failed, for the notice and the bulk table.
+ *
+ * @since 4.5.2
+ * @param string $message Provider or transport reason; '' clears it.
+ * @return void
+ */
+function abcc_set_last_image_error( $message ) {
+	$GLOBALS['abcc_last_image_error'] = sanitize_text_field( (string) $message );
+}
+
+/**
+ * @since 4.5.2
+ * @return string Reason recorded by the last image attempt, or ''.
+ */
+function abcc_get_last_image_error() {
+	return isset( $GLOBALS['abcc_last_image_error'] ) ? (string) $GLOBALS['abcc_last_image_error'] : '';
+}
+
+/**
  * Generates a featured image using AI services.
  *
  * @param string $text_model The text model being used.
@@ -19,6 +38,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function abcc_generate_featured_image( $text_model, $keywords, $category_names = array() ) {
 	try {
+		abcc_set_last_image_error( '' );
+
 		// Check if image generation is enabled.
 		if ( ! abcc_get_setting( 'openai_generate_images', true ) ) {
 			return false;
@@ -46,7 +67,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 		// Generate image using determined service.
 		switch ( $image_service['service'] ) {
 			case 'openai':
-				$openai_model   = abcc_get_setting( 'abcc_openai_image_model', 'gpt-image-1' );
+				$openai_model   = abcc_get_setting( 'abcc_openai_image_model' );
 				$openai_size    = abcc_get_setting( 'abcc_openai_image_size', '1024x1024' );
 				$openai_quality = abcc_get_setting( 'abcc_openai_image_quality', 'medium' );
 				$images         = abcc_openai_generate_images( $image_service['api_key'], $prompt, 1, $openai_size, $openai_quality, $openai_model );
@@ -64,7 +85,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 				break;
 
 			case 'gemini':
-				$gemini_image_model = abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
+				$gemini_image_model = abcc_get_setting( 'abcc_gemini_image_model' );
 				$gemini_image_size  = abcc_get_setting( 'abcc_gemini_image_size', '2K' );
 				$result             = abcc_gemini_generate_images( $image_service['api_key'], $prompt, $gemini_image_model, $gemini_image_size );
 				if ( false !== $result ) {
@@ -78,6 +99,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 
 	} catch ( Exception $e ) {
 		abcc_debug_log( 'Image Generation Error: ' . $e->getMessage() );
+		abcc_set_last_image_error( $e->getMessage() );
 		return false;
 	}
 }
@@ -142,7 +164,7 @@ function abcc_get_image_retry_context( $post_id ) {
 }
 
 /**
- * Build the admin notice for a post whose featured image failed.
+ * Build the meta box notice for a post whose featured image failed.
  *
  * @since 4.4.0
  * @param int $post_id Post ID.
@@ -156,7 +178,7 @@ function abcc_get_image_failure_notice_html( $post_id ) {
 	}
 
 	return sprintf(
-		'<div class="notice notice-warning is-dismissible abcc-image-failure"><p>%1$s <button type="button" class="button button-small abcc-retry-image" data-post-id="%2$d" data-nonce="%4$s">%3$s</button></p></div>',
+		'<div class="abcc-image-failure abcc-meta-notice"><p>%1$s <button type="button" class="button button-small abcc-retry-image" data-post-id="%2$d" data-nonce="%4$s">%3$s</button></p></div>',
 		esc_html(
 			sprintf(
 				/* translators: %s: failure reason from the image provider */
@@ -181,11 +203,13 @@ function abcc_build_featured_image_alt_text( $title, $primary_keyword ) {
 	$title           = trim( (string) $title );
 	$primary_keyword = trim( (string) $primary_keyword );
 
-	if ( '' === $title || '' === $primary_keyword ) {
+	if ( '' === $title ) {
 		return '';
 	}
 
-	return $title . ' - ' . $primary_keyword;
+	// Sites without an SEO plugin have no primary keyword; the title alone is
+	// still a real description, an empty alt is not.
+	return '' === $primary_keyword ? $title : $title . ' - ' . $primary_keyword;
 }
 
 /**
@@ -199,9 +223,18 @@ function abcc_build_featured_image_alt_text( $title, $primary_keyword ) {
  * @param int    $post_id  Target post.
  * @param string $path     Absolute path to an image file inside the uploads dir.
  * @param string $alt_text Optional alt text.
+ * @param array  $args     Optional. 'title' attachment title; 'set_thumbnail' (default true).
  * @return int|false Attachment ID, or false on failure.
  */
-function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '' ) {
+function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '', $args = array() ) {
+	$args = wp_parse_args(
+		(array) $args,
+		array(
+			'title'         => '',
+			'set_thumbnail' => true,
+		)
+	);
+
 	if ( ! file_exists( $path ) ) {
 		abcc_debug_log( 'Featured Image Error: local file missing at ' . $path );
 		return false;
@@ -216,7 +249,7 @@ function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '' ) {
 	$attachment_id = wp_insert_attachment(
 		array(
 			'post_mime_type' => $filetype['type'] ? $filetype['type'] : 'image/png',
-			'post_title'     => sanitize_file_name( pathinfo( $path, PATHINFO_FILENAME ) ),
+			'post_title'     => '' !== trim( (string) $args['title'] ) ? sanitize_text_field( $args['title'] ) : sanitize_file_name( pathinfo( $path, PATHINFO_FILENAME ) ),
 			'post_content'   => '',
 			'post_status'    => 'inherit',
 		),
@@ -235,7 +268,9 @@ function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '' ) {
 		update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
 	}
 
-	set_post_thumbnail( $post_id, $attachment_id );
+	if ( ! empty( $args['set_thumbnail'] ) ) {
+		set_post_thumbnail( $post_id, $attachment_id );
+	}
 
 	return (int) $attachment_id;
 }
@@ -246,13 +281,14 @@ function abcc_attach_local_image_to_post( $post_id, $path, $alt_text = '' ) {
  * @param int    $post_id Post ID.
  * @param string $image_url Image URL.
  * @param string $alt_text Optional alt text.
+ * @param array  $args Optional. See abcc_attach_local_image_to_post().
  * @return int|false Attachment ID on success, false on failure.
  */
-function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
+function abcc_set_featured_image( $post_id, $image_url, $alt_text = '', $args = array() ) {
 	try {
 		// Local file: register directly, no self-HTTP.
 		if ( 0 === strpos( $image_url, 'file://' ) || file_exists( $image_url ) ) {
-			return abcc_attach_local_image_to_post( $post_id, str_replace( 'file://', '', $image_url ), $alt_text );
+			return abcc_attach_local_image_to_post( $post_id, str_replace( 'file://', '', $image_url ), $alt_text, $args );
 		}
 
 		// Generated images live in our own uploads dir — map the URL back to a
@@ -261,7 +297,7 @@ function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 		if ( ! empty( $uploads['baseurl'] ) && 0 === strpos( $image_url, $uploads['baseurl'] ) ) {
 			$local_path = $uploads['basedir'] . substr( $image_url, strlen( $uploads['baseurl'] ) );
 			if ( file_exists( $local_path ) ) {
-				return abcc_attach_local_image_to_post( $post_id, $local_path, $alt_text );
+				return abcc_attach_local_image_to_post( $post_id, $local_path, $alt_text, $args );
 			}
 		}
 
@@ -281,6 +317,15 @@ function abcc_set_featured_image( $post_id, $image_url, $alt_text = '' ) {
 		// Set alt text if provided.
 		if ( ! empty( $alt_text ) ) {
 			update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
+		}
+
+		if ( ! empty( $args['title'] ) ) {
+			wp_update_post(
+				array(
+					'ID'         => $attachment_id,
+					'post_title' => sanitize_text_field( $args['title'] ),
+				)
+			);
 		}
 
 		// Set as featured image.

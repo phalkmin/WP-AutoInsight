@@ -10,7 +10,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$post_types          = get_post_types( array( 'public' => true ), 'objects' );
+$post_types = get_post_types( array( 'public' => true ), 'objects' );
+unset( $post_types['attachment'] );
 $selected_post_types = abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
 $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 ?>
@@ -33,26 +34,27 @@ $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 				</label>
 			<?php endforeach; ?>
 		</fieldset>
+		<p class="description"><?php esc_html_e( 'At least one post type is required.', 'automated-blog-content-creator' ); ?></p>
 
 		<h2><?php esc_html_e( 'Content Defaults', 'automated-blog-content-creator' ); ?></h2>
 		<table class="form-table">
 			<tr>
 				<th scope="row">
 					<label for="openai_char_limit"><?php esc_html_e( 'Content Length', 'automated-blog-content-creator' ); ?></label>
-					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Target length in tokens. 200 ≈ 150 words; 800 ≈ 600 words; 2000 ≈ 1500 words. Higher values cost more per post.', 'automated-blog-content-creator' ) ) ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Maximum length in tokens. Posts usually come out shorter than the ceiling: 200 ≈ up to 150 words; 800 ≈ up to 600; 2000 ≈ up to 1,500. Higher values cost more per post.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
 				<td>
 					<input type="range" id="openai_char_limit" name="openai_char_limit"
 						data-autosave-key="openai_char_limit"
 						min="100" max="4000" step="100"
 						value="<?php echo esc_attr( $char_limit ); ?>"
-						oninput="document.getElementById('abcc-char-limit-display').textContent = '≈' + Math.round(this.value * 0.75) + ' words';">
+						oninput="document.getElementById('abcc-char-limit-display').textContent = 'up to ≈' + Math.round(this.value * 0.75) + ' words';">
 					<span id="abcc-char-limit-display">
 						<?php
 						// 0.75 words-per-token matches the tooltip and {word_count}.
 						printf(
 							/* translators: %s: approximate word count */
-							esc_html__( '≈%s words', 'automated-blog-content-creator' ),
+							esc_html__( 'up to ≈%s words', 'automated-blog-content-creator' ),
 							esc_html( (string) round( $char_limit * 0.75 ) )
 						);
 						?>

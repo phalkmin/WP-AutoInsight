@@ -13,12 +13,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Register the single WP-AutoInsight Tools meta box.
  */
-function abcc_register_meta_boxes() {
+function abcc_register_meta_boxes( $current_post_type = '', $post = null ) {
 	if ( ! abcc_current_user_can_prompt() ) {
 		return;
 	}
 
-	$selected_post_types = abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
+	$selected_post_types = (array) abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
+
+	// A generated post whose type was deselected later keeps its tools (image retry, regenerate).
+	if ( is_object( $post ) && ! empty( $post->ID ) && ! in_array( $post->post_type, $selected_post_types, true ) && get_post_meta( $post->ID, '_abcc_generated', true ) ) {
+		$selected_post_types[] = $post->post_type;
+	}
 
 	foreach ( $selected_post_types as $post_type ) {
 		add_meta_box(
@@ -31,30 +36,7 @@ function abcc_register_meta_boxes() {
 		);
 	}
 }
-add_action( 'add_meta_boxes', 'abcc_register_meta_boxes' );
-
-/**
- * Show a notice on the post edit screen when featured-image generation failed.
- *
- * @since 4.4.0
- * @return void
- */
-function abcc_show_image_failure_notice() {
-	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-
-	if ( ! $screen || 'post' !== $screen->base ) {
-		return;
-	}
-
-	$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen detection.
-
-	if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-		return;
-	}
-
-	echo wp_kses_post( abcc_get_image_failure_notice_html( $post_id ) );
-}
-add_action( 'admin_notices', 'abcc_show_image_failure_notice' );
+add_action( 'add_meta_boxes', 'abcc_register_meta_boxes', 10, 2 );
 
 /**
  * Callback for the WP-AutoInsight Tools meta box.
@@ -68,6 +50,8 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 	$gen_params      = ! empty( $gen_params_json ) ? json_decode( $gen_params_json, true ) : null;
 	?>
 	<div class="abcc-meta-box">
+
+		<?php echo wp_kses_post( abcc_get_image_failure_notice_html( $post->ID ) ); ?>
 
 		<div class="abcc-meta-section">
 			<h4 class="abcc-meta-section-title"><?php esc_html_e( 'Content', 'automated-blog-content-creator' ); ?></h4>
@@ -83,8 +67,8 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 			<?php
 			if ( is_array( $gen_params ) ) :
 				$keywords_display      = ! empty( $gen_params['keywords'] ) ? implode( ', ', (array) $gen_params['keywords'] ) : '—';
-				$model_display         = ! empty( $gen_params['model'] ) ? $gen_params['model'] : '—';
-				$template_display      = ! empty( $gen_params['template'] ) ? $gen_params['template'] : 'default';
+				$model_display         = ! empty( $gen_params['model'] ) ? abcc_get_model_display_name( $gen_params['model'] ) : '—';
+				$template_display      = abcc_get_content_template_name( ! empty( $gen_params['template'] ) ? $gen_params['template'] : 'default' );
 				$focus_keyword_display = ! empty( $gen_params['focus_keyword'] ) ? $gen_params['focus_keyword'] : '';
 				?>
 				<div class="abcc-meta-last-gen">
@@ -105,7 +89,7 @@ function abcc_ai_tools_meta_box_callback( $post ) {
 							</tr>
 						<?php endif; ?>
 						<tr>
-							<th><?php esc_html_e( 'Keyword Group', 'automated-blog-content-creator' ); ?></th>
+							<th><?php esc_html_e( 'Keywords', 'automated-blog-content-creator' ); ?></th>
 							<td><?php echo esc_html( $keywords_display ); ?></td>
 						</tr>
 					</table>

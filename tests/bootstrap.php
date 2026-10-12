@@ -203,7 +203,15 @@ function rest_sanitize_boolean($value) {
 	if ( is_string( $value ) ) { $value = strtolower( $value ); }
 	return in_array( $value, array( true, 1, '1', 'true', 'yes', 'on' ), true );
 }
-function user_can($user, $cap, ...$args) { return current_user_can( $cap, ...$args ); }
+// Per-user caps: $GLOBALS['abcc_test_user_caps_by_id'][ $user_id ][ $cap ] overrides the current-user answer.
+function user_can($user, $cap, ...$args) {
+	$user_id = is_object( $user ) && isset( $user->ID ) ? (int) $user->ID : (int) $user;
+	$by_id   = $GLOBALS['abcc_test_user_caps_by_id'] ?? array();
+	if ( isset( $by_id[ $user_id ] ) && array_key_exists( $cap, $by_id[ $user_id ] ) ) {
+		return (bool) $by_id[ $user_id ][ $cap ];
+	}
+	return current_user_can( $cap, ...$args );
+}
 function post_type_exists($post_type) { return in_array( $post_type, array( 'post', 'page' ), true ); }
 function get_post_type_object($post_type) {
 	if ( ! post_type_exists( $post_type ) ) { return null; }
@@ -236,6 +244,7 @@ function absint($value) { return abs((int) $value); }
 function get_current_user_id() { return $GLOBALS['abcc_test_current_user_id'] ?? 1; }
 function get_locale() { return $GLOBALS['abcc_test_locale'] ?? 'en_US'; }
 function is_wp_error($thing) { return $thing instanceof WP_Error; }
+if ( ! function_exists( 'wp_list_pluck' ) ) { function wp_list_pluck( $list, $field ) { return array_map( static function ( $i ) use ( $field ) { return is_array( $i ) ? ( isset( $i[ $field ] ) ? $i[ $field ] : null ) : ( isset( $i->$field ) ? $i->$field : null ); }, (array) $list ); } }
 function wp_parse_args($args, $defaults = array()) { return array_merge($defaults, $args); }
 function get_option($key, $default = false) { return array_key_exists($key, $GLOBALS['abcc_test_options']) ? $GLOBALS['abcc_test_options'][ $key ] : $default; }
 function update_option($key, $value) {
@@ -261,7 +270,7 @@ function get_bloginfo($key) {
 }
 function get_cat_name($id) { return 0 === (int) $id ? 'General' : 'Category ' . (int) $id; }
 function wp_trim_words($text, $num_words = 55) {
-	$words = preg_split('/\s+/', trim((string) $text));
+	$words = preg_split('/\s+/', trim(wp_strip_all_tags((string) $text)));
 	return implode(' ', array_slice($words, 0, $num_words));
 }
 function wp_kses_post($text) { return $text; }
@@ -277,6 +286,10 @@ function wp_get_schedule($hook) { return 'abcc_openai_generate_post_hook' === $h
 function wp_schedule_event($timestamp, $recurrence, $hook, $args = array()) { return true; }
 function wp_clear_scheduled_hook($hook, $args = array()) { return true; }
 function date_i18n($format, $timestamp) { return gmdate('Y-m-d H:i', (int) $timestamp); }
+function wp_date( $format, $timestamp = null ) {
+	// Site timezone fixed at +3h in the harness.
+	return gmdate( $format, ( null === $timestamp ? time() : (int) $timestamp ) + 3 * HOUR_IN_SECONDS );
+}
 function abcc_debug_log($message) { return null; }
 function abcc_handle_api_request_error($response, $api) { return null; }
 function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
@@ -293,8 +306,16 @@ function delete_post_meta($post_id, $key) { unset($GLOBALS['abcc_test_post_meta'
 function get_post_type($post_id) { return $GLOBALS['abcc_test_post_types'][ (int) $post_id ] ?? false; }
 function wp_cache_delete($key, $group = '') { return true; }
 function current_time($type) { return gmdate('Y-m-d H:i:s'); }
+function get_gmt_from_date( $date, $format = 'Y-m-d H:i:s' ) { return $date; }
 function register_post_type($post_type, $args = array()) { return true; }
-function wp_mail($to, $subject, $message) { return true; }
+$GLOBALS['abcc_test_mails'] = array();
+function wp_mail($to, $subject, $message, $headers = '', $attachments = array()) {
+	if ( ! empty( $GLOBALS['abcc_test_mail_fails'] ) ) {
+		return false;
+	}
+	$GLOBALS['abcc_test_mails'][] = array( 'to' => $to, 'subject' => $subject, 'message' => $message );
+	return true;
+}
 $GLOBALS['abcc_test_scheduled_events'] = array();
 function wp_schedule_single_event($timestamp, $hook, $args = array()) {
 	if ( ! empty( $GLOBALS['abcc_test_schedule_fails'] ) ) {
@@ -337,6 +358,7 @@ function wp_insert_post($postarr, $wp_error = false) {
 	$post->post_status  = $postarr['post_status'] ?? 'draft';
 	$post->post_title   = $postarr['post_title'] ?? '';
 	$post->post_content = $postarr['post_content'] ?? '';
+	$post->post_mime_type = $postarr['post_mime_type'] ?? '';
 
 	$GLOBALS['abcc_test_posts'][ $id ]      = $post;
 	$GLOBALS['abcc_test_post_types'][ $id ] = $post->post_type;
@@ -378,7 +400,57 @@ function wp_delete_post($post_id, $force = false) {
 	return $post;
 }
 
+function get_post_mime_type( $post_id ) {
+	$post = $GLOBALS['abcc_test_posts'][ (int) $post_id ] ?? null;
+	return $post && isset( $post->post_mime_type ) ? (string) $post->post_mime_type : false;
+}
+
 function get_post($post_id) { return $GLOBALS['abcc_test_posts'][ (int) $post_id ] ?? null; }
+
+if ( ! function_exists( 'get_post_status' ) ) {
+	function get_post_status( $post_id ) {
+		$post = $GLOBALS['abcc_test_posts'][ (int) $post_id ] ?? null;
+		return $post ? (string) $post->post_status : false;
+	}
+}
+if ( ! function_exists( 'get_post_time' ) ) {
+	function get_post_time( $format = 'U', $gmt = false, $post = null ) {
+		$post = is_object( $post ) ? $post : ( $GLOBALS['abcc_test_posts'][ (int) $post ] ?? null );
+		$ts   = $post && isset( $post->post_date_gmt_ts ) ? (int) $post->post_date_gmt_ts : time();
+		// Mirrors core: the non-GMT value is shifted by the site offset (fixed at +3h here).
+		return $gmt ? $ts : $ts + 3 * HOUR_IN_SECONDS;
+	}
+}
+if ( ! function_exists( 'human_time_diff' ) ) {
+	function human_time_diff( $from, $to = 0 ) {
+		$to   = $to ? $to : time();
+		$diff = abs( $to - $from );
+		if ( $diff < HOUR_IN_SECONDS ) {
+			return max( 1, (int) round( $diff / MINUTE_IN_SECONDS ) ) . ' mins';
+		}
+		return (int) round( $diff / HOUR_IN_SECONDS ) . ' hours';
+	}
+}
+if ( ! function_exists( 'get_edit_post_link' ) ) {
+	function get_edit_post_link( $post_id, $context = 'display' ) {
+		return isset( $GLOBALS['abcc_test_posts'][ (int) $post_id ] ) ? 'http://example.test/wp-admin/post.php?post=' . (int) $post_id . '&action=edit' : null;
+	}
+}
+if ( ! function_exists( 'get_permalink' ) ) {
+	function get_permalink( $post_id ) {
+		return 'http://example.test/?p=' . (int) $post_id;
+	}
+}
+if ( ! function_exists( '_n' ) ) {
+	function _n( $single, $plural, $number, $domain = 'default' ) {
+		return 1 === (int) $number ? $single : $plural;
+	}
+}
+if ( ! function_exists( 'abcc_get_tooltip_html' ) ) {
+	function abcc_get_tooltip_html( $text ) {
+		return '';
+	}
+}
 
 /**
  * Seed a topic post (publish) for resolver/composer tests.
@@ -434,7 +506,11 @@ function abcc_test_post_matches_meta_query($post_id, $meta_query) {
 		$compare = $clause['compare'] ?? '=';
 		$value   = $clause['value'] ?? '';
 
-		if ( '<=' === $compare ) {
+		if ( 'IN' === strtoupper( (string) $compare ) ) {
+			if ( ! in_array( (string) $stored, array_map( 'strval', (array) $value ), true ) ) {
+				return false;
+			}
+		} elseif ( '<=' === $compare ) {
 			if ( null === $stored || ! ( (float) $stored <= (float) $value ) ) {
 				return false;
 			}
@@ -526,6 +602,64 @@ if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
 	}
 }
 
+// Asset and template stubs so admin screens (onboarding) can render in tests.
+// wp_localize_script() records its payload for assertions.
+if ( ! function_exists( 'wp_enqueue_style' ) ) {
+	function wp_enqueue_style( ...$args ) {}
+}
+if ( ! function_exists( 'wp_enqueue_script' ) ) {
+	function wp_enqueue_script( ...$args ) {}
+}
+if ( ! function_exists( 'wp_localize_script' ) ) {
+	function wp_localize_script( $handle, $name, $data ) {
+		$GLOBALS['abcc_test_localized'][ $name ] = $data;
+		return true;
+	}
+}
+if ( ! function_exists( 'plugins_url' ) ) {
+	function plugins_url( $path = '', $plugin = '' ) {
+		return 'https://example.test/wp-content/plugins/automated-blog-content-creator' . $path;
+	}
+}
+if ( ! function_exists( 'admin_url' ) ) {
+	function admin_url( $path = '' ) {
+		return 'https://example.test/wp-admin/' . ltrim( $path, '/' );
+	}
+}
+if ( ! function_exists( 'add_query_arg' ) ) {
+	function add_query_arg( $args, $url = '' ) {
+		return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . http_build_query( $args );
+	}
+}
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( $text ) {
+		echo esc_html( $text );
+	}
+}
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( $text ) {
+		echo esc_attr( $text );
+	}
+}
+if ( ! function_exists( 'selected' ) ) {
+	function selected( $selected, $current = true, $echo = true ) {
+		$result = ( (string) $selected === (string) $current ) ? " selected='selected'" : '';
+		if ( $echo ) {
+			echo $result; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		return $result;
+	}
+}
+if ( ! function_exists( 'checked' ) ) {
+	function checked( $checked, $current = true, $echo = true ) {
+		$result = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
+		if ( $echo ) {
+			echo $result; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		return $result;
+	}
+}
+
 if ( ! defined( 'OPENAI_API' ) ) {
 	define( 'OPENAI_API', 'const-openai-key' );
 }
@@ -613,7 +747,17 @@ if ( ! function_exists( 'wp_strip_all_tags' ) ) {
 
 if ( ! function_exists( 'wp_kses' ) ) {
 	function wp_kses( $text, $allowed_tags = array() ) {
-		return $text;
+		// Mirrors core's tag allowlist only; attributes are left as given.
+		if ( empty( $allowed_tags ) ) {
+			return strip_tags( (string) $text );
+		}
+		return preg_replace_callback(
+			'#</?([a-z][a-z0-9]*)\b[^>]*>#i',
+			function ( $m ) use ( $allowed_tags ) {
+				return isset( $allowed_tags[ strtolower( $m[1] ) ] ) ? $m[0] : '';
+			},
+			(string) $text
+		);
 	}
 }
 
@@ -757,6 +901,9 @@ function abcc_test_reset_state() {
 	$GLOBALS['abcc_test_locale']               = 'en_US';
 	$GLOBALS['abcc_test_uneditable_posts']     = array();
 	$GLOBALS['abcc_test_spawn_cron_calls']     = 0;
+	$GLOBALS['abcc_test_mails']                = array();
+	$GLOBALS['abcc_test_mail_fails']           = false;
+	$GLOBALS['abcc_test_user_caps_by_id']      = array();
 	$GLOBALS['abcc_test_schedule']             = array(
 		'timestamp' => false,
 		'schedule'  => false,

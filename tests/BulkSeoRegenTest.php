@@ -58,13 +58,21 @@ abcc_test(
 abcc_test(
 	'bulk seo batch queues one job per post and counts results',
 	function () {
-		$GLOBALS['abcc_test_options']    = array( 'openai_api_key' => 'sk-test', 'prompt_select' => 'gpt-4.1-mini-2025-04-14' );
+		$GLOBALS['abcc_test_options']    = array(
+			'openai_api_key' => 'sk-test',
+			'prompt_select'  => 'gpt-4.1-mini-2025-04-14',
+		);
 		$GLOBALS['abcc_test_active_seo'] = 'yoast';
 
 		$ids = array();
 		for ( $i = 0; $i < 3; $i++ ) {
 			$ids[] = wp_insert_post(
-				array( 'post_title' => 'P' . $i, 'post_content' => 'x', 'post_status' => 'publish', 'post_type' => 'post' ),
+				array(
+					'post_title'   => 'P' . $i,
+					'post_content' => 'x',
+					'post_status'  => 'publish',
+					'post_type'    => 'post',
+				),
 				true
 			);
 		}
@@ -77,7 +85,13 @@ abcc_test(
 		abcc_assert_same( 0, $result['failed'] );
 
 		// Three seo_regen jobs exist.
-		$jobs = get_posts( array( 'post_type' => ABCC_Job::POST_TYPE, 'post_status' => 'any', 'posts_per_page' => -1 ) );
+		$jobs     = get_posts(
+			array(
+				'post_type'      => ABCC_Job::POST_TYPE,
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+			)
+		);
 		$seo_jobs = 0;
 		foreach ( $jobs as $job ) {
 			if ( 'seo_regen' === get_post_meta( $job->ID, '_abcc_job_source', true ) ) {
@@ -91,11 +105,19 @@ abcc_test(
 abcc_test(
 	'seo_regen job updates the target post and records success',
 	function () {
-		$GLOBALS['abcc_test_options']    = array( 'openai_api_key' => 'sk-test', 'prompt_select' => 'gpt-4.1-mini-2025-04-14' );
+		$GLOBALS['abcc_test_options']    = array(
+			'openai_api_key' => 'sk-test',
+			'prompt_select'  => 'gpt-4.1-mini-2025-04-14',
+		);
 		$GLOBALS['abcc_test_active_seo'] = 'yoast';
 
 		$post_id = wp_insert_post(
-			array( 'post_title' => 'Stale', 'post_content' => 'About comets.', 'post_status' => 'publish', 'post_type' => 'post' ),
+			array(
+				'post_title'   => 'Stale',
+				'post_content' => 'About comets.',
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			),
 			true
 		);
 
@@ -109,7 +131,7 @@ abcc_test(
 				'keywords' => array( 'comets' ),
 			)
 		);
-		$job_id = abcc_queue_generation_job( $payload, array( 'process_inline' => true ) );
+		$job_id  = abcc_queue_generation_job( $payload, array( 'process_inline' => true ) );
 
 		abcc_assert_true( ! is_wp_error( $job_id ), 'Job should queue.' );
 		abcc_assert_same( ABCC_Job::STATUS_SUCCESS, get_post_meta( $job_id, '_abcc_job_status', true ) );
@@ -130,7 +152,12 @@ abcc_test(
 		);
 
 		$post_id = wp_insert_post(
-			array( 'post_title' => 'Old', 'post_content' => 'About bees.', 'post_status' => 'publish', 'post_type' => 'post' ),
+			array(
+				'post_title'   => 'Old',
+				'post_content' => 'About bees.',
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			),
 			true
 		);
 
@@ -141,7 +168,10 @@ abcc_test(
 				array(
 					'content'     => array( array( 'text' => '{"title":"Bees 101","meta_description":"All about bees.","primary_keyword":"bees","secondary_keywords":[],"social_excerpt":"x"}' ) ),
 					'stop_reason' => 'end_turn',
-					'usage'       => array( 'input_tokens' => 5, 'output_tokens' => 9 ),
+					'usage'       => array(
+						'input_tokens'  => 5,
+						'output_tokens' => 9,
+					),
 				)
 			),
 		);
@@ -157,11 +187,30 @@ abcc_test(
 abcc_test(
 	'bulk batch skips posts the user cannot edit',
 	function () {
-		$GLOBALS['abcc_test_options']          = array( 'openai_api_key' => 'sk-test', 'prompt_select' => 'gpt-5.4-mini' );
+		$GLOBALS['abcc_test_options']          = array(
+			'openai_api_key' => 'sk-test',
+			'prompt_select'  => 'gpt-5.4-mini',
+		);
 		$GLOBALS['abcc_test_uneditable_posts'] = array();
 
-		$editable  = wp_insert_post( array( 'post_title' => 'Mine', 'post_content' => 'x', 'post_status' => 'publish', 'post_type' => 'post' ), true );
-		$forbidden = wp_insert_post( array( 'post_title' => 'Theirs', 'post_content' => 'x', 'post_status' => 'publish', 'post_type' => 'post' ), true );
+		$editable  = wp_insert_post(
+			array(
+				'post_title'   => 'Mine',
+				'post_content' => 'x',
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			),
+			true
+		);
+		$forbidden = wp_insert_post(
+			array(
+				'post_title'   => 'Theirs',
+				'post_content' => 'x',
+				'post_status'  => 'publish',
+				'post_type'    => 'post',
+			),
+			true
+		);
 
 		$GLOBALS['abcc_test_uneditable_posts'] = array( $forbidden );
 
@@ -181,7 +230,12 @@ abcc_test(
 
 		$post_ids = array();
 		for ( $i = 0; $i < 12; $i++ ) {
-			$post_ids[] = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Post ' . $i ) );
+			$post_ids[] = wp_insert_post(
+				array(
+					'post_type'  => 'post',
+					'post_title' => 'Post ' . $i,
+				)
+			);
 		}
 
 		abcc_queue_seo_regen_batch( $post_ids );
@@ -190,5 +244,31 @@ abcc_test(
 			$GLOBALS['abcc_test_spawn_cron_calls'] <= 1,
 			'A 12-post batch must spawn cron at most once, got ' . $GLOBALS['abcc_test_spawn_cron_calls'] . '.'
 		);
+	}
+);
+
+abcc_test(
+	'seo regen returns the provider error, not a generic message',
+	function () {
+		$GLOBALS['abcc_test_options'] = array(
+			'openai_api_key' => 'sk-test',
+			'prompt_select'  => 'gpt-4.1-mini-2025-04-14',
+		);
+		$post_id                      = wp_insert_post(
+			array(
+				'post_type'    => 'post',
+				'post_title'   => 'T',
+				'post_content' => 'x',
+			)
+		);
+		$GLOBALS['abcc_http_queue'][] = array(
+			'response' => array( 'code' => 429 ),
+			'body'     => '{}',
+		);
+
+		$result = abcc_run_seo_regen( $post_id, 'gpt-4.1-mini-2025-04-14' );
+
+		abcc_assert_true( is_wp_error( $result ) );
+		abcc_assert_true( false !== strpos( $result->get_error_message(), 'rate limiting' ), $result->get_error_message() );
 	}
 );

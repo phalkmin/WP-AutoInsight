@@ -32,6 +32,7 @@
 		$( '#abcc-topic-id' ).val( '' );
 		$( '#abcc-topic-title' ).val( '' );
 		$( '#abcc-topic-prompt' ).val( '' );
+		$( '#abcc-topic-keywords' ).val( '' );
 		$( '#abcc-topic-frequency' ).val( 'daily' );
 		$( '#abcc-topic-status-override' ).val( '' );
 		$( '#abcc-topic-provider-override' ).val( '' );
@@ -54,6 +55,7 @@
 			var data = {
 				title: $( '#abcc-topic-title' ).val(),
 				prompt: $( '#abcc-topic-prompt' ).val(),
+				keywords: $( '#abcc-topic-keywords' ).val(),
 				frequency: $( '#abcc-topic-frequency' ).val(),
 				post_status_override: $( '#abcc-topic-status-override' ).val(),
 				provider_override: $( '#abcc-topic-provider-override' ).val(),
@@ -90,6 +92,7 @@
 			$( '#abcc-topic-id' ).val( topic.id );
 			$( '#abcc-topic-title' ).val( topic.title );
 			$( '#abcc-topic-prompt' ).val( topic.prompt );
+			$( '#abcc-topic-keywords' ).val( ( topic.keywords || [] ).join( '\n' ) );
 			$( '#abcc-topic-frequency' ).val( topic.frequency );
 			$( '#abcc-topic-status-override' ).val( topic.post_status_override );
 			$( '#abcc-topic-provider-override' ).val( topic.provider_override );
@@ -102,7 +105,11 @@
 			event.preventDefault();
 
 			post( 'abcc_topic_toggle', { topic_id: $( this ).data( 'topic-id' ) } )
-				.done( function () {
+				.done( function ( response ) {
+					if ( ! response.success ) {
+						window.alert( ( response.data && response.data.message ) || abccTopics.i18n.error );
+						return;
+					}
 					window.location.reload();
 				} )
 				.fail( function () {
@@ -147,7 +154,11 @@
 			}
 
 			post( 'abcc_topic_delete', { topic_id: $( this ).data( 'topic-id' ) } )
-				.done( function () {
+				.done( function ( response ) {
+					if ( ! response.success ) {
+						window.alert( ( response.data && response.data.message ) || abccTopics.i18n.error );
+						return;
+					}
 					window.location.reload();
 				} )
 				.fail( function () {

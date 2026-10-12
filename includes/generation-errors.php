@@ -43,14 +43,14 @@ function abcc_format_generation_error( $error, $context = array() ) {
 		case 'abcc_no_api_key':
 			return sprintf(
 				/* translators: %s: provider name */
-				__( 'No API key configured for %s. Add one in Settings → Connections.', 'automated-blog-content-creator' ),
+				__( 'No API key configured for %s. Add one in Connections > API Keys.', 'automated-blog-content-creator' ),
 				$provider_label
 			);
 
 		case 'abcc_provider_auth_error':
 			return sprintf(
 				/* translators: %s: provider name */
-				__( '%s rejected the API key. Check it under Settings → Connections → API Keys.', 'automated-blog-content-creator' ),
+				__( '%s rejected the API key. Check it under Connections > API Keys.', 'automated-blog-content-creator' ),
 				$provider_label
 			);
 
@@ -64,7 +64,7 @@ function abcc_format_generation_error( $error, $context = array() ) {
 		case 'abcc_provider_server_error':
 			return sprintf(
 				/* translators: %s: provider name */
-				__( '%s is having server trouble. This is on their side — try again shortly or use a different provider.', 'automated-blog-content-creator' ),
+				__( '%s is having server trouble. This is on their side. Try again shortly or use a different provider.', 'automated-blog-content-creator' ),
 				$provider_label
 			);
 
@@ -79,7 +79,7 @@ function abcc_format_generation_error( $error, $context = array() ) {
 			);
 
 		case 'abcc_unknown_provider':
-			return __( 'That provider is not available. Pick a model from Settings → Connections.', 'automated-blog-content-creator' );
+			return __( 'That provider is not available. Pick a model from Connections > API Keys.', 'automated-blog-content-creator' );
 
 		case 'http_request_failed':
 			return sprintf(
@@ -91,7 +91,7 @@ function abcc_format_generation_error( $error, $context = array() ) {
 		case 'abcc_provider_empty_completion':
 			return sprintf(
 				/* translators: %s: provider name */
-				__( '%s returned an empty response. Raise the character limit — reasoning models can spend the whole budget before writing anything.', 'automated-blog-content-creator' ),
+				__( '%s returned an empty response. Raise the character limit. Reasoning models can spend the whole budget before writing anything.', 'automated-blog-content-creator' ),
 				$provider_label
 			);
 
@@ -119,7 +119,7 @@ function abcc_format_generation_error( $error, $context = array() ) {
 			}
 			return sprintf(
 				/* translators: 1: provider name, 2: HTTP status code */
-				__( '%1$s rejected the request (HTTP %2$d). The selected model may no longer be available — pick another under Settings → Connections.', 'automated-blog-content-creator' ),
+				__( '%1$s rejected the request (HTTP %2$d). The selected model may no longer be available. Pick another under Connections > API Keys.', 'automated-blog-content-creator' ),
 				$provider_label,
 				$status
 			);
@@ -130,7 +130,25 @@ function abcc_format_generation_error( $error, $context = array() ) {
 		abcc_debug_log( 'Unmapped generation error [' . $code . ']: ' . $error->get_error_message() );
 	}
 
-	return __( 'Content generation failed. Check Content → Generation Log for details.', 'automated-blog-content-creator' );
+	return __( 'Content generation failed. Check Content > Generation Log for details.', 'automated-blog-content-creator' );
+}
+
+/**
+ * Whether a failed job should offer "Report this error".
+ *
+ * Key, quota and site-setting problems are the user's to fix; reporting them
+ * to the author helps nobody.
+ *
+ * @since 4.5.2
+ * @param string $code Error code stored on the job.
+ * @return bool
+ */
+function abcc_should_offer_error_report( $code ) {
+	return ! in_array(
+		(string) $code,
+		array( 'abcc_no_api_key', 'abcc_provider_auth_error', 'abcc_provider_rate_limited', 'abcc_ai_disabled', 'context_overflow', 'abcc_job_never_started' ),
+		true
+	);
 }
 
 /**
@@ -153,11 +171,11 @@ function abcc_get_generation_error_next_step( $error, $context = array() ) { // 
 			return __( 'Check your key under Connections → API Keys.', 'automated-blog-content-creator' );
 
 		case 'abcc_provider_rate_limited':
-			return __( 'Rate limit — wait a minute, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
+			return __( 'Rate limit. Wait a minute, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
 
 		case 'abcc_provider_server_error':
 		case 'http_request_failed':
-			return __( 'Provider outage or network issue — retry later, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
+			return __( 'Provider outage or network issue. Retry later, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
 
 		case 'context_overflow':
 			return __( 'Reduce the keywords or lower the length setting under Settings → General.', 'automated-blog-content-creator' );
@@ -165,6 +183,9 @@ function abcc_get_generation_error_next_step( $error, $context = array() ) { // 
 		case 'abcc_provider_http_error':
 		case 'abcc_unknown_provider':
 			return __( 'Pick a different model under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'abcc_job_never_started':
+			return __( 'WP-Cron did not run. On hosts that block loopback requests, trigger wp-cron.php from a server cron job.', 'automated-blog-content-creator' );
 
 		case 'abcc_ai_disabled':
 			return __( 'A site administrator turned AI off in WordPress settings. Turn it back on to resume generation.', 'automated-blog-content-creator' );

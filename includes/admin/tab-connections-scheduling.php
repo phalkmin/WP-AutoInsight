@@ -25,11 +25,12 @@ $schedule_info = abcc_get_openai_event_schedule();
 				<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
 			</a>
 		</h2>
+		<p class="notice notice-info inline"><?php esc_html_e( 'This is the legacy single-prompt schedule. Topics (the Topics tab) replace it and will become the only scheduler in a future version.', 'automated-blog-content-creator' ); ?></p>
 		<table class="form-table">
 			<tr>
 				<th scope="row">
 					<?php esc_html_e( 'Frequency', 'automated-blog-content-creator' ); ?>
-					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'How often the plugin automatically generates and publishes a post. Uses WP-Cron — your site must receive traffic for cron to fire reliably.', 'automated-blog-content-creator' ) ) ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'How often the plugin automatically generates a post (saved as draft or published per your Settings → General default). Uses WP-Cron — your site must receive traffic for cron to fire reliably.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
 				<td>
 					<?php

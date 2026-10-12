@@ -151,7 +151,7 @@ function abcc_generate_post_from_audio( $audio_path, $mode, $options = array() )
  */
 function abcc_build_post_from_transcript( $transcript, $mode, $options = array() ) {
 	$mode           = abcc_sanitize_audio_mode( $mode );
-	$model          = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$model          = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 	$char_limit     = (int) abcc_get_setting( 'openai_char_limit', 200 );
 	$rewrite_failed = false;
 	$title          = '';
@@ -199,6 +199,9 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 
 		if ( ! empty( $lines ) ) {
 			$title = abcc_audio_clean_title( array_shift( $lines ) );
+		} else {
+			// The intro call failed; the transcript still becomes a post, flagged.
+			$rewrite_failed = true;
 		}
 
 		$intro_lines = ! empty( $lines ) ? $lines : array();
@@ -234,7 +237,15 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 		}
 	}
 
-	$post_status = abcc_resolve_post_status( array( 'source' => 'audio' ) );
+	// Same clamp as every queued job: a user who can't publish gets a draft.
+	$status_payload = abcc_finalize_payload_post_status(
+		array(
+			'post_type' => 'post',
+			'source'    => 'audio',
+		),
+		isset( $options['author_id'] ) ? (int) $options['author_id'] : 0
+	);
+	$post_status    = $status_payload['post_status'];
 
 	$post_id = wp_insert_post(
 		array(
@@ -279,6 +290,50 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 	}
 
 	return $post_id;
+}
+
+/**
+ * Check that an attachment may be sent to transcription by the current user.
+ *
+ * @since 4.5.2
+ * @param int $attachment_id Attachment post ID.
+ * @return true|WP_Error
+ */
+function abcc_validate_audio_attachment( $attachment_id ) {
+	$attachment_id = absint( $attachment_id );
+
+	if ( ! $attachment_id || ! current_user_can( 'edit_post', $attachment_id ) || ! current_user_can( 'upload_files' ) ) {
+		return new WP_Error( 'abcc_audio_forbidden', __( 'Permission denied.', 'automated-blog-content-creator' ) );
+	}
+
+	if ( ! abcc_get_setting( 'abcc_enable_audio_transcription', true ) ) {
+		return new WP_Error( 'abcc_audio_disabled', __( 'Audio transcription is turned off under Media → Audio.', 'automated-blog-content-creator' ) );
+	}
+
+	$mime = (string) get_post_mime_type( $attachment_id );
+	if ( false === strpos( $mime, 'audio' ) ) {
+		return new WP_Error( 'abcc_audio_not_audio', __( 'That file is not an audio attachment.', 'automated-blog-content-creator' ) );
+	}
+
+	$path = get_attached_file( $attachment_id );
+	if ( ! $path || ! file_exists( $path ) ) {
+		return new WP_Error( 'abcc_audio_missing', __( 'Could not locate the audio file.', 'automated-blog-content-creator' ) );
+	}
+
+	$formats   = array_map( 'strtolower', (array) abcc_get_setting( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) ) );
+	$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+	if ( ! in_array( $extension, $formats, true ) ) {
+		return new WP_Error(
+			'abcc_audio_format',
+			sprintf(
+				/* translators: %s: file extension */
+				__( 'Unsupported file format: %s', 'automated-blog-content-creator' ),
+				$extension
+			)
+		);
+	}
+
+	return true;
 }
 
 /**
@@ -368,7 +423,7 @@ function abcc_add_transcribe_button_to_media() {
 	$file_size_bytes = ( $attached_file && file_exists( $attached_file ) ) ? filesize( $attached_file ) : 0;
 	?>
 	<div class="misc-pub-section">
-		<label><?php esc_html_e( 'AI Transcription:', 'automated-blog-content-creator' ); ?></label>
+		<span class="abcc-audio-mode-label"><?php esc_html_e( 'AI Transcription:', 'automated-blog-content-creator' ); ?></span>
 		<fieldset class="abcc-audio-mode" style="margin:8px 0;">
 			<label style="display:block;">
 				<input type="radio" name="abcc_audio_mode" value="transcript_plus_intro" <?php checked( $default_mode, 'transcript_plus_intro' ); ?>>
@@ -425,8 +480,9 @@ function abcc_handle_audio_transcription() {
 		return;
 	}
 
-	if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
-		wp_send_json_error( array( 'message' => __( 'Permission denied', 'automated-blog-content-creator' ) ) );
+	$valid = abcc_validate_audio_attachment( $attachment_id );
+	if ( is_wp_error( $valid ) ) {
+		wp_send_json_error( array( 'message' => $valid->get_error_message() ) );
 		return;
 	}
 
@@ -438,25 +494,7 @@ function abcc_handle_audio_transcription() {
 			throw new Exception( __( 'An OpenAI API key is required for audio transcription. Please add one in Advanced Settings.', 'automated-blog-content-creator' ) );
 		}
 
-		// Validate file.
 		$file_path = get_attached_file( $attachment_id );
-		if ( ! file_exists( $file_path ) ) {
-			throw new Exception( __( 'File not found', 'automated-blog-content-creator' ) );
-		}
-
-		// Check file format.
-		$supported_formats = abcc_get_setting( 'abcc_supported_audio_formats', array( 'mp3', 'wav', 'm4a', 'webm' ) );
-		$file_extension    = pathinfo( $file_path, PATHINFO_EXTENSION );
-
-		if ( ! in_array( strtolower( $file_extension ), $supported_formats, true ) ) {
-			throw new Exception(
-				sprintf(
-					/* translators: %s: File extension */
-					__( 'Unsupported file format: %s', 'automated-blog-content-creator' ),
-					$file_extension
-				)
-			);
-		}
 
 		$file_size = filesize( $file_path );
 		if ( $file_size > 25 * 1024 * 1024 ) {
@@ -555,7 +593,7 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 
 	// Build multipart/form-data body manually (wp_remote_post does not support file uploads natively).
 	$boundary  = wp_generate_password( 24, false );
-	$language  = abcc_get_setting( 'abcc_transcription_language', 'en' );
+	$language  = (string) abcc_get_setting( 'abcc_transcription_language', 'auto' );
 	$file_name = basename( $file_path );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 	$file_data = file_get_contents( $file_path );
@@ -570,9 +608,12 @@ function abcc_transcribe_audio( $api_key, $file_path ) {
 	$body .= '--' . $boundary . "\r\n";
 	$body .= 'Content-Disposition: form-data; name="response_format"' . "\r\n\r\n";
 	$body .= 'text' . "\r\n";
-	$body .= '--' . $boundary . "\r\n";
-	$body .= 'Content-Disposition: form-data; name="language"' . "\r\n\r\n";
-	$body .= $language . "\r\n";
+	// Whisper rejects "auto" as an ISO code; omitting the field lets it detect.
+	if ( '' !== $language && 'auto' !== $language ) {
+		$body .= '--' . $boundary . "\r\n";
+		$body .= 'Content-Disposition: form-data; name="language"' . "\r\n\r\n";
+		$body .= $language . "\r\n";
+	}
 	$body .= '--' . $boundary . "\r\n";
 	$body .= 'Content-Disposition: form-data; name="file"; filename="' . $file_name . '"' . "\r\n";
 	$body .= 'Content-Type: application/octet-stream' . "\r\n\r\n";
@@ -683,10 +724,20 @@ function abcc_enqueue_audio_scripts( $hook ) {
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'abcc_admin_buttons' ),
 			'i18n'    => array(
-				'transcribing' => __( 'Transcribing audio...', 'automated-blog-content-creator' ),
-				'creating'     => __( 'Creating post...', 'automated-blog-content-creator' ),
-				'error'        => __( 'An error occurred', 'automated-blog-content-creator' ),
-				'noTranscript' => __( 'No transcript available', 'automated-blog-content-creator' ),
+				'transcribing'     => __( 'Transcribing audio...', 'automated-blog-content-creator' ),
+				'creating'         => __( 'Creating post...', 'automated-blog-content-creator' ),
+				'error'            => __( 'An error occurred', 'automated-blog-content-creator' ),
+				'noTranscript'     => __( 'No transcript available', 'automated-blog-content-creator' ),
+				'timedOut'         => __( 'Request timed out. Try with a smaller file.', 'automated-blog-content-creator' ),
+				'editPost'         => __( 'Edit Post', 'automated-blog-content-creator' ),
+				'transcribingLong' => __( 'Transcribing and generating… this can take a minute.', 'automated-blog-content-creator' ),
+				/* translators: %s: error message */
+				'errorPrefix'      => __( 'Error: %s', 'automated-blog-content-creator' ),
+				/* translators: %s: formatted file size */
+				'fileSize'         => __( 'File size: %s', 'automated-blog-content-creator' ),
+				'tooLarge'         => __( '(Too large - max 25MB)', 'automated-blog-content-creator' ),
+				'bytesUnits'       => __( 'Bytes,KB,MB,GB', 'automated-blog-content-creator' ),
+				'zeroBytes'        => __( '0 Bytes', 'automated-blog-content-creator' ),
 			),
 		)
 	);
@@ -717,16 +768,18 @@ function abcc_handle_audio_generate_post() {
 		return;
 	}
 
-	if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+	if ( ! abcc_user_can_create_post_type( 'post' ) ) {
 		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
 		return;
 	}
 
-	$path = get_attached_file( $attachment_id );
-	if ( ! $path ) {
-		wp_send_json_error( array( 'message' => __( 'Could not locate the audio file.', 'automated-blog-content-creator' ) ) );
+	$valid = abcc_validate_audio_attachment( $attachment_id );
+	if ( is_wp_error( $valid ) ) {
+		wp_send_json_error( array( 'message' => $valid->get_error_message() ) );
 		return;
 	}
+
+	$path = get_attached_file( $attachment_id );
 
 	$result = abcc_generate_post_from_audio( $path, $mode, array( 'attachment_id' => $attachment_id ) );
 

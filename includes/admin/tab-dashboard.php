@@ -23,7 +23,8 @@ $composer_status   = abcc_get_setting( 'abcc_default_post_status', 'draft' );
 $composer_model    = abcc_get_setting( 'prompt_select', '' );
 
 // Scheduling status.
-$schedule_info = abcc_get_openai_event_schedule();
+$schedule_info   = abcc_get_openai_event_schedule();
+$abcc_next_topic = function_exists( 'abcc_get_next_topic_run' ) ? abcc_get_next_topic_run() : null;
 
 // Recent jobs (last 5).
 $recent_jobs = get_posts(
@@ -70,7 +71,7 @@ usort(
 $page_slug = 'automated-blog-content-creator-post';
 
 // ── Capability grid (Zone 2) ───────────────────────────────────────────────
-$cap_topic_count  = count( $composer_topics );
+$cap_topic_count  = count( array_filter( wp_list_pluck( $composer_topics, 'active' ) ) );
 $cap_images_on    = (bool) abcc_get_setting( 'openai_generate_images', true );
 $cap_infogr_on    = (bool) abcc_get_setting( 'abcc_enable_infographics', true );
 $cap_providers_on = 0;
@@ -154,7 +155,7 @@ foreach ( $provider_cards as $card ) {
 				</span>
 				<span class="abcc-composer__chip">
 					<span class="abcc-composer__k"><?php esc_html_e( 'Template', 'automated-blog-content-creator' ); ?></span>
-					<strong><?php echo esc_html( $composer_resolved['template'] ); ?></strong>
+					<strong><?php echo esc_html( abcc_get_content_template_name( $composer_resolved['template'] ) ); ?></strong>
 				</span>
 				<span class="abcc-composer__chip">
 					<span class="abcc-composer__k"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></span>
@@ -278,6 +279,61 @@ foreach ( $provider_cards as $card ) {
 				</a>
 			</p>
 		<?php else : ?>
+			<?php if ( $abcc_next_topic ) : ?>
+				<?php if ( ! abcc_site_ai_enabled() ) : ?>
+				<p class="abcc-status-next">
+					<span class="abcc-status-dot abcc-status-dot--inactive"></span>
+					<?php esc_html_e( 'AI features are turned off for this site, so topics are paused until they are turned back on.', 'automated-blog-content-creator' ); ?>
+				</p>
+				<?php elseif ( abcc_topic_run_is_overdue( $abcc_next_topic['next_run'] ) ) : ?>
+				<p class="abcc-status-next">
+					<span class="abcc-status-dot abcc-status-dot--inactive"></span>
+					<?php
+					printf(
+						/* translators: %s: how long ago the run was due, e.g. "3 hours" */
+						esc_html__( 'Topic run overdue by %s. WP-Cron has not fired; see Connections > Scheduling for the external cron tip.', 'automated-blog-content-creator' ),
+						'<strong>' . esc_html( human_time_diff( $abcc_next_topic['next_run'], time() ) ) . '</strong>'
+					);
+					?>
+				</p>
+				<?php elseif ( $abcc_next_topic['next_run'] <= time() ) : ?>
+				<p class="abcc-status-next">
+					<span class="abcc-status-dot abcc-status-dot--active"></span>
+					<?php
+					printf(
+						/* translators: %s: topic name */
+						esc_html__( 'Topic run due now: %s. The hourly scheduler picks it up shortly.', 'automated-blog-content-creator' ),
+						'<strong>' . esc_html( $abcc_next_topic['title'] ) . '</strong>'
+					);
+					?>
+				</p>
+				<?php else : ?>
+				<p class="abcc-status-next">
+					<span class="abcc-status-dot abcc-status-dot--active"></span>
+					<?php
+					printf(
+						/* translators: 1: human time diff, 2: topic name */
+						esc_html__( 'Next topic run in %1$s — %2$s', 'automated-blog-content-creator' ),
+						'<strong>' . esc_html( human_time_diff( time(), $abcc_next_topic['next_run'] ) ) . '</strong>',
+						'<strong>' . esc_html( $abcc_next_topic['title'] ) . '</strong>'
+					);
+					?>
+				</p>
+				<?php endif; ?>
+				<p><a href="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'page' => $page_slug,
+							'tab'  => 'topics',
+						),
+						admin_url( 'admin.php' )
+					)
+				);
+				?>
+							"><?php esc_html_e( 'Manage topics →', 'automated-blog-content-creator' ); ?></a></p>
+			<?php else : ?>
 			<p class="abcc-status-next">
 				<span class="abcc-status-dot abcc-status-dot--inactive"></span>
 				<?php esc_html_e( 'Scheduler is off. No posts are queued.', 'automated-blog-content-creator' ); ?>
@@ -299,6 +355,7 @@ foreach ( $provider_cards as $card ) {
 					<?php esc_html_e( 'Set up schedule →', 'automated-blog-content-creator' ); ?>
 				</a>
 			</p>
+			<?php endif; ?>
 		<?php endif; ?>
 	</div>
 
@@ -341,28 +398,22 @@ foreach ( $provider_cards as $card ) {
 			<span class="abcc-tile__name"><?php esc_html_e( 'Bulk Generate', 'automated-blog-content-creator' ); ?></span>
 			<span class="abcc-tile__state"><?php esc_html_e( 'Paste a list → drafts', 'automated-blog-content-creator' ); ?></span>
 		</a>
-		<a class="abcc-tile" href="
-		<?php
-		// The audio upload lives in the post editor's WP-AutoInsight Tools box,
-		// so the tile opens a new post of the first enabled post type.
-		$abcc_audio_post_types = (array) abcc_get_setting( 'abcc_selected_post_types', array( 'post' ) );
-		$abcc_audio_post_type  = ! empty( $abcc_audio_post_types ) ? (string) reset( $abcc_audio_post_types ) : 'post';
-		echo esc_url( admin_url( 'post' === $abcc_audio_post_type ? 'post-new.php' : 'post-new.php?post_type=' . $abcc_audio_post_type ) );
-		?>
-		">
+		<a class="abcc-tile" href="<?php echo esc_url( admin_url( 'upload.php?post_mime_type=audio' ) ); ?>">
 			<span class="abcc-tile__name"><?php esc_html_e( 'Post from Audio', 'automated-blog-content-creator' ); ?></span>
-			<span class="abcc-tile__state"><?php esc_html_e( 'Upload in the post editor', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state"><?php esc_html_e( 'Open an audio file in the Media Library', 'automated-blog-content-creator' ); ?></span>
 		</a>
-		<a class="abcc-tile" href="
-		<?php
-		// Bulk SEO regeneration lives on the Posts list as a bulk action;
-		// there is no plugin subtab for it.
-		echo esc_url( admin_url( 'edit.php?post_type=post' ) );
-		?>
-		">
+		<?php $abcc_seo_plugin = function_exists( 'abcc_get_active_seo_plugin' ) ? abcc_get_active_seo_plugin() : 'none'; ?>
+		<?php if ( 'none' === $abcc_seo_plugin ) : ?>
+		<span class="abcc-tile abcc-tile--disabled" aria-disabled="true">
+			<span class="abcc-tile__name"><?php esc_html_e( 'SEO Refresh', 'automated-blog-content-creator' ); ?></span>
+			<span class="abcc-tile__state abcc-tile__state--off"><?php esc_html_e( 'Needs Yoast, Rank Math or a similar SEO plugin', 'automated-blog-content-creator' ); ?></span>
+		</span>
+		<?php else : ?>
+		<a class="abcc-tile" href="<?php echo esc_url( admin_url( 'edit.php?post_type=post' ) ); ?>">
 			<span class="abcc-tile__name"><?php esc_html_e( 'SEO Refresh', 'automated-blog-content-creator' ); ?></span>
 			<span class="abcc-tile__state"><?php esc_html_e( 'Select posts → Bulk actions', 'automated-blog-content-creator' ); ?></span>
 		</a>
+		<?php endif; ?>
 		<a class="abcc-tile" href="
 		<?php
 		echo esc_url(
@@ -452,10 +503,10 @@ foreach ( $provider_cards as $card ) {
 		<div class="abcc-dashboard-card__header">
 			<h2 class="abcc-dashboard-card__title"><?php esc_html_e( 'Recent Activity', 'automated-blog-content-creator' ); ?></h2>
 			<div class="abcc-activity-filters" role="group" aria-label="<?php esc_attr_e( 'Filter by status', 'automated-blog-content-creator' ); ?>">
-				<button type="button" class="abcc-filter-btn abcc-filter-btn--active" data-filter="all"><?php esc_html_e( 'All', 'automated-blog-content-creator' ); ?></button>
-				<button type="button" class="abcc-filter-btn" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_QUEUED ); ?>"><?php esc_html_e( 'Queued', 'automated-blog-content-creator' ); ?></button>
-				<button type="button" class="abcc-filter-btn" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_RUNNING ); ?>"><?php esc_html_e( 'Running', 'automated-blog-content-creator' ); ?></button>
-				<button type="button" class="abcc-filter-btn" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_FAILED ); ?>"><?php esc_html_e( 'Failed', 'automated-blog-content-creator' ); ?></button>
+				<button type="button" class="abcc-filter-btn abcc-filter-btn--active" aria-pressed="true" data-filter="all"><?php esc_html_e( 'All', 'automated-blog-content-creator' ); ?></button>
+				<button type="button" class="abcc-filter-btn" aria-pressed="false" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_QUEUED ); ?>"><?php esc_html_e( 'Queued', 'automated-blog-content-creator' ); ?></button>
+				<button type="button" class="abcc-filter-btn" aria-pressed="false" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_RUNNING ); ?>"><?php esc_html_e( 'Running', 'automated-blog-content-creator' ); ?></button>
+				<button type="button" class="abcc-filter-btn" aria-pressed="false" data-filter="<?php echo esc_attr( ABCC_Job::STATUS_FAILED ); ?>"><?php esc_html_e( 'Failed', 'automated-blog-content-creator' ); ?></button>
 			</div>
 			<a href="
 			<?php
@@ -482,20 +533,27 @@ foreach ( $provider_cards as $card ) {
 					$job_status = get_post_meta( $job->ID, '_abcc_job_status', true );
 					$model      = get_post_meta( $job->ID, '_abcc_job_model', true );
 					$source     = get_post_meta( $job->ID, '_abcc_job_source', true );
-					$result     = get_post_meta( $job->ID, '_abcc_job_result_post_id', true );
+					$result     = (int) get_post_meta( $job->ID, '_abcc_job_result_post_id', true );
 					$job_error  = get_post_meta( $job->ID, '_abcc_job_error', true );
+					$keywords   = (array) get_post_meta( $job->ID, '_abcc_job_keywords', true );
 					$icon       = ABCC_Job::STATUS_SUCCESS === $job_status ? '✓' : ( ABCC_Job::STATUS_FAILED === $job_status ? '✗' : '⟳' );
 					$class      = 'abcc-activity-item abcc-activity-item--' . esc_attr( $job_status );
+					// A trashed or deleted result has no title to show and nothing to open.
+					$result_live = $result && in_array( (string) get_post_status( $result ), array( 'publish', 'draft', 'pending', 'future', 'private' ), true );
+					$item_title  = $result_live ? get_the_title( $result ) : implode( ', ', array_filter( array_map( 'strval', $keywords ), 'strlen' ) );
+					if ( '' === trim( (string) $item_title ) ) {
+						$item_title = abcc_get_job_source_label( $source );
+					}
 					?>
 					<li class="<?php echo $class; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>" data-status="<?php echo esc_attr( $job_status ); ?>">
 						<span class="abcc-activity-icon"><?php echo $icon; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-						<span class="abcc-activity-title"><?php echo esc_html( get_the_title( $job ) ); ?></span>
+						<span class="abcc-activity-title"><?php echo esc_html( $item_title ); ?></span>
 						<span class="abcc-activity-meta">
 							<?php echo esc_html( abcc_get_model_display_name( $model ) ); ?>
 							&bull; <?php echo esc_html( abcc_get_job_source_label( $source ) ); ?>
-							&bull; <?php echo esc_html( human_time_diff( get_post_time( 'U', false, $job ), time() ) ); ?> <?php esc_html_e( 'ago', 'automated-blog-content-creator' ); ?>
+							&bull; <?php echo esc_html( human_time_diff( get_post_time( 'U', true, $job ), time() ) ); ?> <?php esc_html_e( 'ago', 'automated-blog-content-creator' ); ?>
 						</span>
-						<?php if ( $result && ABCC_Job::STATUS_SUCCESS === $job_status ) : ?>
+						<?php if ( $result_live && ABCC_Job::STATUS_SUCCESS === $job_status ) : ?>
 							<a href="<?php echo esc_url( (string) get_edit_post_link( $result ) ); ?>" class="abcc-activity-link">
 								<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
 							</a>
@@ -582,7 +640,7 @@ foreach ( $provider_cards as $card ) {
 				</li>
 				<li>
 					<span class="dashicons dashicons-sos"></span>
-					<a href="https://wordpress.org/support/plugin/wp-autoinsight/" target="_blank" rel="noopener">
+					<a href="https://wordpress.org/support/plugin/automated-blog-content-creator/" target="_blank" rel="noopener">
 						<?php esc_html_e( 'Support Forum', 'automated-blog-content-creator' ); ?>
 					</a>
 				</li>

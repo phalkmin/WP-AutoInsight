@@ -123,6 +123,8 @@ add_action( 'wp_ajax_abcc_create_post', 'abcc_handle_create_post' );
 /**
  * Handle the AJAX request for rewriting a post.
  *
+ * Returns block markup for the editor to apply; never writes post_content.
+ *
  * @throws Exception On generation failure.
  */
 function abcc_handle_rewrite_post() {
@@ -151,48 +153,47 @@ function abcc_handle_rewrite_post() {
 	}
 
 	try {
-		// Get the post.
 		$post = get_post( $post_id );
 		if ( ! $post ) {
 			throw new Exception( __( 'Post not found', 'automated-blog-content-creator' ) );
 		}
 
-		// Get settings.
 		$api_key       = abcc_check_api_key();
-		$prompt_select = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
-		$tone          = abcc_get_setting( 'openai_tone', 'default' );
-		$char_limit    = abcc_get_setting( 'openai_char_limit', 200 );
+		$prompt_select = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
+		$char_limit    = (int) abcc_get_setting( 'openai_char_limit', 200 );
 
 		if ( empty( $api_key ) ) {
 			throw new Exception( __( 'API key not configured', 'automated-blog-content-creator' ) );
 		}
 
-		// Build rewrite prompt.
-		$prompt = sprintf(
-			"Rewrite this blog post to improve its SEO and readability while maintaining the core message.\n\n" .
-			"Original Title: %s\n\n" .
-			"Original Content:\n%s\n\n" .
-			"Instructions:\n" .
-			"- Keep the same tone and style\n" .
-			"- Improve readability and structure\n" .
-			"- Use proper HTML formatting (<h2>, <h3>, <p> tags)\n" .
-			"- Maintain all key points and information\n" .
-			"- Make it more engaging and SEO-friendly\n" .
-			'- Use clear headings and better paragraph structure',
-			$post->post_title,
-			// Bound the post body — arbitrary-length content overflows the model context.
-			abcc_bound_prompt_input( wp_strip_all_tags( $post->post_content ) )
-		);
+		// The editor's current content when the JS sends it; unsaved edits
+		// are what the user is looking at.
+		$source_html = isset( $_POST['content'] )
+			? wp_kses_post( wp_unslash( $_POST['content'] ) ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wp_kses_post sanitizes.
+			: (string) $post->post_content;
 
-		// Generate new content.
-		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, array( 'source' => 'rewrite' ) );
-		$result   = is_wp_error( $detailed['error'] ) ? false : $detailed['content'];
+		$input = abcc_prepare_rewrite_input( $source_html );
+		if ( is_wp_error( $input ) ) {
+			throw new Exception( $input->get_error_message() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message.
+		}
+		if ( '' === trim( wp_strip_all_tags( $input ) ) ) {
+			throw new Exception( __( 'This post has nothing to rewrite yet. Add some text first.', 'automated-blog-content-creator' ) );
+		}
 
-		if ( false === $result || empty( $result ) ) {
+		$prompt = abcc_build_rewrite_prompt( $post->post_title, $input );
+
+		// A rewrite is at least as long as its input; the Content Length
+		// setting alone truncates anything longer than a stub.
+		$budget = max( $char_limit, (int) ceil( abcc_estimate_tokens( $input ) * 1.3 ) );
+		$budget = min( $budget, 8000 );
+
+		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $budget, array( 'source' => 'rewrite' ) );
+
+		if ( is_wp_error( $detailed['error'] ) || empty( $detailed['content'] ) ) {
 			throw new Exception(
 				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message from the error formatter.
 				abcc_format_generation_error(
-					isset( $detailed['error'] ) ? $detailed['error'] : null,
+					$detailed['error'],
 					array(
 						'provider' => abcc_get_provider_for_model( $prompt_select ),
 						'model'    => $prompt_select,
@@ -201,34 +202,21 @@ function abcc_handle_rewrite_post() {
 			);
 		}
 
-		// Process the content.
-		$content_array = array_filter(
-			$result,
-			function ( $line ) {
-				return ! empty( trim( $line ) );
-			}
-		);
-
-		$format_content = abcc_create_blocks( $content_array );
-		$post_content   = abcc_gutenberg_blocks( $format_content );
-
-		// Update the post.
-		$updated = wp_update_post(
-			array(
-				'ID'           => $post_id,
-				'post_content' => wp_kses_post( $post_content ),
-			),
-			true
-		);
-
-		if ( is_wp_error( $updated ) ) {
-			throw new Exception( $updated->get_error_message() );
+		if ( ! empty( $detailed['truncated'] ) ) {
+			throw new Exception( __( 'The rewrite was cut off at the model\'s output limit. Raise Content Length under Settings → General or shorten the post, then try again. Nothing was changed.', 'automated-blog-content-creator' ) );
 		}
+
+		$lines = abcc_clean_rewrite_output( $detailed['content'], $post->post_title );
+		if ( empty( $lines ) ) {
+			throw new Exception( __( 'The model returned no usable content. Try again.', 'automated-blog-content-creator' ) );
+		}
+
+		$markup = abcc_gutenberg_blocks( abcc_create_blocks( $lines ) );
 
 		wp_send_json_success(
 			array(
-				'message' => __( 'Post rewritten successfully!', 'automated-blog-content-creator' ),
-				'post_id' => $post_id,
+				'content'    => $markup,
+				'word_count' => abcc_count_words_unicode( $markup ),
 			)
 		);
 
@@ -265,41 +253,38 @@ function abcc_handle_validate_api_key() {
 	}
 
 	$submitted_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
-	$api_key       = ! empty( $submitted_key ) ? $submitted_key : abcc_get_provider_api_key( $provider );
-	$result        = abcc_test_provider_connection( $provider, $api_key );
+	$api_key       = '' !== $submitted_key ? $submitted_key : (string) abcc_get_provider_api_key( $provider );
 
-	if ( is_wp_error( $result ) || ( is_array( $result ) && empty( $result['success'] ) ) ) {
-		$error_message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['error'] ?? __( 'Validation failed', 'automated-blog-content-creator' ) );
-		set_transient(
-			'abcc_last_validation_' . $provider,
-			array(
-				'status'  => 'failed',
-				'message' => $error_message,
-			),
-			HOUR_IN_SECONDS
-		);
-		wp_send_json_error( array( 'message' => $error_message ) );
-	} elseif ( ! empty( $result['success'] ) ) {
-		set_transient(
-			'abcc_last_validation_' . $provider,
-			array(
-				'status'  => 'verified',
-				'message' => __( 'Verified just now', 'automated-blog-content-creator' ),
-			),
-			HOUR_IN_SECONDS
-		);
-		wp_send_json_success( array( 'message' => __( 'Verified just now', 'automated-blog-content-creator' ) ) );
-	} else {
-		set_transient(
-			'abcc_last_validation_' . $provider,
-			array(
-				'status'  => 'failed',
-				'message' => __( 'Connection failed', 'automated-blog-content-creator' ),
-			),
-			HOUR_IN_SECONDS
-		);
-		wp_send_json_error( array( 'message' => __( 'Connection failed', 'automated-blog-content-creator' ) ) );
+	if ( '' === trim( $api_key ) ) {
+		wp_send_json_error( array( 'message' => __( 'Enter an API key first.', 'automated-blog-content-creator' ) ) );
+		return;
 	}
+
+	$result = abcc_test_provider_connection( $provider, $api_key );
+
+	if ( is_wp_error( $result ) ) {
+		$error_message = $result->get_error_message();
+	} elseif ( is_array( $result ) && ! empty( $result['success'] ) ) {
+		$error_message = '';
+	} else {
+		$error_message = is_array( $result ) && ! empty( $result['error'] ) ? (string) $result['error'] : __( 'Connection failed', 'automated-blog-content-creator' );
+	}
+
+	// Health follows the key generation will use; a typed, unsaved key is only tested.
+	$record_health = '' === $submitted_key;
+
+	if ( '' !== $error_message ) {
+		if ( $record_health ) {
+			abcc_record_provider_validation( $provider, false, $error_message );
+		}
+		wp_send_json_error( array( 'message' => $error_message ) );
+		return;
+	}
+
+	if ( $record_health ) {
+		abcc_record_provider_validation( $provider, true );
+	}
+	wp_send_json_success( array( 'message' => __( 'Verified just now', 'automated-blog-content-creator' ) ) );
 }
 add_action( 'wp_ajax_abcc_validate_api_key', 'abcc_handle_validate_api_key' );
 
@@ -322,6 +307,10 @@ function abcc_handle_bulk_generate_single() {
 	$model      = isset( $_POST['model'] ) ? sanitize_text_field( wp_unslash( $_POST['model'] ) ) : '';
 	$run_id     = isset( $_POST['run_id'] ) ? sanitize_key( wp_unslash( $_POST['run_id'] ) ) : '';
 	$draft_only = isset( $_POST['draft'] ) && rest_sanitize_boolean( wp_unslash( $_POST['draft'] ) );
+
+	if ( '' !== $model && ! abcc_is_valid_text_model( $model ) ) {
+		$model = '';
+	}
 
 	if ( empty( $keyword ) ) {
 		wp_send_json_error( array( 'message' => __( 'Empty keyword.', 'automated-blog-content-creator' ) ) );
@@ -356,20 +345,32 @@ function abcc_handle_bulk_generate_single() {
 		$result_post = (int) get_post_meta( $job_id, '_abcc_job_result_post_id', true );
 
 		if ( ABCC_Job::STATUS_SUCCESS === $job_status && $result_post ) {
+			$image_attempt = (string) get_post_meta( $result_post, '_abcc_image_generation_attempted', true );
 			wp_send_json_success(
 				array(
-					'message'  => __( 'Success', 'automated-blog-content-creator' ),
-					'job_id'   => $job_id,
-					'run_id'   => $run_id,
-					'edit_url' => get_edit_post_link( $result_post, 'raw' ),
+					'message'      => __( 'Success', 'automated-blog-content-creator' ),
+					'job_id'       => $job_id,
+					'run_id'       => $run_id,
+					'edit_url'     => get_edit_post_link( $result_post, 'raw' ),
+					'image_failed' => '' !== $image_attempt && '1' !== $image_attempt,
 				)
 			);
 		} else {
 			$error = get_post_meta( $job_id, '_abcc_job_error', true );
-			throw new Exception( $error ? $error : __( 'Generation failed.', 'automated-blog-content-creator' ) );
+			wp_send_json_error(
+				array(
+					'message' => $error ? $error : __( 'Generation failed.', 'automated-blog-content-creator' ),
+					'code'    => (string) get_post_meta( $job_id, '_abcc_job_error_code', true ),
+				)
+			);
 		}
 	} catch ( Exception $e ) {
-		wp_send_json_error( array( 'message' => $e->getMessage() ) );
+		wp_send_json_error(
+			array(
+				'message' => $e->getMessage(),
+				'code'    => '',
+			)
+		);
 	}
 }
 add_action( 'wp_ajax_abcc_bulk_generate_single', 'abcc_handle_bulk_generate_single' );
@@ -406,7 +407,7 @@ function abcc_handle_check_wp_connectors() {
 			'has_connectors' => $has_connectors,
 			'has_keys'       => $has_keys,
 			'providers'      => $providers,
-			'connectors_url' => admin_url( 'options-general.php?page=ai-connectors' ),
+			'connectors_url' => abcc_get_connectors_url(),
 		)
 	);
 }
@@ -509,14 +510,15 @@ function abcc_handle_retry_featured_image() {
 		$image_url = abcc_generate_featured_image( $retry['model'], $retry['keywords'] );
 
 		if ( ! $image_url ) {
-			wp_send_json_error( array( 'message' => __( 'The image provider did not return an image. Check the provider key and image settings.', 'automated-blog-content-creator' ) ) );
+			$reason = abcc_get_last_image_error();
+			wp_send_json_error( array( 'message' => '' !== $reason ? $reason : __( 'The image provider did not return an image. Check the provider key and image settings.', 'automated-blog-content-creator' ) ) );
 			return;
 		}
 
 		$alt_text = abcc_get_setting( 'abcc_auto_alt_text', true )
 			? abcc_build_featured_image_alt_text( get_the_title( $post_id ), isset( $retry['keywords'][0] ) ? $retry['keywords'][0] : '' )
 			: '';
-		$attached = abcc_set_featured_image( $post_id, $image_url, $alt_text );
+		$attached = abcc_set_featured_image( $post_id, $image_url, $alt_text, array( 'title' => get_the_title( $post_id ) ) );
 
 		if ( false === $attached ) {
 			wp_send_json_error( array( 'message' => __( 'The image was generated but could not be attached to the post.', 'automated-blog-content-creator' ) ) );
@@ -547,7 +549,14 @@ function abcc_handle_get_job_status() {
 	}
 
 	$job_id = isset( $_POST['job_id'] ) ? absint( $_POST['job_id'] ) : 0;
-	$job    = abcc_get_job_data( $job_id );
+
+	// Same message as a missing job: don't confirm that another user's job exists.
+	if ( ! abcc_user_can_view_job( $job_id ) ) {
+		wp_send_json_error( array( 'message' => __( 'Generation job not found.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$job = abcc_get_job_data( $job_id );
 
 	if ( empty( $job ) ) {
 		wp_send_json_error( array( 'message' => __( 'Generation job not found.', 'automated-blog-content-creator' ) ) );
@@ -668,8 +677,6 @@ function abcc_run_provider_health_check() {
 		return;
 	}
 
-	$results = get_option( 'abcc_provider_health', array() );
-
 	foreach ( abcc_get_provider_ids() as $provider_id ) {
 		if ( ! abcc_provider_supports_text_generation( $provider_id ) ) {
 			continue;
@@ -677,45 +684,32 @@ function abcc_run_provider_health_check() {
 
 		$api_key = abcc_get_provider_api_key_for_health_check( $provider_id );
 
-		if ( empty( $api_key ) ) {
-			$results[ $provider_id ] = array(
-				'status'    => 'no_key',
-				'timestamp' => time(),
-			);
-			delete_transient( 'abcc_last_validation_' . $provider_id );
+		if ( '' === $api_key ) {
+			abcc_record_provider_no_key( $provider_id );
 			continue;
 		}
 
 		$valid = abcc_validate_provider_api_key_probe( $provider_id, $api_key );
 
-		$results[ $provider_id ] = array(
-			'status'    => $valid ? 'connected' : 'failed',
-			'timestamp' => time(),
-		);
-		set_transient(
-			'abcc_last_validation_' . $provider_id,
-			array(
-				'status'    => $valid ? 'verified' : 'failed',
-				'message'   => $valid
-					? __( 'Validated automatically', 'automated-blog-content-creator' )
-					: __( 'Connection failed', 'automated-blog-content-creator' ),
-				'timestamp' => time(),
-			),
+		abcc_record_provider_validation(
+			$provider_id,
+			$valid,
+			$valid
+				? __( 'Validated automatically', 'automated-blog-content-creator' )
+				: __( 'Connection failed', 'automated-blog-content-creator' ),
 			2 * DAY_IN_SECONDS
 		);
 	}
-
-	update_option( 'abcc_provider_health', $results );
 }
 
 /**
- * Get the stored API key option value for a provider (used by health check only).
+ * Key the daily health check probes: Connectors, wp-config, then the saved option.
  *
  * @param string $provider_id Provider ID from registry.
  * @return string
  */
 function abcc_get_provider_api_key_for_health_check( $provider_id ) {
-	return (string) abcc_get_provider_saved_api_key( $provider_id );
+	return (string) abcc_get_provider_api_key( $provider_id );
 }
 
 /**
@@ -778,6 +772,9 @@ function abcc_topic_args_from_request() {
 	}
 	if ( isset( $_POST['provider_override'] ) ) {
 		$args['provider_override'] = sanitize_text_field( wp_unslash( $_POST['provider_override'] ) );
+	}
+	if ( isset( $_POST['keywords'] ) ) {
+		$args['keywords'] = sanitize_textarea_field( wp_unslash( $_POST['keywords'] ) );
 	}
 	if ( isset( $_POST['target_post_type'] ) ) {
 		$args['target_post_type'] = sanitize_key( wp_unslash( $_POST['target_post_type'] ) );
@@ -906,9 +903,9 @@ function abcc_handle_topic_run_now() {
 		return;
 	}
 
+	// The failure streak resets when the job succeeds, not when it is queued.
 	update_post_meta( $topic_id, '_abcc_topic_last_job_id', (int) $job_id );
-	// A successful manual run is proof the topic works — clear the auto-pause counter.
-	update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', 0 );
+	update_post_meta( $topic_id, '_abcc_topic_last_run', time() );
 
 	wp_send_json_success( array( 'job_id' => (int) $job_id ) );
 }

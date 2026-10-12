@@ -17,14 +17,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<h2><?php esc_html_e( 'How should new posts be saved?', 'automated-blog-content-creator' ); ?></h2>
 			<p><?php esc_html_e( 'You can change this anytime in Settings.', 'automated-blog-content-creator' ); ?></p>
 
+			<?php $abcc_status = abcc_sanitize_post_status( abcc_get_setting( 'abcc_default_post_status', 'draft' ) ); ?>
 			<fieldset class="abcc-onboarding-status">
 				<label class="abcc-onboarding-radio">
-					<input type="radio" name="abcc_onboarding_status" value="draft" checked>
+					<input type="radio" name="abcc_onboarding_status" value="draft" <?php checked( $abcc_status, 'draft' ); ?>>
 					<strong><?php esc_html_e( 'Save as drafts', 'automated-blog-content-creator' ); ?></strong>
 					<span><?php esc_html_e( 'Recommended for agencies — review before publishing.', 'automated-blog-content-creator' ); ?></span>
 				</label>
 				<label class="abcc-onboarding-radio">
-					<input type="radio" name="abcc_onboarding_status" value="publish">
+					<input type="radio" name="abcc_onboarding_status" value="publish" <?php checked( $abcc_status, 'publish' ); ?>>
 					<strong><?php esc_html_e( 'Publish immediately', 'automated-blog-content-creator' ); ?></strong>
 					<span><?php esc_html_e( 'Posts go live as soon as they are generated.', 'automated-blog-content-creator' ); ?></span>
 				</label>
@@ -46,7 +47,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</div>
 
 			<div class="abcc-step-actions">
-				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-2"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
+				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-2"><?php esc_html_e( 'Skip setup', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-secondary abcc-prev-step" data-goto="1"><?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-primary abcc-next-step" data-step="2" data-goto="3"><?php esc_html_e( 'Continue', 'automated-blog-content-creator' ); ?></button>
 			</div>

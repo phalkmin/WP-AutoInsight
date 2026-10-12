@@ -1,6 +1,5 @@
 jQuery(document).ready(function ($) {
   // ── Auto-save ──────────────────────────────────────────────────────────────
-  var abccAutosaveTimer = null;
   var $abccIndicator = $('#abcc-autosave-indicator');
 
   var abccHideTimer = null;
@@ -51,16 +50,26 @@ jQuery(document).ready(function ($) {
     });
   }
 
-  // Attach to any field with data-autosave-key attribute.
+  // Attach to any field with data-autosave-key attribute. One timer per key, so two
+  // quick changes to different fields both reach the server.
+  var abccAutosaveTimers = {};
   $(document).on('change', '[data-autosave-key]', function () {
     var $field = $(this);
     var key    = $field.data('autosave-key');
     var value  = $field.is(':checkbox') ? ($field.is(':checked') ? '1' : '0') : $field.val();
 
-    clearTimeout(abccAutosaveTimer);
-    abccAutosaveTimer = setTimeout(function () {
+    clearTimeout(abccAutosaveTimers[key]);
+    abccAutosaveTimers[key] = setTimeout(function () {
       abccAutosaveSetting(key, value);
     }, 800);
+
+    // A custom tone only applies while the dropdown says "custom"; typing one selects it.
+    if (key === 'custom_tone' && $.trim(value) !== '') {
+      var $tone = $('#openai_tone');
+      if ($tone.length && $tone.val() !== 'custom') {
+        $tone.val('custom').trigger('change');
+      }
+    }
   });
   // ── End Auto-save ──────────────────────────────────────────────────────────
 
@@ -286,7 +295,7 @@ jQuery(document).ready(function ($) {
       transform: "translateX(100%)",
       transition: "all 0.3s ease",
     });
-    $("<strong>").text("Selected: ").appendTo($notice);
+    $("<strong>").text(abcc.i18n("selected") + " ").appendTo($notice);
     $notice.append(document.createTextNode(modelName));
 
     $("body").append($notice);
@@ -375,17 +384,26 @@ jQuery(document).ready(function ($) {
       },
       function (response) {
         $status.removeClass("loading");
+        var $badge = $('.abcc-provider-badge[data-provider="' + provider + '"][data-badge-kind="validation"]');
         if (response.success) {
           $status.addClass("verified");
           abcc.showStatus($status, "✓ " + response.data.message, "success");
+          $badge
+            .removeClass("abcc-provider-badge--failed abcc-provider-badge--manual abcc-provider-badge--none")
+            .addClass("abcc-provider-badge--verified")
+            .text("✓ " + abcc.i18n("verified"));
         } else {
           $status.addClass("failed");
           abcc.showStatus($status, "✗ " + response.data.message, "error");
+          $badge
+            .removeClass("abcc-provider-badge--verified abcc-provider-badge--manual abcc-provider-badge--none")
+            .addClass("abcc-provider-badge--failed")
+            .text("✗ " + abcc.i18n("validationFailed"));
         }
       },
     ).fail(function () {
       $status.removeClass("loading").addClass("failed");
-      abcc.showStatus($status, "✗ Connection error", "error");
+      abcc.showStatus($status, "✗ " + abcc.i18n("connectionError"), "error");
     });
   }
 
@@ -481,34 +499,11 @@ jQuery(document).ready(function ($) {
       }
     });
 
-    // Create new group HTML (simplified for JS)
-    const newGroup = `
-      <div class="abcc-group-item" data-index="${index}">
-        <div class="abcc-group-header">
-          <input type="text" name="abcc_group_name[${index}]" value="" class="abcc-group-name-input" placeholder="New Group Name">
-          <span class="abcc-remove-item abcc-remove-group">&times; Remove</span>
-        </div>
-        <div class="abcc-group-body">
-          <div class="abcc-group-keywords">
-            <label class="abcc-field-label">Keywords (one per line)</label>
-            <textarea name="abcc_group_keywords[${index}]" rows="4" class="large-text"></textarea>
-          </div>
-          <div class="abcc-group-category">
-            <label class="abcc-field-label">Target Category</label>
-            ${$(".abcc-category-select").first().clone().attr("name", `abcc_group_category[${index}]`).prop("outerHTML")}
-          </div>
-          <div class="abcc-group-template">
-            <label class="abcc-field-label">Content Template</label>
-            <select name="abcc_group_template[${index}]">
-              ${$('select[name^="abcc_group_template"]').first().html() || '<option value="default">Default Template</option>'}
-            </select>
-          </div>
-          ${($('#abcc-group-advanced-template').html() || '').replace(/__INDEX__/g, index)}
-        </div>
-      </div>
-    `;
-
-    $container.append(newGroup);
+    const tpl = $("#abcc-group-template").html();
+    if (!tpl) {
+      return;
+    }
+    $container.append(tpl.replace(/__INDEX__/g, index));
   });
 
   $(document).on("click", ".abcc-remove-group", function () {
@@ -523,18 +518,22 @@ jQuery(document).ready(function ($) {
     const $container = $("#abcc-templates-container");
     const slug = "custom_" + Math.random().toString(36).substr(2, 9);
 
-    const newTemplate = `
-      <div class="abcc-template-item" data-slug="${slug}">
-        <div class="abcc-group-header">
-          <input type="text" name="abcc_template_name[${slug}]" value="" class="abcc-template-name-input" placeholder="New Template Name">
-          <input type="hidden" name="abcc_template_slug[]" value="${slug}">
-          <span class="abcc-remove-item abcc-remove-template">&times; Remove</span>
-        </div>
-        <textarea name="abcc_template_prompt[${slug}]" rows="3" class="large-text"></textarea>
-      </div>
-    `;
+    // Translated strings go in through attr/text so quotes and brackets cannot break the markup.
+    const $header = $('<div class="abcc-group-header"></div>')
+      .append(
+        $('<input type="text" class="abcc-template-name-input" value="">').attr({
+          name: "abcc_template_name[" + slug + "]",
+          placeholder: abcc.i18n("newTemplateName"),
+        })
+      )
+      .append($('<input type="hidden" name="abcc_template_slug[]">').val(slug))
+      .append($('<span class="abcc-remove-item abcc-remove-template"></span>').text("× " + abcc.i18n("remove")));
+    const $newTemplate = $('<div class="abcc-template-item"></div>')
+      .attr("data-slug", slug)
+      .append($header)
+      .append($('<textarea rows="3" class="large-text"></textarea>').attr("name", "abcc_template_prompt[" + slug + "]"));
 
-    $container.append(newTemplate);
+    $container.append($newTemplate);
 
     // Update all template selectors in keyword groups
     updateTemplateSelectors();
@@ -549,7 +548,7 @@ jQuery(document).ready(function ($) {
 
   // Function to update all template dropdowns when a template is added or removed
   function updateTemplateSelectors() {
-    const options = [{ value: "default", label: "Default Template" }];
+    const options = [{ value: "default", label: abcc.i18n("defaultTemplate") }];
 
     $(".abcc-template-item").each(function () {
       const slug = $(this).data("slug");
@@ -560,7 +559,7 @@ jQuery(document).ready(function ($) {
       const name = $nameInput.length
         ? ($nameInput.val() || "").trim()
         : ($(this).find(".abcc-group-header strong").text() || "").trim();
-      options.push({ value: slug, label: name || "Unnamed Template" });
+      options.push({ value: slug, label: name || abcc.i18n("unnamedTemplate") });
     });
 
     $('select[name^="abcc_group_template"]').each(function () {
@@ -582,7 +581,7 @@ jQuery(document).ready(function ($) {
     var $status = $("#abcc-manual-generation-status");
 
     $btn.prop("disabled", true);
-    abcc.showStatus($status, "Queueing generation job\u2026");
+    abcc.showStatus($status, abcc.i18n("queueing"));
 
     var groupIndex = $("#abcc-group-select").length
       ? $("#abcc-group-select").val()
@@ -606,12 +605,12 @@ jQuery(document).ready(function ($) {
           refreshJobLog();
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($status, "Status: " + job.statusLabel);
+              abcc.showStatus($status, abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
               abcc.showStatus(
                 $status,
-                "Post created successfully. Post ID: " + job.post_id,
+                abcc.i18n("postCreatedId").replace("%d", job.post_id),
                 "success"
               );
               $btn.prop("disabled", false);
@@ -631,11 +630,16 @@ jQuery(document).ready(function ($) {
         }
       },
       error: function (xhr) {
-        abcc.setError($status, "Error generating post: " + xhr.statusText);
+        abcc.setError($status, abcc.i18n("errorGenerating").replace("%s", xhr.statusText));
         $btn.prop("disabled", false);
       },
     });
   });
+
+  function abccComposerFieldsVisible() {
+    var $fields = $("#abcc-composer-fields");
+    return $fields.length > 0 && !$fields.prop("hidden") && $fields.is(":visible");
+  }
 
   // Composer \u2014 expand / collapse the editor.
   $("#abcc-composer-toggle").on("click", function () {
@@ -645,7 +649,7 @@ jQuery(document).ready(function ($) {
     var expanded = $btn.attr("aria-expanded") === "true";
 
     $btn.attr("aria-expanded", !expanded);
-    $btn.text(expanded ? "change \u25be" : "collapse \u25b4");
+    $btn.text(expanded ? abcc.i18n("change") : abcc.i18n("collapse"));
     $fields.prop("hidden", expanded);
     $summary.toggle(expanded);
   });
@@ -660,15 +664,16 @@ jQuery(document).ready(function ($) {
       nonce: abccAdmin.buttonNonce,
     };
 
-    // Only send overrides when the editor is open.
-    if ($("#abcc-composer-toggle").attr("aria-expanded") === "true") {
+    // Send overrides only for fields the user can see. The toggle's
+    // aria-expanded can disagree with the DOM, so check the DOM.
+    if (abccComposerFieldsVisible()) {
       data.source = $("#abcc-composer-source").val();
       data.model = $("#abcc-composer-model").val();
       data.post_status = $("input[name='abcc-composer-status']:checked").val();
     }
 
     $btn.prop("disabled", true);
-    abcc.showStatus($status, "Queueing generation job\u2026");
+    abcc.showStatus($status, abcc.i18n("queueing"));
 
     $.ajax({
       url: ajaxurl,
@@ -679,7 +684,7 @@ jQuery(document).ready(function ($) {
           abcc.showStatus($status, response.data.message);
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($status, "Status: " + job.statusLabel);
+              abcc.showStatus($status, abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
               const $link = $("<a>")
@@ -705,7 +710,7 @@ jQuery(document).ready(function ($) {
         }
       },
       error: function (xhr) {
-        abcc.setError($status, "Error: " + xhr.statusText);
+        abcc.setError($status, abcc.i18n("errorPrefix").replace("%s", xhr.statusText));
         $btn.prop("disabled", false);
       },
     });
@@ -753,10 +758,10 @@ jQuery(document).ready(function ($) {
           refreshJobLog();
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($statusCell, "Status: " + job.statusLabel);
+              abcc.showStatus($statusCell, abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
-              abcc.showStatus($statusCell, "Done! Redirecting\u2026", "success");
+              abcc.showStatus($statusCell, abcc.i18n("doneRedirecting"), "success");
               window.location.href = job.edit_url;
             },
             onFailed: function (message) {
@@ -771,13 +776,13 @@ jQuery(document).ready(function ($) {
         } else {
           abcc.setError(
             $statusCell,
-            response.data.message || "An error occurred.",
+            response.data.message || abcc.i18n("errorOccurred"),
           );
           $link.css("pointer-events", "auto");
         }
       },
     ).fail(function () {
-      abcc.setError($statusCell, "Network error occurred.");
+      abcc.setError($statusCell, abcc.i18n("networkError"));
       $link.css("pointer-events", "auto");
     });
   });
@@ -811,8 +816,31 @@ jQuery(document).ready(function ($) {
     });
 
     $bulkStart.on('click', function () {
-      var keywords = $bulkKeywords.val().split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      var seen     = {};
+      var keywords = $bulkKeywords.val().split('\n').map(function (s) { return s.trim(); }).filter(function (kw) {
+        var key = kw.toLowerCase();
+        if (!kw || seen[key]) { return false; }
+        seen[key] = true;
+        return true;
+      });
       if (!keywords.length) { return; }
+      $bulkKeywords.val(keywords.join('\n'));
+      updateBulkCount();
+
+      // Codes that mean every remaining keyword would fail the same way.
+      var STOP_CODES = ['abcc_provider_auth_error', 'abcc_no_api_key', 'abcc_ai_disabled', 'abcc_unknown_provider'];
+      var stopped    = false;
+
+      function lockForm(locked) {
+        $bulkStart.prop('disabled', locked);
+        $bulkKeywords.prop('disabled', locked);
+        $('#abcc-bulk-file-upload, #abcc-bulk-template, #abcc-bulk-model, #abcc-bulk-draft').prop('disabled', locked);
+      }
+      function leaveWarning(e) {
+        e.preventDefault();
+        e.returnValue = abccAdmin.i18n.bulkLeaveWarning || '';
+        return e.returnValue;
+      }
 
       var $progress = $('#abcc-bulk-progress');
       var $body     = $('#abcc-bulk-log-body');
@@ -821,9 +849,8 @@ jQuery(document).ready(function ($) {
       $progress.show();
       $body.empty();
       $progress.find('.abcc-bulk-summary').remove();
-      $bulkStart.prop('disabled', true);
-      $bulkKeywords.prop('disabled', true);
-      $('#abcc-bulk-file-upload').prop('disabled', true);
+      lockForm(true);
+      window.addEventListener('beforeunload', leaveWarning);
 
       var template = $('#abcc-bulk-template').val();
       var model    = $('#abcc-bulk-model').val();
@@ -846,13 +873,16 @@ jQuery(document).ready(function ($) {
 
       function processNext(index) {
         if (index >= keywords.length) {
-          $bulkStart.prop('disabled', false);
-          $bulkKeywords.prop('disabled', false);
-          $('#abcc-bulk-file-upload').prop('disabled', false).val('');
+          lockForm(false);
+          window.removeEventListener('beforeunload', leaveWarning);
+          $('#abcc-bulk-file-upload').val('');
 
           var summary = (abccAdmin.i18n.bulkSummary || 'Done: %1$s created, %2$s failed')
             .replace('%1$s', created)
             .replace('%2$s', failed);
+          if (stopped) {
+            summary += ' ' + (abccAdmin.i18n.bulkStopped || 'Stopped after a configuration error.');
+          }
           var $summary = $('<p class="abcc-bulk-summary">').text(summary);
           if (abccAdmin.logUrl) {
             $summary.append(' \u2014 ', $('<a>').attr('href', abccAdmin.logUrl).text(abccAdmin.i18n.viewLog || 'View log \u2192'));
@@ -862,6 +892,11 @@ jQuery(document).ready(function ($) {
         }
         var kw  = keywords[index];
         var $tr = bulkRows[index];
+        if (stopped) {
+          $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.skipped || 'Skipped');
+          processNext(index + 1);
+          return;
+        }
         $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.generating || 'Generating\u2026');
 
         $.post(ajaxurl, {
@@ -881,15 +916,22 @@ jQuery(document).ready(function ($) {
                 (abccAdmin.i18n.viewPost || 'View post') + '</a>'
               );
             }
+            if (response.data && response.data.image_failed) {
+              $tr.find('.abcc-bulk-result').append(' ', $('<span class="description">').text(abccAdmin.i18n.noImage || '(no image)'));
+            }
           } else {
             failed++;
-            var msg = response.data && response.data.message ? response.data.message : 'Error';
+            var msg = response.data && response.data.message ? response.data.message : abccAdmin.i18n.error;
             $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
             $tr.find('.abcc-bulk-result').text(msg);
+            if (response.data && STOP_CODES.indexOf(response.data.code) !== -1) {
+              stopped = true;
+            }
           }
         }).fail(function () {
           failed++;
           $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
+          $tr.find('.abcc-bulk-result').text(abcc.i18n("networkError"));
         }).always(function () {
           processNext(index + 1);
         });
@@ -922,8 +964,8 @@ jQuery(document).ready(function ($) {
     var $items = $list.find('.abcc-activity-item');
     var $empty = $list.siblings('.abcc-activity-empty');
 
-    $btn.closest('.abcc-activity-filters').find('.abcc-filter-btn').removeClass('abcc-filter-btn--active');
-    $btn.addClass('abcc-filter-btn--active');
+    $btn.closest('.abcc-activity-filters').find('.abcc-filter-btn').removeClass('abcc-filter-btn--active').attr('aria-pressed', 'false');
+    $btn.addClass('abcc-filter-btn--active').attr('aria-pressed', 'true');
 
     var visible = 0;
     $items.each(function () {

@@ -38,7 +38,7 @@ $audio_tab_url = add_query_arg(
 			</p>
 
 			<div class="abcc-step-actions">
-				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-4"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
+				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-4"><?php esc_html_e( 'Skip setup', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-secondary abcc-prev-step" data-goto="3"><?php esc_html_e( 'Back', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-primary" id="abcc-onboarding-finish"><?php esc_html_e( 'Finish setup', 'automated-blog-content-creator' ); ?></button>
 			</div>

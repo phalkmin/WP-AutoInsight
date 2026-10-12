@@ -85,7 +85,12 @@ abcc_test(
 		// 1x1 transparent PNG.
 		file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' ) );
 
-		$post_id = wp_insert_post( array( 'post_type' => 'post', 'post_title' => 'Has an image' ) );
+		$post_id = wp_insert_post(
+			array(
+				'post_type'  => 'post',
+				'post_title' => 'Has an image',
+			)
+		);
 
 		// No canned HTTP response is queued: if the implementation makes a
 		// request, wp_remote_post returns the 'no_canned_response' WP_Error and
@@ -139,5 +144,41 @@ abcc_test(
 		if ( file_exists( $file ) ) {
 			unlink( $file );
 		}
+	}
+);
+
+abcc_test(
+	'local attach can keep the featured image and title the attachment after the post',
+	function () {
+		$post_id = wp_insert_post(
+			array(
+				'post_type'  => 'post',
+				'post_title' => 'Hello World Guide',
+			)
+		);
+		update_post_meta( $post_id, '_thumbnail_id', 55 );
+
+		$dir = wp_upload_dir()['basedir'];
+		wp_mkdir_p( $dir );
+		$path = $dir . '/abcc-attach-args.png';
+		file_put_contents( $path, 'png' );
+
+		$attachment_id = abcc_attach_local_image_to_post(
+			$post_id,
+			$path,
+			'alt',
+			array(
+				'title'         => 'Infographic for: Hello World Guide',
+				'set_thumbnail' => false,
+			)
+		);
+
+		abcc_assert_true( $attachment_id > 0 );
+		abcc_assert_same( 55, (int) get_post_meta( $post_id, '_thumbnail_id', true ), 'set_thumbnail=false must not replace the featured image.' );
+		abcc_assert_same( 'Infographic for: Hello World Guide', get_the_title( $attachment_id ) );
+
+		$featured = abcc_attach_local_image_to_post( $post_id, $path, 'alt', array( 'title' => 'Hello World Guide' ) );
+		abcc_assert_same( $featured, (int) get_post_meta( $post_id, '_thumbnail_id', true ), 'Default still sets the thumbnail.' );
+		unlink( $path );
 	}
 );

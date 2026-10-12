@@ -51,6 +51,18 @@ class ABCC_Plugin {
 	}
 
 	/**
+	 * "Settings" link on the Plugins screen.
+	 *
+	 * @param array $links Existing action links.
+	 * @return array
+	 */
+	public function add_settings_action_link( $links ) {
+		$url = admin_url( 'admin.php?page=automated-blog-content-creator-post' );
+		array_unshift( $links, '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Settings', 'automated-blog-content-creator' ) . '</a>' );
+		return $links;
+	}
+
+	/**
 	 * Initialize hooks
 	 */
 	private function init_hooks() {
@@ -59,6 +71,8 @@ class ABCC_Plugin {
 
 		// Register deactivation hook.
 		register_deactivation_hook( dirname( __DIR__ ) . '/auto-post.php', array( $this, 'deactivate_plugin' ) );
+
+		add_filter( 'plugin_action_links_' . plugin_basename( dirname( __DIR__ ) . '/auto-post.php' ), array( $this, 'add_settings_action_link' ) );
 
 		// Enqueue scripts and styles.
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
@@ -163,6 +177,10 @@ class ABCC_Plugin {
 		wp_clear_scheduled_hook( 'abcc_openai_generate_post_hook' );
 		wp_clear_scheduled_hook( 'abcc_daily_provider_health_check' );
 		wp_clear_scheduled_hook( 'abcc_run_topic_schedules' );
+		// Queued job events carry the job id as an argument.
+		if ( function_exists( 'wp_unschedule_hook' ) ) {
+			wp_unschedule_hook( 'abcc_process_generation_job' );
+		}
 	}
 
 	/**
@@ -196,7 +214,7 @@ class ABCC_Plugin {
 				array(
 					'i18n' => array(
 						/* translators: confirmation dialog when rewriting a post with AI */
-						'confirmRewrite'        => __( 'Are you sure you want to rewrite this post? This will replace the current content.', 'automated-blog-content-creator' ),
+						'confirmRewrite'        => __( 'Rewrite this post with AI? The result replaces the editor content. WordPress may autosave a draft you own, so to discard it use Undo in the block editor, or reload without saving in the classic editor.', 'automated-blog-content-creator' ),
 						/* translators: confirmation dialog when regenerating a post as a new draft */
 						'confirmRegenerate'     => __( 'Regenerate this post? A new draft will be created with the same parameters.', 'automated-blog-content-creator' ),
 						/* translators: confirmation dialog when creating an infographic */
@@ -204,7 +222,8 @@ class ABCC_Plugin {
 						/* translators: button label while AI rewrite is in progress */
 						'rewriting'             => __( 'Rewriting...', 'automated-blog-content-creator' ),
 						'analyzing'             => __( 'Analyzing content...', 'automated-blog-content-creator' ),
-						'rewriteSuccess'        => __( 'Success! Reloading page...', 'automated-blog-content-creator' ),
+						'rewriteApplied'        => __( 'Rewritten. Review the result before saving.', 'automated-blog-content-creator' ),
+						'rewriteNoEditor'       => __( 'Could not find the editor to apply the rewrite. Reload the page and try again.', 'automated-blog-content-creator' ),
 						'rewriteBtn'            => __( 'Rewrite with AI', 'automated-blog-content-creator' ),
 						/* translators: button label while regenerating a post */
 						'regenerating'          => __( 'Regenerating…', 'automated-blog-content-creator' ),
@@ -214,7 +233,7 @@ class ABCC_Plugin {
 						/* translators: button label while infographic is being created */
 						'creating'              => __( 'Creating...', 'automated-blog-content-creator' ),
 						'generatingInfographic' => __( 'Generating infographic...', 'automated-blog-content-creator' ),
-						'infographicSuccess'    => __( 'Success!', 'automated-blog-content-creator' ),
+						'infographicSuccess'    => __( 'Infographic saved to the Media Library (not inserted into the post).', 'automated-blog-content-creator' ),
 						'infographicBtn'        => __( 'Create Infographic', 'automated-blog-content-creator' ),
 						'view'                  => __( 'View', 'automated-blog-content-creator' ),
 						'edit'                  => __( 'Edit', 'automated-blog-content-creator' ),

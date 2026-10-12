@@ -66,6 +66,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			" class="button">
 				<?php esc_html_e( 'Export Settings as JSON', 'automated-blog-content-creator' ); ?>
 			</a>
+			<span class="description"><?php esc_html_e( 'A copy of your settings for your records. There is no import yet; keys are never included.', 'automated-blog-content-creator' ); ?></span>
 		</p>
 
 		<hr>
@@ -85,7 +86,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<li>
 					<span class="dashicons dashicons-heart"></span>
 					<a href="https://ko-fi.com/phalkmin" target="_blank" rel="noopener">
-						<?php esc_html_e( 'Buy Me a Coffee (Ko-fi)', 'automated-blog-content-creator' ); ?>
+						<?php esc_html_e( 'Support on Ko-fi', 'automated-blog-content-creator' ); ?>
 					</a>
 				</li>
 				<li>
@@ -101,16 +102,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<div class="abcc-danger-zone">
 			<h3><?php esc_html_e( 'Danger Zone', 'automated-blog-content-creator' ); ?></h3>
 			<p>
-				<button type="submit" name="abcc_action" value="reset_settings" class="button"
-					onclick="return confirm('<?php esc_attr_e( 'This will reset all plugin settings to defaults. Are you sure?', 'automated-blog-content-creator' ); ?>')">
+				<button type="submit" name="abcc_action" value="reset_settings" class="button button-link-delete"
+					onclick="return confirm('<?php esc_attr_e( 'Reset all plugin settings to their defaults? Your API keys are kept. Are you sure?', 'automated-blog-content-creator' ); ?>')">
 					<?php esc_html_e( 'Reset All Settings', 'automated-blog-content-creator' ); ?>
 				</button>
 				&nbsp;
-				<button type="submit" name="abcc_action" value="delete_history" class="button"
+				<button type="submit" name="abcc_action" value="delete_history" class="button button-link-delete"
 					onclick="return confirm('<?php esc_attr_e( 'This will delete all generation job history. Are you sure?', 'automated-blog-content-creator' ); ?>')">
 					<?php esc_html_e( 'Delete All Generation History', 'automated-blog-content-creator' ); ?>
 				</button>
 			</p>
+			<span class="description"><?php esc_html_e( 'Reset keeps your API keys; use "Remove saved key" under Connections to delete one.', 'automated-blog-content-creator' ); ?></span>
 		</div>
 
 	</form>

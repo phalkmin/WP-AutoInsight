@@ -107,16 +107,23 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 				break;
 
 			case 'gemini':
-				$url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent';
-				$headers = array(
+				$url               = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent';
+				$headers           = array(
 					'Content-Type'   => 'application/json',
 					'x-goog-api-key' => $api_key,
 				);
-				$body    = array(
+				$generation_config = array( 'maxOutputTokens' => $available_tokens );
+				$thinking_budget   = abcc_get_model_thinking_budget( 'gemini', $model );
+				if ( null !== $thinking_budget ) {
+					$generation_config['thinkingConfig']   = array( 'thinkingBudget' => $thinking_budget );
+					$generation_config['maxOutputTokens'] += $thinking_budget;
+				}
+
+				$body = array(
 					'contents'         => array(
 						array( 'parts' => array( array( 'text' => $prompt ) ) ),
 					),
-					'generationConfig' => array( 'maxOutputTokens' => $available_tokens ),
+					'generationConfig' => $generation_config,
 				);
 				break;
 
@@ -205,9 +212,21 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 			break;
 
 		case 'gemini':
-			$text                = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+			$parts  = isset( $data['candidates'][0]['content']['parts'] ) && is_array( $data['candidates'][0]['content']['parts'] )
+				? $data['candidates'][0]['content']['parts']
+				: array();
+			$finish = (string) ( $data['candidates'][0]['finishReason'] ?? '' );
+			$chunks = array();
+			foreach ( $parts as $part ) {
+				// Thought parts are hidden reasoning, never post content.
+				if ( ! empty( $part['thought'] ) || ! isset( $part['text'] ) || ! is_string( $part['text'] ) ) {
+					continue;
+				}
+				$chunks[] = $part['text'];
+			}
+			$text                = ! empty( $chunks ) ? implode( "\n", $chunks ) : ( 'MAX_TOKENS' === $finish ? '' : null );
 			$result['usage']     = isset( $data['usageMetadata'] ) && is_array( $data['usageMetadata'] ) ? $data['usageMetadata'] : array();
-			$result['truncated'] = 'MAX_TOKENS' === ( $data['candidates'][0]['finishReason'] ?? '' );
+			$result['truncated'] = 'MAX_TOKENS' === $finish;
 			break;
 
 		case 'openai':
@@ -222,6 +241,13 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 		abcc_debug_log( 'Unexpected ' . $label . ' response structure: ' . wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 		$result['error'] = new WP_Error( 'abcc_provider_parse_error', sprintf( 'Unexpected %s response structure', $label ) );
 		return $result;
+	}
+
+	// Reasoning models return their thinking in <think>; kses would keep the
+	// text and turn it into paragraphs. Strip closed and truncated blocks.
+	if ( 'perplexity' === $provider ) {
+		$text = preg_replace( '#<think>.*?</think>\s*#is', '', $text );
+		$text = preg_replace( '#^\s*<think>.*\z#is', '', $text );
 	}
 
 	// HTTP 200 with no text: reasoning models can burn the whole completion
@@ -398,20 +424,16 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 
 	if ( is_wp_error( $response ) ) {
 		abcc_debug_log( 'OpenAI Image Generation Error: ' . $response->get_error_message() );
+		abcc_set_last_image_error( 'OpenAI: ' . $response->get_error_message() );
 
-		// Get Stability AI key for fallback.
-		$stability_key = abcc_get_provider_api_key( 'stability' );
-		$fallback_url  = abcc_stability_generate_images( $prompt, $n, $stability_key );
-		return $fallback_url ? array( $fallback_url ) : false;
+		return abcc_openai_image_stability_fallback( $prompt, $n );
 	}
 
 	if ( empty( $response['data'] ) ) {
 		abcc_debug_log( 'OpenAI Image API: Missing expected data in response' );
+		abcc_set_last_image_error( 'OpenAI: the image response contained no data.' );
 
-		// Get Stability AI key for fallback.
-		$stability_key = abcc_get_provider_api_key( 'stability' );
-		$fallback_url  = abcc_stability_generate_images( $prompt, $n, $stability_key );
-		return $fallback_url ? array( $fallback_url ) : false;
+		return abcc_openai_image_stability_fallback( $prompt, $n );
 	}
 
 	// GPT Image models return base64 (data[].b64_json), not URLs. Persist each
@@ -430,14 +452,34 @@ function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024
 
 	if ( empty( $urls ) ) {
 		abcc_debug_log( 'OpenAI Image API: No image data could be saved from response' );
+		abcc_set_last_image_error( 'OpenAI: the returned image could not be saved.' );
 
-		// Get Stability AI key for fallback.
-		$stability_key = abcc_get_provider_api_key( 'stability' );
-		$fallback_url  = abcc_stability_generate_images( $prompt, $n, $stability_key );
-		return $fallback_url ? array( $fallback_url ) : false;
+		return abcc_openai_image_stability_fallback( $prompt, $n );
 	}
 
 	return $urls;
+}
+
+/**
+ * Retry a failed OpenAI image on Stability AI, keeping both reasons on failure.
+ *
+ * @since 4.5.2
+ * @param string $prompt Text prompt.
+ * @param int    $n      Number of images.
+ * @return array|false Array of image URLs or false on failure.
+ */
+function abcc_openai_image_stability_fallback( $prompt, $n ) {
+	$openai_reason = abcc_get_last_image_error();
+	abcc_set_last_image_error( '' );
+
+	$fallback_url = abcc_stability_generate_images( $prompt, $n, abcc_get_provider_api_key( 'stability' ) );
+	if ( $fallback_url ) {
+		return array( $fallback_url );
+	}
+
+	$stability_reason = abcc_get_last_image_error();
+	abcc_set_last_image_error( '' !== $stability_reason ? rtrim( $openai_reason, '. ' ) . '. ' . $stability_reason : $openai_reason );
+	return false;
 }
 
 /**
@@ -494,6 +536,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 
 	if ( is_wp_error( $response ) ) {
 		abcc_debug_log( 'Stability AI API Error: ' . $response->get_error_message() );
+		abcc_set_last_image_error( 'Stability AI: ' . $response->get_error_message() );
 		return false;
 	}
 
@@ -501,6 +544,14 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 	if ( $response_code !== 200 ) {
 		abcc_debug_log( 'Stability AI API Error: Response code ' . $response_code );
 		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		abcc_set_last_image_error(
+			sprintf(
+				'Stability AI HTTP %d: %s',
+				$response_code,
+				is_array( $decoded ) && isset( $decoded['message'] ) && is_string( $decoded['message'] ) ? $decoded['message'] : ''
+			)
+		);
 		return false;
 	}
 
@@ -508,6 +559,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 
 	if ( empty( $body['artifacts'] ) || ! is_array( $body['artifacts'] ) ) {
 		abcc_debug_log( 'Stability AI: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		abcc_set_last_image_error( 'Stability AI: unexpected response format.' );
 		return false;
 	}
 
@@ -517,6 +569,7 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 	}
 
 	abcc_debug_log( 'Stability AI: No valid image data in response' );
+	abcc_set_last_image_error( 'Stability AI: the response contained no image data.' );
 	return false;
 }
 
@@ -649,6 +702,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 
 	if ( is_wp_error( $response ) ) {
 		abcc_debug_log( 'Gemini Image API Error: ' . $response->get_error_message() );
+		abcc_set_last_image_error( 'Gemini: ' . $response->get_error_message() );
 		return false;
 	}
 
@@ -656,6 +710,14 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	if ( 200 !== $response_code ) {
 		abcc_debug_log( 'Gemini Image API Error: Response code ' . $response_code );
 		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		abcc_set_last_image_error(
+			sprintf(
+				'Gemini HTTP %d: %s',
+				$response_code,
+				is_array( $decoded ) && isset( $decoded['error']['message'] ) && is_string( $decoded['error']['message'] ) ? $decoded['error']['message'] : ''
+			)
+		);
 		return false;
 	}
 
@@ -664,6 +726,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	// Look for image data in response.
 	if ( empty( $body['candidates'][0]['content']['parts'] ) ) {
 		abcc_debug_log( 'Gemini Image: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		abcc_set_last_image_error( 'Gemini: the response contained no image (it may have been blocked by safety filters).' );
 		return false;
 	}
 
@@ -675,5 +738,6 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	}
 
 	abcc_debug_log( 'Gemini Image: No valid image data in response' );
+	abcc_set_last_image_error( 'Gemini: the response contained no image data.' );
 	return false;
 }

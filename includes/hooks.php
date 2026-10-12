@@ -18,6 +18,8 @@
  *                      'repair', 'rewrite', 'audio', 'infographic'.
  *   attempt    int     1 = primary provider, 2+ = fallback provider.
  *   post_id    int     Only on abcc_post_inserted.
+ *   brief      string  Topic jobs only: the topic prompt (bounded to 150 words),
+ *                      carried so title and SEO calls follow it.
  *
  * `api_key` is never present. Anything else the pipeline attached passes
  * through unchanged.

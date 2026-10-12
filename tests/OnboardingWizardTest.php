@@ -8,7 +8,10 @@ abcc_test(
 	function () {
 		$GLOBALS['abcc_test_options'] = array();
 
-		$_POST                          = array( 'nonce' => 'x', 'status' => 'publish' );
+		$_POST                          = array(
+			'nonce'  => 'x',
+			'status' => 'publish',
+		);
 		$GLOBALS['abcc_test_last_json'] = null;
 
 		abcc_handle_onboarding_post_status();
@@ -17,7 +20,10 @@ abcc_test(
 		abcc_assert_true( ! empty( $GLOBALS['abcc_test_last_json']['success'] ), 'Handler should send a success response.' );
 
 		// Junk status falls back to draft via the sanitizer.
-		$_POST = array( 'nonce' => 'x', 'status' => 'garbage' );
+		$_POST = array(
+			'nonce'  => 'x',
+			'status' => 'garbage',
+		);
 		abcc_handle_onboarding_post_status();
 		abcc_assert_same( 'draft', abcc_get_setting( 'abcc_default_post_status' ) );
 
@@ -93,7 +99,15 @@ abcc_test(
 		}
 		ksort( $numbered );
 
-		abcc_assert_equals( array( 1 => 'provider', 2 => 'post_status', 3 => 'first_topic', 4 => 'try_audio' ), $numbered );
+		abcc_assert_equals(
+			array(
+				1 => 'provider',
+				2 => 'post_status',
+				3 => 'first_topic',
+				4 => 'try_audio',
+			),
+			$numbered
+		);
 
 		// A terminal success step exists, unnumbered.
 		$has_success = false;
@@ -103,5 +117,46 @@ abcc_test(
 			}
 		}
 		abcc_assert_true( $has_success, 'A success step must exist.' );
+	}
+);
+
+abcc_test(
+	'wizard connection test records the provider as verified',
+	function () {
+		$GLOBALS['abcc_test_last_json'] = null;
+		$_POST                          = array(
+			'provider' => 'stability',
+			'api_key'  => 'sk-stability-key',
+		);
+
+		abcc_handle_onboarding_test_api();
+
+		abcc_assert_same( true, $GLOBALS['abcc_test_last_json']['success'] );
+		abcc_assert_same( 'connected', abcc_get_provider_health_snapshot( 'stability' )['health'], 'A passed wizard test must show as connected on the dashboard.' );
+		$_POST = array();
+	}
+);
+
+abcc_test(
+	'a failed wizard test of a typed key does not record provider health',
+	function () {
+		$GLOBALS['abcc_test_options']['claude_api_key'] = 'sk-ant-saved';
+		abcc_record_provider_validation( 'claude', true );
+		$GLOBALS['abcc_test_last_json'] = null;
+		$_POST                          = array(
+			'provider' => 'claude',
+			'api_key'  => 'sk-ant-half-typed',
+		);
+		$GLOBALS['abcc_http_queue'][]   = array(
+			'response' => array( 'code' => 401 ),
+			'body'     => '{"error":{"message":"invalid x-api-key"}}',
+		);
+
+		abcc_handle_onboarding_test_api();
+
+		abcc_assert_same( false, $GLOBALS['abcc_test_last_json']['success'], 'The typed key is reported as failing.' );
+		abcc_assert_same( 'connected', abcc_get_provider_health_snapshot( 'claude' )['health'], 'Typing a key must not mark the working one failed.' );
+		$_POST                      = array();
+		$GLOBALS['abcc_http_queue'] = array();
 	}
 );

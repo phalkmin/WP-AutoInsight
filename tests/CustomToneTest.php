@@ -47,3 +47,11 @@ abcc_test(
 		abcc_assert_same( 'professional', $payload['tone'], 'Empty custom_tone must fall back to professional' );
 	}
 );
+
+abcc_test(
+	'custom tone input autosaves like the tone select',
+	function () {
+		$html = file_get_contents( dirname( __DIR__ ) . '/includes/admin/tab-content-keywords.php' );
+		abcc_assert_true( 1 === preg_match( '/id="custom_tone"[^>]*data-autosave-key="custom_tone"/', $html ) );
+	}
+);

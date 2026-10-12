@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 			<!-- Step 1: API Configuration (provider-first flow, v4.3) -->
-	<div class="abcc-onboarding-step abcc-step-1">
+	<div class="abcc-onboarding-step abcc-step-1 active" data-step="1">
 		<div class="abcc-step-content">
 			<h2><?php esc_html_e( 'Connect an AI Provider', 'automated-blog-content-creator' ); ?></h2>
 			<p><?php esc_html_e( 'Choose one AI service to power your content generation.', 'automated-blog-content-creator' ); ?></p>
@@ -37,7 +37,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<span class="dashicons dashicons-info-outline"></span>
 					<div class="abcc-notice-content">
 						<strong><?php esc_html_e( 'Tip: Configure your AI key once in WordPress Connectors', 'automated-blog-content-creator' ); ?></strong>
-						<p><?php esc_html_e( 'WordPress 7.0 lets you manage all AI provider keys centrally at Settings > Connectors. Any key you add there works automatically here.', 'automated-blog-content-creator' ); ?></p>
+						<p><?php esc_html_e( 'WordPress 7.0 lets you manage all AI provider keys centrally at Settings > Connectors. Connectors needs the matching provider plugin installed there first. Any key you add works automatically here.', 'automated-blog-content-creator' ); ?></p>
 						<a href="#" id="abcc-open-connectors" class="button button-secondary" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open Connectors settings', 'automated-blog-content-creator' ); ?></a>
 					</div>
 				</div>
@@ -54,7 +54,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'OpenAI', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'GPT-4.1, o4-mini • Best for creative content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php echo esc_html( sprintf( /* translators: %s: model name */ __( '%s • Best for creative content', 'automated-blog-content-creator' ), abcc_get_model_display_name( abcc_get_provider_default_model( 'openai' ) ) ) ); ?></p>
 						</div>
 						<div class="abcc-provider-status openai-status"></div>
 					</div>
@@ -71,7 +71,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							</div>
 						<?php else : ?>
 							<div class="abcc-api-input">
-								<input type="password" id="openai-api-key" placeholder="<?php esc_attr_e( 'sk-...', 'automated-blog-content-creator' ); ?>" />
+								<input type="password" id="openai-api-key" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s API key', 'automated-blog-content-creator' ), 'OpenAI' ) ); ?>" placeholder="<?php esc_attr_e( 'sk-...', 'automated-blog-content-creator' ); ?>" />
 								<button class="button button-secondary abcc-test-api" data-provider="openai">
 									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
 								</button>
@@ -111,7 +111,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Claude', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Claude 4.5 Sonnet • Great for analytical content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php echo esc_html( sprintf( /* translators: %s: model name */ __( '%s • Great for analytical content', 'automated-blog-content-creator' ), abcc_get_model_display_name( abcc_get_provider_default_model( 'claude' ) ) ) ); ?></p>
 						</div>
 						<div class="abcc-provider-status claude-status"></div>
 					</div>
@@ -128,7 +128,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							</div>
 						<?php else : ?>
 							<div class="abcc-api-input">
-								<input type="password" id="claude-api-key" placeholder="<?php esc_attr_e( 'sk-ant-api...', 'automated-blog-content-creator' ); ?>" />
+								<input type="password" id="claude-api-key" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s API key', 'automated-blog-content-creator' ), 'Claude' ) ); ?>" placeholder="<?php esc_attr_e( 'sk-ant-api...', 'automated-blog-content-creator' ); ?>" />
 								<button class="button button-secondary abcc-test-api" data-provider="claude">
 									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
 								</button>
@@ -168,7 +168,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Google Gemini', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Gemini 2.5 Flash • Excellent for factual content', 'automated-blog-content-creator' ); ?></p>
+							<p><?php echo esc_html( sprintf( /* translators: %s: model name */ __( '%s • Excellent for factual content', 'automated-blog-content-creator' ), abcc_get_model_display_name( abcc_get_provider_default_model( 'gemini' ) ) ) ); ?></p>
 						</div>
 						<div class="abcc-provider-status gemini-status"></div>
 					</div>
@@ -185,7 +185,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							</div>
 						<?php else : ?>
 							<div class="abcc-api-input">
-								<input type="password" id="gemini-api-key" placeholder="<?php esc_attr_e( 'AIza...', 'automated-blog-content-creator' ); ?>" />
+								<input type="password" id="gemini-api-key" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s API key', 'automated-blog-content-creator' ), 'Google Gemini' ) ); ?>" placeholder="<?php esc_attr_e( 'AIza...', 'automated-blog-content-creator' ); ?>" />
 								<button class="button button-secondary abcc-test-api" data-provider="gemini">
 									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
 								</button>
@@ -242,7 +242,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 							</div>
 						<?php else : ?>
 							<div class="abcc-api-input">
-								<input type="password" id="perplexity-api-key" placeholder="<?php esc_attr_e( 'pplx-...', 'automated-blog-content-creator' ); ?>" />
+								<input type="password" id="perplexity-api-key" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s API key', 'automated-blog-content-creator' ), 'Perplexity' ) ); ?>" placeholder="<?php esc_attr_e( 'pplx-...', 'automated-blog-content-creator' ); ?>" />
 								<button class="button button-secondary abcc-test-api" data-provider="perplexity">
 									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
 								</button>
@@ -274,7 +274,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</div>
 
 			<div class="abcc-step-actions">
-				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-1"><?php esc_html_e( 'Skip to settings', 'automated-blog-content-creator' ); ?></button>
+				<button class="button button-link abcc-skip-onboarding" id="abcc-skip-onboarding-1"><?php esc_html_e( 'Skip setup', 'automated-blog-content-creator' ); ?></button>
 				<button class="button button-primary" id="abcc-next-step-2" disabled>
 					<?php esc_html_e( 'Continue', 'automated-blog-content-creator' ); ?>
 				</button>

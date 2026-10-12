@@ -53,7 +53,7 @@ jQuery(document).ready(function ($) {
       error: function (xhr, status, error) {
         let errorMsg = abccAudio.i18n.error;
         if (status === "timeout") {
-          errorMsg = "Request timed out. Try with a smaller file.";
+          errorMsg = abccAudio.i18n.timedOut;
         }
         abcc.showStatus($status, errorMsg, "error");
       },
@@ -96,7 +96,7 @@ jQuery(document).ready(function ($) {
             .attr("href", response.data.edit_url)
             .attr("class", "button button-small")
             .attr("target", "_blank")
-            .text("Edit Post");
+            .text(abccAudio.i18n.editPost);
           var $msg = $("<span>")
             .text(response.data.message + " ")
             .append($editLink);
@@ -131,7 +131,7 @@ jQuery(document).ready(function ($) {
     }
 
     $btn.prop("disabled", true);
-    abcc.showStatus($status, "Transcribing and generating… this can take a minute.", "loading");
+    abcc.showStatus($status, abccAudio.i18n.transcribingLong, "loading");
 
     $.ajax({
       url: abccAudio.ajaxurl,
@@ -149,7 +149,7 @@ jQuery(document).ready(function ($) {
             .attr("href", response.data.edit_url)
             .attr("class", "button button-small")
             .attr("target", "_blank")
-            .text("Edit Post");
+            .text(abccAudio.i18n.editPost);
           var $msg = $("<span>")
             .text(response.data.message + " ")
             .append($editLink);
@@ -161,7 +161,7 @@ jQuery(document).ready(function ($) {
         $btn.prop("disabled", false);
       },
       error: function (xhr) {
-        abcc.showStatus($status, "Error: " + xhr.statusText, "error");
+        abcc.showStatus($status, abccAudio.i18n.errorPrefix.replace("%s", xhr.statusText), "error");
         $btn.prop("disabled", false);
       },
     });
@@ -175,9 +175,9 @@ jQuery(document).ready(function ($) {
 
   // Format file size display
   function formatFileSize(bytes) {
-    if (bytes === 0) return "0 Bytes";
+    if (bytes === 0) return abccAudio.i18n.zeroBytes;
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const sizes = abccAudio.i18n.bytesUnits.split(",");
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
@@ -186,12 +186,12 @@ jQuery(document).ready(function ($) {
   const fileSize = parseInt($(".abcc-audio-create-post").data("file-size"));
   if (fileSize) {
     const maxSize = 25 * 1024 * 1024; // 25MB
-    const $fileInfo = $("<span>").text("File size: " + formatFileSize(fileSize));
+    const $fileInfo = $("<span>").text(abccAudio.i18n.fileSize.replace("%s", formatFileSize(fileSize)));
 
     if (fileSize > maxSize) {
       const $warning = $("<span>")
         .css("color", "#dc3232")
-        .text("(Too large - max 25MB)");
+        .text(abccAudio.i18n.tooLarge);
       $fileInfo.append(" ", $warning);
       $(".abcc-audio-create-post, #abcc-transcribe-only").prop("disabled", true);
     }

@@ -19,7 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_queue_seo_regen_batch( $post_ids ) {
 	$queued = 0;
 	$failed = 0;
-	$model  = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+	$model  = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
+	// One run_id per batch: stale-job recovery gives batches the long window.
+	$run_id = uniqid( 'seo_' );
 
 	foreach ( (array) $post_ids as $post_id ) {
 		$post_id = (int) $post_id;
@@ -44,7 +46,13 @@ function abcc_queue_seo_regen_batch( $post_ids ) {
 				'source'  => 'seo_regen',
 			)
 		);
-		$job_id  = abcc_queue_generation_job( $payload, array( 'defer_spawn' => true ) );
+		$job_id  = abcc_queue_generation_job(
+			$payload,
+			array(
+				'defer_spawn' => true,
+				'run_id'      => $run_id,
+			)
+		);
 
 		if ( is_wp_error( $job_id ) ) {
 			++$failed;

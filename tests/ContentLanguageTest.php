@@ -197,3 +197,32 @@ abcc_test(
 		}
 	}
 );
+
+abcc_test(
+	'infographic description prompt names the content language',
+	function () {
+		if ( ! function_exists( 'abcc_build_infographic_description_prompt' ) ) {
+			require_once dirname( __DIR__ ) . '/includes/infographic.php';
+		}
+		$GLOBALS['abcc_test_locale'] = 'pt_BR';
+
+		$prompt = abcc_build_infographic_description_prompt( 'Título', 'corpo do post' );
+
+		abcc_assert_true( false !== strpos( $prompt, 'Portuguese' ), 'Infographic prompt must carry the language: ' . $prompt );
+		abcc_assert_false( false !== strpos( $prompt, '%3' ), 'No unresolved sprintf placeholder.' );
+	}
+);
+
+abcc_test(
+	'legacy body prompt goes through the shared expander',
+	function () {
+		$GLOBALS['abcc_test_locale'] = 'pt_BR';
+
+		$prompt = abcc_build_legacy_content_prompt( 'Título', array( 'tokusatsu', 'anos 90' ), 800 );
+
+		abcc_assert_true( false !== strpos( $prompt, 'Portuguese' ), 'Legacy prompt must carry the language.' );
+		abcc_assert_same( 1, substr_count( $prompt, ABCC_CONTENT_FORMAT_REQUIREMENTS ), 'Format requirements appended exactly once, by the expander.' );
+		abcc_assert_false( false !== strpos( $prompt, '    - Use <h2>' ), 'The inline indented rule list must be gone.' );
+		abcc_assert_true( false !== strpos( $prompt, 'tokusatsu, anos 90' ) );
+	}
+);

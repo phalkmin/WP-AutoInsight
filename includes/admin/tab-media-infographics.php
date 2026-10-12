@@ -33,20 +33,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</tr>
 			<tr>
 				<th scope="row">
-					<?php esc_html_e( 'Image Provider', 'automated-blog-content-creator' ); ?>
+					<label for="abcc_infographic_provider"><?php esc_html_e( 'Image Provider', 'automated-blog-content-creator' ); ?></label>
 					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Which image provider to use for infographic generation. "Follow featured image setting" uses whatever is configured in the Images sub-tab.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
 				<td>
-					<select name="abcc_infographic_provider" data-autosave-key="abcc_infographic_provider">
-						<option value="auto" <?php selected( abcc_get_setting( 'abcc_infographic_provider', 'auto' ), 'auto' ); ?>>
-							<?php esc_html_e( 'Follow Featured Image setting', 'automated-blog-content-creator' ); ?>
-						</option>
-						<option value="openai" <?php selected( abcc_get_setting( 'abcc_infographic_provider', 'auto' ), 'openai' ); ?>>
-							<?php esc_html_e( 'DALL-E (OpenAI)', 'automated-blog-content-creator' ); ?>
-						</option>
-						<option value="stability" <?php selected( abcc_get_setting( 'abcc_infographic_provider', 'auto' ), 'stability' ); ?>>
-							<?php esc_html_e( 'Stability AI', 'automated-blog-content-creator' ); ?>
-						</option>
+					<?php $abcc_infographic_provider = abcc_get_setting( 'abcc_infographic_provider', 'auto' ); ?>
+					<select id="abcc_infographic_provider" name="abcc_infographic_provider" data-autosave-key="abcc_infographic_provider">
+						<option value="auto" <?php selected( $abcc_infographic_provider, 'auto' ); ?>><?php esc_html_e( 'Follow Featured Image setting', 'automated-blog-content-creator' ); ?></option>
+						<option value="openai" <?php selected( $abcc_infographic_provider, 'openai' ); ?>><?php esc_html_e( 'OpenAI (GPT Image)', 'automated-blog-content-creator' ); ?></option>
+						<option value="gemini" <?php selected( $abcc_infographic_provider, 'gemini' ); ?>><?php esc_html_e( 'Gemini (Google)', 'automated-blog-content-creator' ); ?></option>
+						<option value="stability" <?php selected( $abcc_infographic_provider, 'stability' ); ?>><?php esc_html_e( 'Stability AI', 'automated-blog-content-creator' ); ?></option>
 					</select>
 				</td>
 			</tr>

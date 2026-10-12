@@ -1,5 +1,46 @@
 == Full Changelog ==
 
+= 4.5.2 =
+
+**Fixed**
+* The setup wizard showed only its header on new installs and on "Restart setup wizard": the first step never appeared, so there was no way forward. This had been broken since 4.3. The provider step now shows on load. On restart, providers that already have a key are marked connected, so Continue works without pasting the key again.
+* Admin notices (such as the 4.2 draft-mode notice) no longer render inside the wizard header as white text on a white box.
+* Wizard: "Skip to settings" no longer asks "are you sure you want to leave?" after you've already confirmed. Pressing Enter on a focused button no longer also advances the step. Going back to the Topic step after creating a topic no longer leaves Continue disabled, and continuing again doesn't create a duplicate topic. Clicking Test while an automatic key test is still pending no longer sends a second (billed) request. Restarting the wizard no longer resets your chosen model when a wp-config key is tested automatically. Wizard messages are now translatable.
+* WordPress Connectors links (Connections → API Keys banner and the setup wizard tip) now open core's Connectors screen (`options-connectors.php`) instead of a page that no longer exists in WordPress 7.1.
+* Dashboard Composer: the Source, Model and Save-as fields were visible while the toggle said "change", and the choices shown were not sent. A post could publish with Draft selected. The fields now open and close with the toggle, and whatever is visible is what runs.
+* Rewrite with AI no longer writes to the post on the server. The rewritten body is placed in the editor as an unsaved change you can review, save or undo; it includes your unsaved edits; code fences, model notes and a repeated title are removed; the output budget follows the post length; a rewrite cut off at the model's limit is refused instead of saved.
+* Provider health now reflects reality: the setup wizard's connection test, the daily check and real generations all update it, Validate works for wp-config and WordPress Connectors keys, and the badge updates without a reload. Rate limits and outages never mark a key as failed; only a rejected key does.
+* Gemini 2.5 Flash, Flash-Lite and Pro: hidden "thinking" tokens no longer eat the title and SEO budgets, which made whole posts fail with "Unexpected Gemini response structure".
+* Perplexity reasoning models: `<think>` reasoning is stripped before it reaches the post.
+* Generated content: code samples and lists survive as code and list blocks; empty paragraphs are dropped; headings stay headings (a body H1 becomes H2, H5 and H6 become H4, so the post title stays the only H1).
+* Featured images get alt text without an SEO plugin (title and focus keyword), attachments are titled after the post, and an image failure shows the provider's actual reason inside the Tools box with a working Retry. Bulk results flag posts without an image.
+* Infographics attach from the generated file instead of a loopback request, honor the image model, quality and size settings, offer Gemini, keep the post's featured image, and leave no orphan file. The button recovers after success and the message says where the file went.
+* Topics: optional focus keywords (the topic name is only a label when set); the title and SEO follow the topic's brief; "Use global setting" shows the effective value; Next Run and Last Run are in site-local time; auto-pause now counts real generation failures and topic failures send the notification email.
+* Queued jobs that never start (blocked WP-Cron) are failed after 30 minutes (3 hours for batch jobs, and for every job when WP-Cron runs from an external cron) with a hint instead of staying "Queued" forever; the posts-list "Create AI Post" poller now stops.
+* Bulk Generate stops after a key or configuration error instead of billing one failure per keyword, removes duplicate keywords, locks the form while running and warns before you leave the page.
+* Audio-to-post runs the same publish clamp as every other path and validates the attachment (enabled, audio MIME, supported format) on both handlers. Whisper language defaults to auto-detect and "Auto" is no longer sent as a literal; sites that explicitly saved English keep it.
+* Restarting the setup wizard no longer flips the default post status to Draft; step 2 preselects the saved value.
+* Reset All Settings keeps your API keys, version and onboarding state, and re-syncs the prompt_ai capability. Fresh installs no longer see "Settings migrated from v1.0.0".
+* Settings export excludes internal state and normalizes booleans. Job status and the Generation Log show only your own jobs unless you're an administrator. Model overrides are checked against the model list.
+* Copy and polish: Content Length is labelled as a maximum; error messages say "Connections > API Keys" and survive storage; the Support Forum link, Recent Activity titles and View links, the SEO Refresh tile without an SEO plugin, the Post from Audio tile and help text, image provider labels (GPT Image), the Plugins screen Settings link, tab URLs, the scheduling tab marked legacy, wizard step 2 styling, overflow and step dots, "Skip setup", JS strings made translatable, aria on tabs, filters and inputs.
+* Bulk SEO regeneration jobs are no longer failed as "never started" while a large batch is still draining: they share one batch id and get the three-hour window, as do bulk SEO jobs queued by 4.5.1.
+* The dashboard no longer says WP-Cron has not fired for a topic that is only waiting for the next hourly sweep. It says the run is due, and it names the AI kill switch when that is what paused topics.
+* Generated content survives three more model habits: a raw tag inside inline code (such as <code><div></code>), an unclosed HTML comment, and a figure that wraps a table instead of an image. Output cut off inside a tag no longer leaves a broken link.
+* Provider health follows the key generation actually uses. Testing a typed, unsaved key, or a half-typed key in the wizard, no longer marks a working key as failed, and a 403 (no access to that model) no longer counts as a rejected key.
+* Stale-job recovery re-spawns WP-Cron and gives a queued job two more minutes before failing it, and runs at most once a minute from editor polls. Run Now on a topic records the run without resetting its failure streak. Deleted topics get no orphan meta.
+* Topic prompts used as the brief for the title and SEO calls now have {keyword}, {category} and {language} filled in instead of being sent literally.
+* Scheduled and bulk posts drop stray Markdown fences and keep code indentation, as Rewrite already did.
+* Typing a custom tone switches the tone dropdown to Custom so the next Save keeps it, and two quick autosaves no longer drop the first. Translated strings are inserted safely on the Keywords and wizard screens. The Tools box still appears on generated posts whose post type was deselected later. The Rewrite confirm says WordPress may autosave a draft you own.
+* The stock default template text changed slightly ("number" was dropped from the list of things to include) and is refreshed on upgrade; custom templates are never touched.
+* Uninstall and deactivation clear queued job events, uninstall removes two pre-4.0 options, and export and reset tolerate extension settings that have no default.
+* README: the API-key security answer no longer claims database encryption, and the directory short description sits where WordPress.org reads it.
+
+**Security**
+* Job status and log are scoped to the job's creator or administrators.
+* Debug logging redacts API keys before writing to the server log.
+* Model overrides from the Composer, Bulk and Topics must name a registered model.
+* Provider error text is redacted before it is stored in the job log and the validation badge.
+
 = 4.5.1 =
 
 **Fixed**

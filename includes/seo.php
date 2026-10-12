@@ -105,6 +105,9 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 
 	$prompt  = $site_context;
 	$prompt .= 'Create a blog post title and SEO metadata for a post about: ' . implode( ', ', $keywords ) . "\n\n";
+	if ( ! empty( $context['brief'] ) ) {
+		$prompt .= 'The article follows this brief: ' . $context['brief'] . "\n\n";
+	}
 	$prompt .= sprintf(
 		"Write the title, meta description and social excerpt in %s.\n\n",
 		abcc_resolve_content_language()

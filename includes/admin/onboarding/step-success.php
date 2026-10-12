@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<a href="?page=automated-blog-content-creator-post" class="button button-primary button-hero">
 							<?php esc_html_e( 'Go to Dashboard', 'automated-blog-content-creator' ); ?>
 						</a>
-						<a href="?page=automated-blog-content-creator-post&tab=settings" class="button button-secondary">
+						<a href="?page=automated-blog-content-creator-post&tab=settings" class="button button-secondary button-hero">
 							<?php esc_html_e( 'Go to Settings', 'automated-blog-content-creator' ); ?>
 						</a>
 					</div>

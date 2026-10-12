@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $model_options = abcc_get_ai_model_options();
-$current_model = abcc_get_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
+$current_model = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 $templates     = abcc_get_setting( 'abcc_content_templates', array() );
 
 // Bulk runs on the keywords pasted below, but a site with no keyword groups

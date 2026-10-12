@@ -27,3 +27,20 @@ abcc_test(
 		abcc_assert_false( (bool) $value, 'Saved false setting should be falsy on read' );
 	}
 );
+
+abcc_test(
+	'post notification email carries an edit URL even with no current user',
+	function () {
+		$post_id                                     = wp_insert_post(
+			array(
+				'post_type'  => 'post',
+				'post_title' => 'Cron post',
+			)
+		);
+		$GLOBALS['abcc_test_options']['admin_email'] = 'a@example.test';
+
+		$message = abcc_build_post_notification_message( $post_id );
+
+		abcc_assert_true( false !== strpos( $message, 'post.php?post=' . $post_id . '&action=edit' ), $message );
+	}
+);

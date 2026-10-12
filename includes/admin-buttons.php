@@ -33,7 +33,7 @@ function abcc_add_create_post_button() {
 		$('.page-title-action').after(
 			'<span id="abcc-create-post-status" style="display:none; margin-left:8px; vertical-align:middle;"></span>' +
 			'<a href="#" id="abcc-create-post" class="page-title-action" data-post-type="<?php echo esc_attr( $screen->post_type ); ?>">' +
-			'<?php esc_html_e( 'Create AI Post', 'automated-blog-content-creator' ); ?>' +
+			'<?php echo esc_js( __( 'Create AI Post', 'automated-blog-content-creator' ) ); ?>' +
 			'</a>'
 		);
 
@@ -63,7 +63,7 @@ function abcc_add_create_post_button() {
 				success: function(response) {
 					if (response.success) {
 						abcc.showStatus($status, response.data.message);
-						pollJobStatus(response.data.job_id);
+						pollJob(response.data.job_id);
 					} else {
 						abcc.setError($status, response.data.message || '<?php echo esc_js( __( 'An error occurred', 'automated-blog-content-creator' ) ); ?>');
 						$button.css('pointer-events', 'auto');
@@ -75,43 +75,32 @@ function abcc_add_create_post_button() {
 				}
 			});
 
-			function pollJobStatus(jobId) {
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: 'abcc_get_job_status',
-						nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_openai_generate_post' ) ); ?>',
-						job_id: jobId
+			function pollJob(jobId) {
+				abcc.pollJob(jobId, {
+					nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_openai_generate_post' ) ); ?>',
+					$status: $status,
+					onUpdate: function(job) {
+						abcc.showStatus($status, '<?php echo esc_js( __( 'Status:', 'automated-blog-content-creator' ) ); ?> ' + job.statusLabel);
 					},
-					success: function(jobResponse) {
-						if (!jobResponse.success) {
-							abcc.setError($status, jobResponse.data.message || '<?php echo esc_js( __( 'An error occurred', 'automated-blog-content-creator' ) ); ?>');
-							$button.css('pointer-events', 'auto');
-							return;
-						}
-
-						const job = jobResponse.data;
-						abcc.showStatus($status, 'Status: ' + job.statusLabel);
-
-						if ('queued' === job.status || 'running' === job.status) {
-							setTimeout(function() {
-								pollJobStatus(jobId);
-							}, 3000);
-							return;
-						}
-
-						if ('succeeded' === job.status && job.post_id) {
+					onSuccess: function(job) {
+						if (job.post_id) {
 							abcc.showStatus($status, '<?php echo esc_js( __( 'Done! Redirecting…', 'automated-blog-content-creator' ) ); ?>', 'success');
 							window.location.href = '<?php echo esc_url( admin_url( 'post.php?action=edit&post=' ) ); ?>' + job.post_id;
 							return;
 						}
-
 						abcc.setError($status, job.message || '<?php echo esc_js( __( 'Generation failed.', 'automated-blog-content-creator' ) ); ?>');
 						$button.css('pointer-events', 'auto');
 					},
-					error: function() {
-						abcc.setError($status, '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+					onFailed: function(message) {
+						abcc.setError($status, message || '<?php echo esc_js( __( 'Generation failed.', 'automated-blog-content-creator' ) ); ?>');
+						$button.css('pointer-events', 'auto');
+					},
+					onError: function(message) {
+						abcc.setError($status, message || '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+						$button.css('pointer-events', 'auto');
+					},
+					onStall: function() {
+						abcc.setError($status, '<?php echo esc_js( __( 'Still working… check Content → Generation Log.', 'automated-blog-content-creator' ) ); ?>');
 						$button.css('pointer-events', 'auto');
 					}
 				});

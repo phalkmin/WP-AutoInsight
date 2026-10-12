@@ -15,6 +15,30 @@ $model_options    = abcc_get_ai_model_options();
 $wp_connectors_on = abcc_wp_ai_client_available();
 $health_rows      = get_option( 'abcc_provider_health', array() );
 
+/**
+ * Status span + Validate button for one provider.
+ *
+ * @param string     $provider_id Provider ID.
+ * @param array|null $last_v      Last validation record.
+ */
+$abcc_render_validate_control = static function ( $provider_id, $last_v ) {
+	?>
+	<p class="abcc-validate-row">
+		<?php if ( $last_v ) : ?>
+			<span class="api-validation-status <?php echo esc_attr( 'verified' === $last_v['status'] ? 'verified' : 'failed' ); ?>" data-provider="<?php echo esc_attr( $provider_id ); ?>">
+				<?php echo esc_html( ( 'verified' === $last_v['status'] ? '✓ ' : '✗ ' ) . $last_v['message'] ); ?>
+			</span>
+		<?php else : ?>
+			<span class="api-validation-status" data-provider="<?php echo esc_attr( $provider_id ); ?>"></span>
+		<?php endif; ?>
+		<button type="button" class="button abcc-validate-key" data-provider="<?php echo esc_attr( $provider_id ); ?>">
+			<?php esc_html_e( 'Validate', 'automated-blog-content-creator' ); ?>
+		</button>
+	</p>
+	<?php
+};
+
+
 // Build provider lists: text providers first, then image-only.
 $text_providers  = array_filter( abcc_get_provider_ids(), 'abcc_provider_supports_text_generation' );
 $image_providers = array_filter(
@@ -33,9 +57,9 @@ $image_providers = array_filter(
 			<div class="notice notice-info abcc-connectors-banner">
 				<p>
 					<strong><?php esc_html_e( '★ WordPress AI Connectors is available.', 'automated-blog-content-creator' ); ?></strong>
-					<?php esc_html_e( 'Managing keys through Connectors is more secure — they\'re stored by WordPress, not the plugin.', 'automated-blog-content-creator' ); ?>
-					<a href="<?php echo esc_url( admin_url( 'options-general.php?page=ai-connectors' ) ); ?>">
-						<?php esc_html_e( 'Manage at Settings → AI Connectors →', 'automated-blog-content-creator' ); ?>
+					<?php esc_html_e( 'Managing keys through Connectors is more secure — they\'re stored by WordPress, not the plugin. Connectors needs the matching provider plugin installed (Settings → Connectors → Install).', 'automated-blog-content-creator' ); ?>
+					<a href="<?php echo esc_url( abcc_get_connectors_url() ); ?>">
+						<?php esc_html_e( 'Manage at Settings → Connectors →', 'automated-blog-content-creator' ); ?>
 					</a>
 				</p>
 			</div>
@@ -59,19 +83,22 @@ $image_providers = array_filter(
 			$source        = $snapshot['source'];
 
 			// Determine status badge.
+			$badge_kind = 'validation';
 			if ( 'wp_connector' === $source ) {
 				$badge_class = 'abcc-provider-badge--connector';
 				$badge_text  = __( 'Via WP Connectors', 'automated-blog-content-creator' );
+				$badge_kind  = 'source';
 			} elseif ( 'constant' === $source ) {
 				$badge_class = 'abcc-provider-badge--manual';
 				$badge_text  = __( 'Via wp-config.php', 'automated-blog-content-creator' );
+				$badge_kind  = 'source';
 			} elseif ( ! empty( $saved_key ) ) {
 				if ( $last_v && 'verified' === $last_v['status'] ) {
 					$badge_class = 'abcc-provider-badge--verified';
-					$badge_text  = '✓ ' . $last_v['message'];
+					$badge_text  = '✓ ' . __( 'Verified', 'automated-blog-content-creator' );
 				} elseif ( $last_v && 'verified' !== $last_v['status'] ) {
 					$badge_class = 'abcc-provider-badge--failed';
-					$badge_text  = '✗ ' . $last_v['message'];
+					$badge_text  = '✗ ' . __( 'Validation failed', 'automated-blog-content-creator' );
 				} else {
 					$badge_class = 'abcc-provider-badge--manual';
 					$badge_text  = __( 'Manual key', 'automated-blog-content-creator' );
@@ -95,7 +122,7 @@ $image_providers = array_filter(
 			<div class="abcc-provider-card">
 				<div class="abcc-provider-card__header">
 					<strong class="abcc-provider-name"><?php echo esc_html( $provider['name'] ); ?></strong>
-					<span class="abcc-provider-badge <?php echo esc_attr( $badge_class ); ?>"><?php echo esc_html( $badge_text ); ?></span>
+					<span class="abcc-provider-badge <?php echo esc_attr( $badge_class ); ?>" data-provider="<?php echo esc_attr( $provider_id ); ?>" data-badge-kind="<?php echo esc_attr( $badge_kind ); ?>"><?php echo esc_html( $badge_text ); ?></span>
 				</div>
 
 				<?php if ( $has_connector ) : ?>
@@ -106,8 +133,17 @@ $image_providers = array_filter(
 						} else {
 							esc_html_e( 'Managed by WordPress. Use Validate to test this connection.', 'automated-blog-content-creator' );
 						}
+						if ( ! empty( $const ) && defined( $const ) ) {
+							echo ' ';
+							printf(
+								/* translators: %s: wp-config constant name */
+								esc_html__( 'The %s constant in wp-config.php is ignored while this Connectors key exists.', 'automated-blog-content-creator' ),
+								'<code>' . esc_html( $const ) . '</code>'
+							);
+						}
 						?>
 					</p>
+					<?php $abcc_render_validate_control( $provider_id, $last_v ); ?>
 					<?php if ( ! empty( $saved_key ) ) : ?>
 					<details class="abcc-manual-override">
 						<summary>
@@ -124,6 +160,7 @@ $image_providers = array_filter(
 					<?php endif; ?>
 				<?php elseif ( defined( $const ) ) : ?>
 					<p><strong><?php esc_html_e( 'API key set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong></p>
+					<?php $abcc_render_validate_control( $provider_id, $last_v ); ?>
 				<?php else : ?>
 					<table class="form-table abcc-provider-card__form">
 						<tr>
@@ -189,7 +226,7 @@ $image_providers = array_filter(
 					</table>
 				<?php endif; ?>
 
-				<?php if ( abcc_provider_supports_citations( $provider_id ) ) : ?>
+				<?php if ( abcc_provider_supports_citations( $provider_id ) && '' !== (string) abcc_get_provider_api_key( $provider_id ) ) : ?>
 					<table class="form-table abcc-provider-card__form">
 						<tr>
 							<th scope="row">

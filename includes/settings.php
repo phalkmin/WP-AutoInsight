@@ -19,9 +19,27 @@ function abcc_get_default_content_template() {
 		'name'   => 'Default Template',
 		'prompt' => 'Write a {tone} blog post in {language} titled "{title}", focused on {keyword}, '
 			. 'for readers interested in {category}. Work these related keywords in naturally where they fit: {keywords}. '
-			. 'Open with a concrete hook — a specific detail, number, or scenario — never a broad scene-setting cliché. '
+			. 'Open with a concrete hook — a specific detail or scenario — never a broad scene-setting cliché. '
 			. 'Prefer short paragraphs and concrete examples over abstractions.',
 	);
+}
+
+/**
+ * Human name for a stored content template slug.
+ *
+ * @since 4.5.2
+ * @param string $slug Template slug.
+ * @return string Name, or the slug when unknown.
+ */
+function abcc_get_content_template_name( $slug ) {
+	$slug      = (string) $slug;
+	$templates = abcc_get_setting( 'abcc_content_templates', array() );
+
+	if ( is_array( $templates ) && ! empty( $templates[ $slug ]['name'] ) ) {
+		return (string) $templates[ $slug ]['name'];
+	}
+
+	return '' === $slug ? 'default' : $slug;
 }
 
 /**
@@ -58,6 +76,46 @@ function abcc_sanitize_content_templates_input( $slugs, $names, $prompts ) {
 }
 
 /**
+ * Build keyword groups from the form arrays; rows with no name and no keywords are dropped.
+ *
+ * @since 4.5.2
+ * @param array $names       Group names by index.
+ * @param array $keywords    Keyword textareas by index.
+ * @param array $categories  Category IDs by index.
+ * @param array $templates   Template slugs by index.
+ * @param array $models      Model overrides by index (already restricted to callable models by the caller).
+ * @param array $char_limits Length overrides by index.
+ * @return array
+ */
+function abcc_sanitize_keyword_groups_input( $names, $keywords, $categories, $templates, $models, $char_limits ) {
+	$groups = array();
+	foreach ( (array) $names as $index => $name ) {
+		$name           = sanitize_text_field( (string) $name );
+		$keywords_raw   = isset( $keywords[ $index ] ) ? sanitize_textarea_field( (string) $keywords[ $index ] ) : '';
+		$keywords_array = array_values( array_filter( array_map( 'trim', explode( "\n", $keywords_raw ) ), 'strlen' ) );
+
+		if ( '' === $name && empty( $keywords_array ) ) {
+			continue;
+		}
+
+		$char_limit = isset( $char_limits[ $index ] ) ? absint( $char_limits[ $index ] ) : 0;
+		if ( $char_limit > 0 ) {
+			$char_limit = min( 4000, max( 100, $char_limit ) );
+		}
+
+		$groups[] = array(
+			'name'       => $name,
+			'keywords'   => $keywords_array,
+			'category'   => isset( $categories[ $index ] ) ? absint( $categories[ $index ] ) : 0,
+			'template'   => isset( $templates[ $index ] ) ? sanitize_text_field( (string) $templates[ $index ] ) : 'default',
+			'model'      => isset( $models[ $index ] ) ? sanitize_text_field( (string) $models[ $index ] ) : '',
+			'char_limit' => $char_limit,
+		);
+	}
+	return $groups;
+}
+
+/**
  * Get the versioned settings schema.
  *
  * @return array
@@ -66,8 +124,14 @@ function abcc_get_settings_schema() {
 	$schema = array(
 		'version'  => ABCC_VERSION,
 		'settings' => array(
-			'abcc_version'                    => array( 'default' => ABCC_VERSION ),
-			'abcc_onboarding_completed'       => array( 'default' => false ),
+			'abcc_version'                    => array(
+				'default' => ABCC_VERSION,
+				'export'  => false,
+			),
+			'abcc_onboarding_completed'       => array(
+				'default' => false,
+				'export'  => false,
+			),
 			'abcc_keyword_groups'             => array(
 				'default' => array(
 					array(
@@ -86,7 +150,10 @@ function abcc_get_settings_schema() {
 			'custom_tone'                     => array( 'default' => '' ),
 			'openai_tone'                     => array( 'default' => 'friendly' ),
 			'openai_generate_seo'             => array( 'default' => true ),
-			'abcc_draft_first'                => array( 'default' => true ),
+			'abcc_draft_first'                => array(
+				'default' => true,
+				'export'  => false,
+			),
 			'abcc_default_post_status'        => array(
 				'default'  => 'draft',
 				'sanitize' => 'abcc_sanitize_post_status',
@@ -103,6 +170,7 @@ function abcc_get_settings_schema() {
 			),
 			'abcc_composer_last_source'       => array(
 				'default'  => '',
+				'export'   => false,
 				'sanitize' => 'abcc_sanitize_composer_source',
 			),
 			'openai_api_key'                  => array( 'default' => '' ),
@@ -133,16 +201,20 @@ function abcc_get_settings_schema() {
 			'abcc_stability_image_size'       => array( 'default' => '1024x1024' ),
 			'abcc_enable_audio_transcription' => array( 'default' => true ),
 			'abcc_supported_audio_formats'    => array( 'default' => array( 'mp3', 'wav', 'm4a', 'webm' ) ),
-			'abcc_transcription_language'     => array( 'default' => 'en' ),
+			'abcc_transcription_language'     => array( 'default' => 'auto' ),
 			'abcc_audio_default_mode'         => array(
 				'default'  => 'transcript_plus_intro',
 				'sanitize' => 'abcc_sanitize_audio_mode',
 			),
 			'abcc_auto_alt_text'              => array( 'default' => true ),
 			'abcc_enable_infographics'        => array( 'default' => true ),
-			'abcc_infographic_provider'       => array( 'default' => 'auto' ),
+			'abcc_infographic_provider'       => array(
+				'default'  => 'auto',
+				'sanitize' => 'abcc_sanitize_infographic_provider',
+			),
 			'abcc_topics_last_sweep'          => array(
 				'default'  => 0,
+				'export'   => false,
 				'sanitize' => 'absint',
 			),
 			'abcc_allowed_roles'              => array( 'default' => array( 'administrator', 'editor' ) ),
@@ -150,8 +222,8 @@ function abcc_get_settings_schema() {
 		),
 	);
 
-	// Extensions add keys under 'settings'; abcc_get_setting() and the
-	// export/import loops in admin.php pick them up with no other change.
+	// Extensions add keys under 'settings'; abcc_get_setting() reads them and
+	// abcc_get_exportable_settings() skips entries flagged 'export' => false.
 	return apply_filters( 'abcc_settings_schema', $schema );
 }
 
@@ -167,6 +239,37 @@ function abcc_get_settings_schema() {
  */
 function abcc_sanitize_post_status( $value ) {
 	return 'publish' === $value ? 'publish' : 'draft';
+}
+
+/**
+ * @since 4.5.2
+ * @param mixed $value Raw value.
+ * @return string One of auto|openai|stability|gemini.
+ */
+function abcc_sanitize_infographic_provider( $value ) {
+	$value = is_string( $value ) ? sanitize_key( $value ) : '';
+	return in_array( $value, array( 'auto', 'openai', 'stability', 'gemini' ), true ) ? $value : 'auto';
+}
+
+/**
+ * Keep only real, non-attachment post types; an empty selection means Posts.
+ *
+ * @since 4.5.2
+ * @param array $raw Submitted post type slugs.
+ * @return string[]
+ */
+function abcc_sanitize_selected_post_types( $raw ) {
+	$clean = array();
+	foreach ( (array) $raw as $slug ) {
+		$slug = sanitize_key( (string) $slug );
+		if ( '' === $slug || 'attachment' === $slug || ! post_type_exists( $slug ) ) {
+			continue;
+		}
+		$clean[] = $slug;
+	}
+	$clean = array_values( array_unique( $clean ) );
+
+	return empty( $clean ) ? array( 'post' ) : $clean;
 }
 
 /**
@@ -230,6 +333,58 @@ function abcc_get_setting_default( $key, $fallback = null ) {
  */
 function abcc_get_setting( $key, $fallback = null ) {
 	return get_option( $key, abcc_get_setting_default( $key, $fallback ) );
+}
+
+/**
+ * Settings worth carrying to another site: no credentials, no internal state.
+ *
+ * @since 4.5.2
+ * @return array key => value, with booleans as booleans.
+ */
+function abcc_get_exportable_settings() {
+	$schema   = abcc_get_settings_schema();
+	$exported = array();
+
+	foreach ( $schema['settings'] as $key => $def ) {
+		if ( '_api_key' === substr( $key, -8 ) || ( isset( $def['export'] ) && false === $def['export'] ) ) {
+			continue;
+		}
+		// Extension schema entries may omit a default.
+		$default = is_array( $def ) && array_key_exists( 'default', $def ) ? $def['default'] : null;
+		$value   = abcc_get_setting( $key, $default );
+		if ( is_bool( $default ) ) {
+			$value = ( true === $value || '1' === $value || 1 === $value );
+		}
+		$exported[ $key ] = $value;
+	}
+
+	return $exported;
+}
+
+/**
+ * Restore every portable setting to its schema default.
+ *
+ * Uses the export rule: credentials and `'export' => false` entries (version,
+ * onboarding and other install state) are kept, since resetting them would
+ * re-run migrations and reopen the wizard. The capability grant follows the
+ * restored role list.
+ *
+ * @since 4.5.2
+ * @return void
+ */
+function abcc_reset_settings() {
+	$schema = abcc_get_settings_schema();
+
+	foreach ( $schema['settings'] as $key => $def ) {
+		if ( '_api_key' === substr( $key, -8 ) || ( isset( $def['export'] ) && false === $def['export'] ) ) {
+			continue;
+		}
+		abcc_update_setting( $key, is_array( $def ) && array_key_exists( 'default', $def ) ? $def['default'] : null );
+	}
+
+	if ( function_exists( 'abcc_sync_prompt_ai_capability' ) ) {
+		abcc_sync_prompt_ai_capability( abcc_get_setting( 'abcc_allowed_roles', array( 'administrator', 'editor' ) ) );
+	}
 }
 
 /**
@@ -365,6 +520,14 @@ add_action( 'wp_ajax_abcc_dismiss_draft_mode_notice', 'abcc_handle_dismiss_draft
  * @return void
  */
 function abcc_run_settings_migrations() {
+	$had_version = false !== get_option( 'abcc_version' );
+	// No version and none of the options every install writes: nothing to migrate.
+	$is_fresh = ! $had_version
+		&& false === get_option( 'openai_api_key' )
+		&& false === get_option( 'abcc_content_templates' )
+		&& false === get_option( 'abcc_keyword_groups' )
+		&& false === get_option( 'prompt_select' );
+
 	$installed_version = get_option( 'abcc_version', '1.0.0' );
 	$start_version     = $installed_version;
 
@@ -496,7 +659,7 @@ function abcc_run_settings_migrations() {
 		abcc_update_setting( 'abcc_version', ABCC_VERSION );
 	}
 
-	if ( version_compare( $start_version, ABCC_VERSION, '<' ) ) {
+	if ( ! $is_fresh && version_compare( $start_version, ABCC_VERSION, '<' ) ) {
 		abcc_queue_settings_migration_notice( $start_version, ABCC_VERSION );
 	}
 }

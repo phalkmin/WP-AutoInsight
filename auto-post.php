@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name:       WP-AutoInsight
- * Plugin URI:        https://phalkmin.me/
- * Description:       Create blog posts automatically using the OpenAI and Gemini APIs!
- * Version:           4.5.1
+ * Plugin URI:        https://phalkmin.me/en/project/automated-blog-content-creator/
+ * Description:       Writes posts on a schedule with your own OpenAI, Claude, Gemini or Perplexity keys, adds images and SEO metadata, and saves drafts for review.
+ * Version:           4.5.2
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '4.5.1' );
+define( 'ABCC_VERSION', '4.5.2' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
@@ -72,7 +72,7 @@ require_once __DIR__ . '/gpt.php';
  */
 function abcc_debug_log( $message ) {
 	if ( abcc_get_setting( 'abcc_debug_logging', false ) || ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
-		error_log( '[WP-AutoInsight] ' . $message ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[WP-AutoInsight] ' . abcc_redact_secrets( $message ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 }
 

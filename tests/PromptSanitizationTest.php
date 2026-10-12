@@ -43,7 +43,10 @@ abcc_test(
 		$intro   = abcc_audio_build_intro_prompt( $long, array() );
 		$rewrite = abcc_audio_build_rewrite_prompt( $long, array() );
 
-		foreach ( array( 'intro' => $intro, 'rewrite' => $rewrite ) as $label => $prompt ) {
+		foreach ( array(
+			'intro'   => $intro,
+			'rewrite' => $rewrite,
+		) as $label => $prompt ) {
 			abcc_assert_true(
 				strlen( $prompt ) < strlen( $long ),
 				$label . ' prompt must be shorter than the raw transcript.'
@@ -57,7 +60,7 @@ abcc_test(
 );
 
 abcc_test(
-	'rewrite handler bounds very long post content before prompting',
+	'rewrite handler refuses very long post content instead of trimming it',
 	function () {
 		abcc_update_setting( 'openai_api_key', 'sk-test' );
 		abcc_update_setting( 'prompt_select', 'gpt-4.1-mini-2025-04-14' );
@@ -70,8 +73,6 @@ abcc_test(
 			)
 		);
 
-		abcc_test_queue_http_response( abcc_test_fake_generation( '<h2>Better</h2>' . "\n" . '<p>Rewritten.</p>' ) );
-
 		$_POST = array(
 			'post_id' => $post_id,
 			'nonce'   => 'x',
@@ -80,15 +81,8 @@ abcc_test(
 		$_POST = array();
 
 		$json = $GLOBALS['abcc_test_last_json'];
-		abcc_assert_true( is_array( $json ) && $json['success'], 'Rewrite should succeed with a canned response.' );
-
-		$body   = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
-		$prompt = $body['messages'][0]['content'] ?? '';
-
-		abcc_assert_true(
-			str_word_count( $prompt ) < 8000,
-			'Rewrite prompt must be bounded well under the raw 20,000-word content.'
-		);
+		abcc_assert_true( is_array( $json ) && ! $json['success'], 'Rewrite must refuse an over-long post.' );
+		abcc_assert_same( null, $GLOBALS['abcc_http_last_request'], 'No provider call for a refused post.' );
 	}
 );
 
@@ -126,5 +120,14 @@ abcc_test(
 			false !== strpos( $message, 'Generation Log' ),
 			'Rewrite errors should route through abcc_format_generation_error, got: ' . $message
 		);
+	}
+);
+
+abcc_test(
+	'default template does not ask for a number and keeps its language placeholder',
+	function () {
+		$prompt = abcc_get_default_content_template()['prompt'];
+		abcc_assert_false( false !== strpos( $prompt, 'number' ), 'Asking for a number invites invented statistics (P3-10).' );
+		abcc_assert_true( false !== strpos( $prompt, '{language}' ) );
 	}
 );

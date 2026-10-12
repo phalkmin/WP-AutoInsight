@@ -93,3 +93,32 @@ abcc_test(
 		abcc_assert_same( 'unknown-model', $label );
 	}
 );
+
+abcc_test(
+	'default text model is the schema default and connection tests use registered models',
+	function () {
+		abcc_assert_same( abcc_get_setting_default( 'prompt_select' ), abcc_get_default_text_model() );
+
+		foreach ( array( 'openai', 'claude', 'gemini', 'perplexity' ) as $provider ) {
+			$model = abcc_get_provider_connection_test_model( $provider );
+			abcc_assert_true( abcc_is_valid_text_model( $model ), $provider . ' connection test must name a registered model, got ' . $model );
+		}
+	}
+);
+
+abcc_test(
+	'no legacy model literal outside the registry and the context table',
+	function () {
+		$root  = dirname( __DIR__ );
+		$files = array_merge( glob( $root . '/*.php' ), glob( $root . '/includes/*.php' ), glob( $root . '/includes/admin/*.php' ) );
+		foreach ( $files as $file ) {
+			if ( in_array( basename( $file ), array( 'providers.php', 'token-handling.php' ), true ) ) {
+				continue;
+			}
+			abcc_assert_false(
+				false !== strpos( file_get_contents( $file ), 'gpt-4.1-mini-2025-04-14' ),
+				basename( $file ) . ' must read the default model from abcc_get_default_text_model().'
+			);
+		}
+	}
+);

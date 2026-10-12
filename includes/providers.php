@@ -32,6 +32,7 @@ function abcc_get_provider_registry() {
 			'wp_connector_id'          => 'openai',
 			'text_generation_callback' => 'abcc_openai_generate_text',
 			'connection_test_callback' => 'abcc_test_openai_connection',
+			'connection_test_model'    => 'gpt-5.4-mini',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => true,
@@ -83,6 +84,7 @@ function abcc_get_provider_registry() {
 			'wp_connector_id'          => 'anthropic',
 			'text_generation_callback' => 'abcc_claude_generate_text',
 			'connection_test_callback' => 'abcc_test_claude_connection',
+			'connection_test_model'    => 'claude-haiku-4-5-20251001',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => false,
@@ -120,6 +122,7 @@ function abcc_get_provider_registry() {
 			'wp_connector_id'          => 'google',
 			'text_generation_callback' => 'abcc_gemini_generate_text',
 			'connection_test_callback' => 'abcc_test_gemini_connection',
+			'connection_test_model'    => 'gemini-2.5-flash-lite',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => true,
@@ -128,22 +131,25 @@ function abcc_get_provider_registry() {
 			),
 			'text_models'              => array(
 				'gemini-2.5-flash-lite' => array(
-					'name'          => 'Gemini 2.5 Flash-Lite',
-					'description'   => 'Fastest and most budget-friendly model',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0001,
+					'name'            => 'Gemini 2.5 Flash-Lite',
+					'description'     => 'Fastest and most budget-friendly model',
+					'cost_tier'       => '1',
+					'cost_per_post'   => 0.0001,
+					'thinking_budget' => 0,
 				),
 				'gemini-2.5-flash'      => array(
-					'name'          => 'Gemini 2.5 Flash',
-					'description'   => 'Best price-performance with thinking capabilities',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.0002,
+					'name'            => 'Gemini 2.5 Flash',
+					'description'     => 'Best price-performance with thinking capabilities',
+					'cost_tier'       => '2',
+					'cost_per_post'   => 0.0002,
+					'thinking_budget' => 0,
 				),
 				'gemini-2.5-pro'        => array(
-					'name'          => 'Gemini 2.5 Pro',
-					'description'   => 'Most advanced reasoning model for complex problems',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.002,
+					'name'            => 'Gemini 2.5 Pro',
+					'description'     => 'Most advanced reasoning model for complex problems',
+					'cost_tier'       => '3',
+					'cost_per_post'   => 0.002,
+					'thinking_budget' => 128,
 				),
 				'gemini-3.5-flash'      => array(
 					'name'          => 'Gemini 3.5 Flash',
@@ -163,6 +169,7 @@ function abcc_get_provider_registry() {
 			'wp_connector_id'          => 'perplexity',
 			'text_generation_callback' => 'abcc_perplexity_generate_text',
 			'connection_test_callback' => 'abcc_test_perplexity_connection',
+			'connection_test_model'    => 'sonar',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => false,
@@ -319,6 +326,52 @@ function abcc_get_provider_default_model( $provider ) {
 }
 
 /**
+ * Hidden-reasoning budget a model needs, or null when it has no such parameter.
+ *
+ * 0 turns thinking off; a positive value is the smallest the model accepts
+ * and must be added to the output ceiling or it eats the visible budget.
+ *
+ * @since 4.5.2
+ * @param string $provider Provider ID.
+ * @param string $model    Model ID.
+ * @return int|null
+ */
+function abcc_get_model_thinking_budget( $provider, $model ) {
+	$config = abcc_get_provider( $provider );
+	if ( isset( $config['text_models'][ $model ]['thinking_budget'] ) ) {
+		return (int) $config['text_models'][ $model ]['thinking_budget'];
+	}
+
+	return null;
+}
+
+/**
+ * Cheapest registered model to use for a 1-token connection test.
+ *
+ * @since 4.5.2
+ * @param string $provider Provider ID.
+ * @return string
+ */
+function abcc_get_provider_connection_test_model( $provider ) {
+	$config = abcc_get_provider( $provider );
+	if ( ! empty( $config['connection_test_model'] ) ) {
+		return (string) $config['connection_test_model'];
+	}
+
+	return abcc_get_provider_default_model( $provider );
+}
+
+/**
+ * The model used when no model is stored or passed.
+ *
+ * @since 4.5.2
+ * @return string
+ */
+function abcc_get_default_text_model() {
+	return (string) abcc_get_setting_default( 'prompt_select', 'gpt-5.4-mini' );
+}
+
+/**
  * Get available model options grouped by provider.
  *
  * @return array
@@ -377,6 +430,31 @@ function abcc_get_provider_for_model( $model ) {
 	}
 
 	return '';
+}
+
+/**
+ * Whether a model ID names a registered text model of a text-capable provider.
+ *
+ * Membership only: no substring guessing, so a made-up ID that contains a
+ * provider word is rejected.
+ *
+ * @since 4.5.2
+ * @param string $model Model ID.
+ * @return bool
+ */
+function abcc_is_valid_text_model( $model ) {
+	$model = trim( (string) $model );
+	if ( '' === $model ) {
+		return false;
+	}
+
+	foreach ( abcc_get_provider_registry() as $provider_id => $provider ) {
+		if ( isset( $provider['text_models'][ $model ] ) && abcc_provider_supports_text_generation( $provider_id ) ) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -515,6 +593,120 @@ function abcc_get_provider_health_snapshot( $provider, $health_rows = null ) {
 		'health'     => $health,
 		'last_check' => $last_check,
 	);
+}
+
+/**
+ * Record a provider validation outcome in both health stores.
+ *
+ * The transient drives the badges and the dashboard; the option row is what
+ * the daily check reads back. Writing both here keeps them from disagreeing.
+ *
+ * @since 4.5.2
+ * @param string $provider Provider ID: a lowercase registry key (sanitize_key form), as for every health writer.
+ * @param bool   $ok       Whether the key worked.
+ * @param string $message  Optional user-facing detail; secrets are redacted.
+ * @param int    $ttl      Transient lifetime in seconds.
+ * @return void
+ */
+function abcc_record_provider_validation( $provider, $ok, $message = '', $ttl = HOUR_IN_SECONDS ) {
+	$provider = sanitize_key( (string) $provider );
+	if ( ! in_array( $provider, abcc_get_provider_ids(), true ) ) {
+		return;
+	}
+
+	if ( '' === $message ) {
+		$message = $ok
+			? __( 'Verified just now', 'automated-blog-content-creator' )
+			: __( 'Connection failed', 'automated-blog-content-creator' );
+	} elseif ( function_exists( 'abcc_redact_secrets' ) ) {
+		// Provider error text can echo the key; the badge shows this message.
+		$message = abcc_redact_secrets( $message );
+	}
+
+	$now = time();
+
+	set_transient(
+		'abcc_last_validation_' . $provider,
+		array(
+			'status'    => $ok ? 'verified' : 'failed',
+			'message'   => sanitize_text_field( $message ),
+			'timestamp' => $now,
+		),
+		(int) $ttl
+	);
+
+	$rows = get_option( 'abcc_provider_health', array() );
+	$rows = is_array( $rows ) ? $rows : array();
+
+	$rows[ $provider ] = array(
+		'status'    => $ok ? 'connected' : 'failed',
+		'timestamp' => $now,
+	);
+	update_option( 'abcc_provider_health', $rows );
+}
+
+/**
+ * Record that a provider has no key: a no_key health row, no cached validation.
+ *
+ * @since 4.5.2
+ * @param string $provider Provider ID.
+ * @return void
+ */
+function abcc_record_provider_no_key( $provider ) {
+	$provider = sanitize_key( (string) $provider );
+	if ( ! in_array( $provider, abcc_get_provider_ids(), true ) ) {
+		return;
+	}
+
+	delete_transient( 'abcc_last_validation_' . $provider );
+
+	$rows = get_option( 'abcc_provider_health', array() );
+	$rows = is_array( $rows ) ? $rows : array();
+
+	$rows[ $provider ] = array(
+		'status'    => 'no_key',
+		'timestamp' => time(),
+	);
+	update_option( 'abcc_provider_health', $rows );
+}
+
+/**
+ * Feed a generation outcome into provider health.
+ *
+ * Only an auth error proves the key is bad; outages and rate limits are
+ * ignored. A success writes only when the stored state isn't already
+ * "verified" within the hour, so scheduled sites don't pay a DB write per call.
+ *
+ * @since 4.5.2
+ * @param string        $provider Provider that served (or refused) the call.
+ * @param WP_Error|null $error    Normalized error from the wrapper, or null.
+ * @return void
+ */
+function abcc_note_provider_outcome( $provider, $error ) {
+	$provider = sanitize_key( (string) $provider );
+	if ( '' === $provider ) {
+		return;
+	}
+
+	if ( is_wp_error( $error ) ) {
+		// A 403 means no access to that model, not a bad key; only a 401 rejects the key.
+		$data   = (array) $error->get_error_data();
+		$status = isset( $data['status'] ) ? (int) $data['status'] : 401;
+		if ( 'abcc_provider_auth_error' === $error->get_error_code() && 401 === $status ) {
+			abcc_record_provider_validation( $provider, false, __( 'The provider rejected the API key during generation.', 'automated-blog-content-creator' ) );
+		}
+		return;
+	}
+
+	$current = get_transient( 'abcc_last_validation_' . $provider );
+	if ( is_array( $current )
+		&& 'verified' === ( $current['status'] ?? '' )
+		&& ! empty( $current['timestamp'] )
+		&& ( time() - (int) $current['timestamp'] ) < HOUR_IN_SECONDS ) {
+		return;
+	}
+
+	abcc_record_provider_validation( $provider, true, __( 'Verified by a successful generation', 'automated-blog-content-creator' ) );
 }
 
 /**
