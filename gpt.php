@@ -130,8 +130,9 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 			case 'perplexity':
 				$url     = 'https://api.perplexity.ai/chat/completions';
 				$headers = array(
-					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $api_key,
+					'Content-Type'       => 'application/json',
+					'Authorization'      => 'Bearer ' . $api_key,
+					'X-Pplx-Integration' => 'wp-autoinsight',
 				);
 				$body    = array(
 					'model'      => $model,
