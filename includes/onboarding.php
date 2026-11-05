@@ -621,8 +621,9 @@ function abcc_test_perplexity_connection( $api_key ) {
 			'https://api.perplexity.ai/chat/completions',
 			array(
 				'headers' => array(
-					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $api_key,
+					'Content-Type'       => 'application/json',
+					'Authorization'      => 'Bearer ' . $api_key,
+					'X-Pplx-Integration' => 'wp-autoinsight',
 				),
 				'body'    => wp_json_encode(
 					array(
