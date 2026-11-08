@@ -180,6 +180,8 @@ function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 			// the user must see; 429 and 5xx are transient and retryable.
 			if ( 401 === $code || 403 === $code ) {
 				$error_code = 'abcc_provider_auth_error';
+			} elseif ( 402 === $code ) {
+				$error_code = 'abcc_provider_payment_required';
 			} elseif ( 429 === $code ) {
 				$error_code = 'abcc_provider_rate_limited';
 			} elseif ( $code >= 500 ) {
@@ -381,9 +383,8 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
 /**
  * Generates images using OpenAI's GPT Image models, falling back to Stability AI on failure.
  *
- * GPT Image models (gpt-image-1, gpt-image-1-mini, gpt-image-1.5) replaced the
- * deprecated dall-e-3 and return base64 payloads, which are saved locally and
- * returned as public URLs.
+ * GPT Image models return base64 payloads, which are saved locally and
+ * returned as public URLs. Retired IDs are mapped to their successor first.
  *
  * @since 1.0.0
  * @param string $api_key       API key for OpenAI.
@@ -394,8 +395,9 @@ function abcc_perplexity_generate_text( $api_key, $prompt, $requested_tokens, $m
  * @param string $model         GPT Image model to use.
  * @return array|false Array of image URLs or false on failure.
  */
-function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024x1024', $image_quality = 'medium', $model = 'gpt-image-1' ) {
+function abcc_openai_generate_images( $api_key, $prompt, $n, $image_size = '1024x1024', $image_quality = 'medium', $model = 'gpt-image-2.5-flare' ) {
 	$client = new ABCC_OpenAI_Client( $api_key );
+	$model  = abcc_resolve_image_model( 'openai', $model );
 
 	// Translate any stale DALL-E 3 values still stored in settings to their
 	// GPT Image equivalents. dall-e-3 was deprecated 2026-05-12 and its sizes
@@ -644,7 +646,7 @@ function abcc_save_base64_image( $b64, $mime, $prefix ) {
  * @since 3.2.0
  * @param string $api_key    Gemini API key.
  * @param string $prompt     Text prompt for image generation.
- * @param string $model      Model to use ('gemini-2.5-flash-image' or 'gemini-3-pro-image-preview').
+ * @param string $model      Model to use (see abcc_get_image_model_options( 'gemini' )).
  * @param string $image_size Image size ('1K', '2K', or '4K').
  * @return string|false Image URL on success, false on failure.
  */
@@ -654,11 +656,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 		return false;
 	}
 
-	// Validate model.
-	$valid_models = array( 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview' );
-	if ( ! in_array( $model, $valid_models, true ) ) {
-		$model = 'gemini-2.5-flash-image';
-	}
+	$model = abcc_resolve_image_model( 'gemini', $model );
 
 	// Validate image size.
 	$valid_sizes = array( '1K', '2K', '4K' );

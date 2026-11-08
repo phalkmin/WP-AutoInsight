@@ -36,7 +36,18 @@ abcc_test(
 abcc_test(
 	'non-perplexity providers do not send the integration header',
 	function () {
-		abcc_test_queue_http_response( wp_json_encode( array( 'content' => array( array( 'type' => 'text', 'text' => '<p>Body</p>' ) ) ) ) );
+		abcc_test_queue_http_response(
+			wp_json_encode(
+				array(
+					'content' => array(
+						array(
+							'type' => 'text',
+							'text' => '<p>Body</p>',
+						),
+					),
+				)
+			)
+		);
 		abcc_call_provider_api(
 			'claude',
 			'claude-sonnet-4-5',

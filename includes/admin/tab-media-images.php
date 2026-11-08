@@ -11,10 +11,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $preferred_service = abcc_get_setting( 'preferred_image_service', 'auto' );
-$openai_model      = abcc_get_setting( 'abcc_openai_image_model', 'gpt-image-1' );
+$openai_model      = abcc_resolve_image_model( 'openai', abcc_get_setting( 'abcc_openai_image_model', 'gpt-image-2.5-flare' ) );
 $openai_size       = abcc_get_setting( 'abcc_openai_image_size', '1024x1024' );
 $openai_quality    = abcc_get_setting( 'abcc_openai_image_quality', 'medium' );
-$gemini_model      = abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' );
+$gemini_model      = abcc_resolve_image_model( 'gemini', abcc_get_setting( 'abcc_gemini_image_model', 'gemini-2.5-flash-image' ) );
 $gemini_size       = abcc_get_setting( 'abcc_gemini_image_size', '2K' );
 $stability_size    = abcc_get_setting( 'abcc_stability_image_size', '1024x1024' );
 $image_style       = abcc_sanitize_image_style( abcc_get_setting( 'abcc_image_style', 'editorial photography' ) );
@@ -105,13 +105,13 @@ $image_style_text  = abcc_get_setting( 'abcc_image_style_custom', '' );
 				<tr>
 					<th scope="row">
 						<label for="abcc_openai_image_model"><?php esc_html_e( 'OpenAI Image Model', 'automated-blog-content-creator' ); ?></label>
-						<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'GPT Image models replaced DALL-E 3 (deprecated by OpenAI in May 2026). Using a GPT Image model requires API organization verification on your OpenAI account.', 'automated-blog-content-creator' ) ) ); ?>
+						<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'OpenAI retired GPT Image 1 on October 23, 2026; saved selections of retired models are sent as their replacement automatically. Using a GPT Image model requires API organization verification on your OpenAI account.', 'automated-blog-content-creator' ) ) ); ?>
 					</th>
 					<td>
 						<select id="abcc_openai_image_model" name="abcc_openai_image_model" data-autosave-key="abcc_openai_image_model">
-							<option value="gpt-image-1" <?php selected( $openai_model, 'gpt-image-1' ); ?>><?php esc_html_e( 'GPT Image 1', 'automated-blog-content-creator' ); ?></option>
-							<option value="gpt-image-1-mini" <?php selected( $openai_model, 'gpt-image-1-mini' ); ?>><?php esc_html_e( 'GPT Image 1 Mini (faster, cheaper)', 'automated-blog-content-creator' ); ?></option>
-							<option value="gpt-image-1.5" <?php selected( $openai_model, 'gpt-image-1.5' ); ?>><?php esc_html_e( 'GPT Image 1.5 (higher quality)', 'automated-blog-content-creator' ); ?></option>
+							<?php foreach ( abcc_get_image_model_picker_options( 'openai', $openai_model ) as $abcc_image_model_id => $abcc_image_model_label ) : ?>
+								<option value="<?php echo esc_attr( $abcc_image_model_id ); ?>" <?php selected( $openai_model, $abcc_image_model_id ); ?>><?php echo esc_html( $abcc_image_model_label ); ?></option>
+							<?php endforeach; ?>
 						</select>
 					</td>
 				</tr>
@@ -151,8 +151,9 @@ $image_style_text  = abcc_get_setting( 'abcc_image_style_custom', '' );
 					</th>
 					<td>
 						<select id="abcc_gemini_image_model" name="abcc_gemini_image_model" data-autosave-key="abcc_gemini_image_model">
-							<option value="gemini-2.5-flash-image" <?php selected( $gemini_model, 'gemini-2.5-flash-image' ); ?>><?php esc_html_e( 'Flash (faster)', 'automated-blog-content-creator' ); ?></option>
-							<option value="gemini-3-pro-image-preview" <?php selected( $gemini_model, 'gemini-3-pro-image-preview' ); ?>><?php esc_html_e( 'Pro (higher quality)', 'automated-blog-content-creator' ); ?></option>
+							<?php foreach ( abcc_get_image_model_picker_options( 'gemini', $gemini_model ) as $abcc_image_model_id => $abcc_image_model_label ) : ?>
+								<option value="<?php echo esc_attr( $abcc_image_model_id ); ?>" <?php selected( $gemini_model, $abcc_image_model_id ); ?>><?php echo esc_html( $abcc_image_model_label ); ?></option>
+							<?php endforeach; ?>
 						</select>
 					</td>
 				</tr>

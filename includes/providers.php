@@ -230,6 +230,22 @@ function abcc_get_provider_registry() {
 }
 
 /**
+ * The clock retirement checks use.
+ *
+ * @since 4.5.3
+ * @return int Unix time.
+ */
+function abcc_get_retirement_now() {
+	/**
+	 * Filter the time retirement dates are compared against.
+	 *
+	 * @since 4.5.3
+	 * @param int $now Unix time.
+	 */
+	return (int) apply_filters( 'abcc_retirement_now', time() );
+}
+
+/**
  * Get a provider configuration.
  *
  * @param string $provider Provider ID.

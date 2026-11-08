@@ -1,5 +1,16 @@
 == Full Changelog ==
 
+= 4.5.3 =
+
+**Fixed**
+* Featured images and infographics on OpenAI had failed since October 23, 2026, when OpenAI shut down GPT Image 1, the plugin's default image model. The default is now GPT Image 2.5 Flare, with GPT Image 2.5 Sunburst offered for higher quality. Saved selections of retired models are sent as their replacement automatically: GPT Image 1 now, GPT Image 1 Mini and 1.5 from their shutdown on December 1, 2026. Until then a saved Mini or 1.5 shows as "retiring soon" in Media settings instead of silently switching.
+* Gemini "Pro (higher quality)" images had failed since June 25, 2026, when Google shut down the preview model behind that option. It now uses gemini-3-pro-image, and Gemini 3.1 Flash-Lite Image is offered as the cheapest choice. Gemini 2.5 Flash Image retires on March 15, 2027 and will map to it then.
+* A provider replying "payment required" (HTTP 402: out of credits or over the key's spending limit) was reported as "the selected model may no longer be available". It now says to add credits or raise the limit, and the log no longer offers to report it as a bug.
+* GPT-5.4 mini's context window was budgeted as 1M tokens; it is 400K.
+
+**Changed**
+* Perplexity requests carry an `X-Pplx-Integration: wp-autoinsight` header so Perplexity can attribute the plugin's API traffic for integration support. No other provider, key or request body changes. (Community contribution.)
+
 = 4.5.2 =
 
 **Fixed**

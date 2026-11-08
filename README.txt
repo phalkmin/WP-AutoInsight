@@ -4,7 +4,7 @@ Tags: openai, anthropic, google-ai, perplexity, ai-content
 Requires at least: 6.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 4.5.2
+Stable tag: 4.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,7 +60,7 @@ Whether you're a small business keeping a blog active, an agency managing conten
 = API Keys =
 You'll need at least one of the following API keys:
 * OpenAI API key (for GPT models and GPT Image)
-* Claude API key (for Claude 4.5 models)
+* Claude API key (for Claude models)
 * Gemini API key (for Google's AI)
 * Perplexity API key (for web-grounded content with citations)
 * Stability AI key (optional, for alternative image generation)
@@ -87,7 +87,7 @@ define('STABILITY_API', 'your-key-here');
 
 = How do I get an OpenAI API key? =
 
-To use OpenAI models (GPT-4.1, o4-mini), sign up at OpenAI and get your API key:
+To use OpenAI models (GPT-5.4 mini and others), sign up at OpenAI and get your API key:
 1. Go to https://platform.openai.com/api-keys
 2. Sign up or log in to your account
 3. Click "Create new secret key"
@@ -247,6 +247,12 @@ Multiple support channels available:
 2. Example generated blog post using Gutenberg blocks.
 
 == Changelog ==
+
+= 4.5.3 =
+* Fixed: featured images and infographics on OpenAI had failed since October 23, 2026, when OpenAI shut down GPT Image 1. The default is now GPT Image 2.5 Flare, and saved selections of retired image models are sent as their replacement automatically.
+* Fixed: Gemini "Pro (higher quality)" images, broken since Google shut down the preview model in June 2026. The option now uses the released model, and Gemini 3.1 Flash-Lite Image is offered as the cheapest choice.
+* Fixed: an out-of-credits reply from a provider (HTTP 402) now says so instead of suggesting the model is gone.
+* Changed: Perplexity requests now identify the plugin to Perplexity with an integration header (community contribution).
 
 = 4.5.2 =
 * Fixed: the setup wizard was stuck on an empty screen for new installs and on "Restart setup wizard" (broken since 4.3). The first step shows again, and providers with a saved key are recognized on restart.

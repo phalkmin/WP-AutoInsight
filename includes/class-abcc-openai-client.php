@@ -73,6 +73,8 @@ class ABCC_OpenAI_Client {
 			// v4.5 fallback chain.
 			if ( 401 === $code || 403 === $code ) {
 				$error_code = 'abcc_provider_auth_error';
+			} elseif ( 402 === $code ) {
+				$error_code = 'abcc_provider_payment_required';
 			} elseif ( 429 === $code ) {
 				$error_code = 'abcc_provider_rate_limited';
 			} elseif ( $code >= 500 ) {
@@ -153,12 +155,10 @@ class ABCC_OpenAI_Client {
 	 * @return array|WP_Error The API response or WP_Error on failure.
 	 */
 	public function create_image( $prompt, $options = array() ) {
-		// GPT Image models (gpt-image-1, *-mini, *-1.5) replaced dall-e-3, which
-		// OpenAI deprecated on 2026-05-12. They do NOT accept 'response_format'
-		// (always returning base64 in data[].b64_json) and use low/medium/high
-		// quality rather than DALL-E's standard/hd.
+		// GPT Image models reject 'response_format' (base64 comes back in
+		// data[].b64_json) and take low/medium/high quality.
 		$default_options = array(
-			'model'         => 'gpt-image-1',
+			'model'         => 'gpt-image-2.5-flare',
 			'n'             => 1,
 			'size'          => '1024x1024',
 			'quality'       => 'medium',

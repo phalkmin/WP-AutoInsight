@@ -10,6 +10,134 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Image models offered per provider: id => label. Audited 2026-11-05.
+ *
+ * @since 4.5.3
+ * @param string $provider 'openai' or 'gemini'.
+ * @return array<string, string>
+ */
+function abcc_get_image_model_options( $provider ) {
+	$options = array(
+		'openai' => array(
+			'gpt-image-2.5-flare'    => __( 'GPT Image 2.5 Flare (fast, default)', 'automated-blog-content-creator' ),
+			'gpt-image-2.5-sunburst' => __( 'GPT Image 2.5 Sunburst (higher quality)', 'automated-blog-content-creator' ),
+		),
+		'gemini' => array(
+			'gemini-2.5-flash-image'      => __( 'Flash (faster)', 'automated-blog-content-creator' ),
+			'gemini-3.1-flash-lite-image' => __( 'Flash-Lite 3.1 (cheapest)', 'automated-blog-content-creator' ),
+			'gemini-3-pro-image'          => __( 'Pro (higher quality)', 'automated-blog-content-creator' ),
+		),
+	);
+
+	return isset( $options[ $provider ] ) ? $options[ $provider ] : array();
+}
+
+/**
+ * Picker options plus the stored model when it is retired-but-still-served,
+ * so the form never silently switches a selection the provider still accepts.
+ *
+ * @since 4.5.3
+ * @param string $provider 'openai' or 'gemini'.
+ * @param string $stored   Resolved stored model ID.
+ * @return array<string, string>
+ */
+function abcc_get_image_model_picker_options( $provider, $stored ) {
+	$options = abcc_get_image_model_options( $provider );
+	$stored  = (string) $stored;
+	$retired = abcc_get_retired_image_models();
+
+	if ( '' !== $stored && ! isset( $options[ $stored ] ) && isset( $retired[ $provider ][ $stored ] ) ) {
+		$options = array_merge(
+			array(
+				/* translators: %s: model ID */
+				$stored => sprintf( __( '%s (retiring soon)', 'automated-blog-content-creator' ), $stored ),
+			),
+			$options
+		);
+	}
+
+	return $options;
+}
+
+/**
+ * Retired image model IDs and what replaces them, with the retirement date.
+ *
+ * @since 4.5.3
+ * @return array<string, array<string, array{successor: string, retires: string}>>
+ */
+function abcc_get_retired_image_models() {
+	return array(
+		'openai' => array(
+			'dall-e-2'         => array(
+				'successor' => 'gpt-image-2.5-flare',
+				'retires'   => '2026-05-12',
+			),
+			'dall-e-3'         => array(
+				'successor' => 'gpt-image-2.5-flare',
+				'retires'   => '2026-05-12',
+			),
+			'gpt-image-1'      => array(
+				'successor' => 'gpt-image-2.5-flare',
+				'retires'   => '2026-10-23',
+			),
+			'gpt-image-1-mini' => array(
+				'successor' => 'gpt-image-2.5-flare',
+				'retires'   => '2026-12-01',
+			),
+			'gpt-image-1.5'    => array(
+				'successor' => 'gpt-image-2.5-sunburst',
+				'retires'   => '2026-12-01',
+			),
+		),
+		'gemini' => array(
+			'gemini-3-pro-image-preview' => array(
+				'successor' => 'gemini-3-pro-image',
+				'retires'   => '2026-06-25',
+			),
+			'gemini-2.5-flash-image'     => array(
+				'successor' => 'gemini-3.1-flash-lite-image',
+				'retires'   => '2027-03-15',
+			),
+		),
+	);
+}
+
+/**
+ * Map a stored image model to one the provider still serves.
+ *
+ * Past its retirement date an ID becomes its successor; IDs the plugin never
+ * offered fall back to the provider's first option.
+ *
+ * @since 4.5.3
+ * @param string   $provider 'openai' or 'gemini'.
+ * @param string   $model    Stored model ID.
+ * @param int|null $now      Unix time; null means now.
+ * @return string
+ */
+function abcc_resolve_image_model( $provider, $model, $now = null ) {
+	$model   = trim( (string) $model );
+	$now     = null === $now ? abcc_get_retirement_now() : (int) $now;
+	$retired = abcc_get_retired_image_models();
+	$options = abcc_get_image_model_options( $provider );
+	$map     = isset( $retired[ $provider ] ) ? $retired[ $provider ] : array();
+
+	for ( $hops = 0; $hops < 3 && isset( $map[ $model ] ); $hops++ ) {
+		$retires = strtotime( $map[ $model ]['retires'] . ' UTC' );
+		if ( false !== $retires && $now < $retires ) {
+			return $model;
+		}
+		$model = $map[ $model ]['successor'];
+	}
+
+	if ( '' === $model || ( ! isset( $options[ $model ] ) && ! isset( $map[ $model ] ) ) ) {
+		reset( $options );
+		return (string) key( $options );
+	}
+
+	return $model;
+}
+
+/**
  * Remember why the last image call failed, for the notice and the bulk table.
  *
  * @since 4.5.2

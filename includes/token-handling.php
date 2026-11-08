@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_get_model_context_window( $model ) {
 	$model_limits = array(
 		// OpenAI GPT-5.x models (~1M context, 128K max output).
-		'gpt-5.4-mini'               => 1000000,
+		'gpt-5.4-mini'               => 400000,
 		'gpt-5.4'                    => 1000000,
 		'gpt-5.5'                    => 1000000,
 		// OpenAI GPT-4.1 models (1M context).

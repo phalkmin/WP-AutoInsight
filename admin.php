@@ -321,7 +321,7 @@ function abcc_handle_settings_page_actions() {
 					$preferred_image_service = isset( $_POST['preferred_image_service'] ) ? sanitize_text_field( wp_unslash( $_POST['preferred_image_service'] ) ) : 'auto';
 					$gemini_image_model      = isset( $_POST['abcc_gemini_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_model'] ) ) : 'gemini-2.5-flash-image';
 					$gemini_image_size       = isset( $_POST['abcc_gemini_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_gemini_image_size'] ) ) : '2K';
-					$openai_image_model      = isset( $_POST['abcc_openai_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_model'] ) ) : 'gpt-image-1';
+					$openai_image_model      = isset( $_POST['abcc_openai_image_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_model'] ) ) : 'gpt-image-2.5-flare';
 					$openai_image_size       = isset( $_POST['abcc_openai_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_size'] ) ) : '1024x1024';
 					$openai_image_quality    = isset( $_POST['abcc_openai_image_quality'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_openai_image_quality'] ) ) : 'medium';
 					$stability_image_size    = isset( $_POST['abcc_stability_image_size'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_stability_image_size'] ) ) : '1024x1024';

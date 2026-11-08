@@ -81,6 +81,13 @@ function abcc_format_generation_error( $error, $context = array() ) {
 		case 'abcc_unknown_provider':
 			return __( 'That provider is not available. Pick a model from Connections > API Keys.', 'automated-blog-content-creator' );
 
+		case 'abcc_provider_payment_required':
+			return sprintf(
+				/* translators: %s: provider name */
+				__( '%s reports the key is out of credits or over its spending limit. Add credits or raise the limit, then try again.', 'automated-blog-content-creator' ),
+				$provider_label
+			);
+
 		case 'http_request_failed':
 			return sprintf(
 				/* translators: %s: provider name */
@@ -146,7 +153,7 @@ function abcc_format_generation_error( $error, $context = array() ) {
 function abcc_should_offer_error_report( $code ) {
 	return ! in_array(
 		(string) $code,
-		array( 'abcc_no_api_key', 'abcc_provider_auth_error', 'abcc_provider_rate_limited', 'abcc_ai_disabled', 'context_overflow', 'abcc_job_never_started' ),
+		array( 'abcc_no_api_key', 'abcc_provider_auth_error', 'abcc_provider_rate_limited', 'abcc_provider_payment_required', 'abcc_ai_disabled', 'context_overflow', 'abcc_job_never_started' ),
 		true
 	);
 }
@@ -183,6 +190,9 @@ function abcc_get_generation_error_next_step( $error, $context = array() ) { // 
 		case 'abcc_provider_http_error':
 		case 'abcc_unknown_provider':
 			return __( 'Pick a different model under Connections → API Keys.', 'automated-blog-content-creator' );
+
+		case 'abcc_provider_payment_required':
+			return __( 'Add credits or raise the spending limit in the provider\'s dashboard, or set a fallback provider under Connections → API Keys.', 'automated-blog-content-creator' );
 
 		case 'abcc_job_never_started':
 			return __( 'WP-Cron did not run. On hosts that block loopback requests, trigger wp-cron.php from a server cron job.', 'automated-blog-content-creator' );

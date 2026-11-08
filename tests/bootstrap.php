@@ -885,6 +885,7 @@ function abcc_test_reset_state() {
 	$GLOBALS['abcc_test_transients']           = array();
 	$GLOBALS['abcc_test_post_meta']            = array();
 	$GLOBALS['abcc_test_filters']              = array();
+	add_filter( 'abcc_retirement_now', 'abcc_test_pinned_retirement_now' );
 	$GLOBALS['abcc_test_actions']              = array();
 	$GLOBALS['abcc_test_fired_actions']        = array();
 	$GLOBALS['abcc_test_scheduled_events']     = array();
@@ -915,6 +916,12 @@ function abcc_test_reset_state() {
 		$GLOBALS['abcc_test_force_insert_error'],
 		$GLOBALS['abcc_test_force_insert_error_once']
 	);
+}
+
+// Retirement dates are compared against the 2026-11-05 audit so date-gated
+// model swaps never flip a test when the calendar moves on.
+function abcc_test_pinned_retirement_now() {
+	return strtotime( '2026-11-05 12:00:00 UTC' );
 }
 
 function abcc_test($name, callable $callback) {

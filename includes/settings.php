@@ -195,7 +195,7 @@ function abcc_get_settings_schema() {
 			),
 			'abcc_gemini_image_model'         => array( 'default' => 'gemini-2.5-flash-image' ),
 			'abcc_gemini_image_size'          => array( 'default' => '2K' ),
-			'abcc_openai_image_model'         => array( 'default' => 'gpt-image-1' ),
+			'abcc_openai_image_model'         => array( 'default' => 'gpt-image-2.5-flare' ),
 			'abcc_openai_image_size'          => array( 'default' => '1024x1024' ),
 			'abcc_openai_image_quality'       => array( 'default' => 'medium' ),
 			'abcc_stability_image_size'       => array( 'default' => '1024x1024' ),

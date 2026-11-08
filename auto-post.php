@@ -3,7 +3,7 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/en/project/automated-blog-content-creator/
  * Description:       Writes posts on a schedule with your own OpenAI, Claude, Gemini or Perplexity keys, adds images and SEO metadata, and saves drafts for review.
- * Version:           4.5.2
+ * Version:           4.5.3
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '4.5.2' );
+define( 'ABCC_VERSION', '4.5.3' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
