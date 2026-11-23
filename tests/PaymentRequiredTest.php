@@ -14,7 +14,7 @@ abcc_test(
 		$result                       = abcc_call_provider_api( 'claude', 'claude-sonnet-4-6', 'p', array( 'api_key' => 'k' ) );
 
 		abcc_assert_same( 'abcc_provider_payment_required', $result['error']->get_error_code() );
-		abcc_assert_false( abcc_is_retryable_generation_error( $result['error'] ), 'Credits do not come back on a retry.' );
+		abcc_assert_true( abcc_is_retryable_generation_error( $result['error'] ), 'A configured backup provider may still serve the request.' );
 		abcc_assert_false( abcc_should_offer_error_report( 'abcc_provider_payment_required' ) );
 
 		$message = abcc_format_generation_error( $result['error'], array( 'provider' => 'claude' ) );

@@ -103,7 +103,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<h3><?php esc_html_e( 'Danger Zone', 'automated-blog-content-creator' ); ?></h3>
 			<p>
 				<button type="submit" name="abcc_action" value="reset_settings" class="button button-link-delete"
-					onclick="return confirm('<?php esc_attr_e( 'Reset all plugin settings to their defaults? Your API keys are kept. Are you sure?', 'automated-blog-content-creator' ); ?>')">
+					onclick="return confirm('<?php esc_attr_e( 'Reset all plugin settings to their defaults? Your API keys and the custom endpoint are kept. Are you sure?', 'automated-blog-content-creator' ); ?>')">
 					<?php esc_html_e( 'Reset All Settings', 'automated-blog-content-creator' ); ?>
 				</button>
 				&nbsp;

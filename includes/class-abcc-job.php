@@ -112,6 +112,115 @@ function abcc_queue_generation_job( $payload, $args = array() ) {
 }
 
 /**
+ * Open a log row for work that runs inside the current request (Rewrite, Infographic).
+ *
+ * The row starts as running, so no worker claims it; passing its ID as the
+ * generation context's job_id attaches usage records and notes to it.
+ *
+ * @since 4.6.0
+ * @param string $source Source slug: 'rewrite' or 'infographic'.
+ * @param array  $args   model (string), post_id (int), label (string, shown in the keywords column).
+ * @return int Job ID, or 0 when the row could not be created.
+ */
+function abcc_start_inline_job( $source, $args = array() ) {
+	$source = sanitize_key( (string) $source );
+
+	$job_id = wp_insert_post(
+		array(
+			'post_type'   => ABCC_Job::POST_TYPE,
+			'post_status' => 'publish',
+			'post_title'  => sprintf(
+				/* translators: %s: generation source. */
+				__( 'Generation Job: %s', 'automated-blog-content-creator' ),
+				ucfirst( $source )
+			),
+		),
+		true
+	);
+
+	if ( is_wp_error( $job_id ) || ! $job_id ) {
+		return 0;
+	}
+
+	$model   = isset( $args['model'] ) ? (string) $args['model'] : '';
+	$post_id = isset( $args['post_id'] ) ? (int) $args['post_id'] : 0;
+	$label   = isset( $args['label'] ) ? sanitize_text_field( (string) $args['label'] ) : '';
+	$now     = current_time( 'mysql' );
+
+	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_RUNNING );
+	update_post_meta(
+		$job_id,
+		'_abcc_job_payload',
+		array(
+			'type'    => 'inline',
+			'source'  => $source,
+			'model'   => $model,
+			'post_id' => $post_id,
+		)
+	);
+	update_post_meta( $job_id, '_abcc_job_source', $source );
+	update_post_meta( $job_id, '_abcc_job_model', $model );
+	update_post_meta( $job_id, '_abcc_job_keywords', '' !== $label ? array( $label ) : array() );
+	// No content template applies; the log shows a dash instead of "Default Template".
+	update_post_meta( $job_id, '_abcc_job_template', '—' );
+	update_post_meta( $job_id, '_abcc_job_created_by', get_current_user_id() );
+	update_post_meta( $job_id, '_abcc_job_created_at', $now );
+	update_post_meta( $job_id, '_abcc_job_started_at', $now );
+
+	return (int) $job_id;
+}
+
+/**
+ * Close a log row opened by abcc_start_inline_job().
+ *
+ * @since 4.6.0
+ * @param int         $job_id  Job ID (0 is ignored).
+ * @param bool        $success Whether the work succeeded.
+ * @param array       $args    post_id (int, the post worked on), message (string, on failure),
+ *                             code (string, on failure), note (string, on success).
+ * @param float|false $started microtime( true ) at the start, for the duration.
+ * @return void
+ */
+function abcc_finish_inline_job( $job_id, $success, $args = array(), $started = false ) {
+	$job_id = (int) $job_id;
+	if ( $job_id <= 0 || ABCC_Job::POST_TYPE !== get_post_type( $job_id ) ) {
+		return;
+	}
+
+	$usage_note = function_exists( 'abcc_format_job_usage_note' ) ? abcc_format_job_usage_note( $job_id ) : '';
+
+	if ( ! $success ) {
+		if ( '' !== $usage_note ) {
+			abcc_append_job_log_note( $job_id, $usage_note );
+		}
+		abcc_mark_job_failed(
+			$job_id,
+			isset( $args['message'] ) ? (string) $args['message'] : __( 'The operation failed.', 'automated-blog-content-creator' ),
+			$started,
+			isset( $args['code'] ) ? (string) $args['code'] : ''
+		);
+		return;
+	}
+
+	if ( ! empty( $args['note'] ) ) {
+		abcc_append_job_log_note( $job_id, (string) $args['note'] );
+	}
+	if ( '' !== $usage_note ) {
+		abcc_append_job_log_note( $job_id, $usage_note );
+	}
+
+	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_SUCCESS );
+	update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
+	if ( false !== $started ) {
+		update_post_meta( $job_id, '_abcc_job_duration', round( microtime( true ) - $started, 2 ) );
+	}
+	if ( ! empty( $args['post_id'] ) ) {
+		update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $args['post_id'] );
+	}
+	delete_post_meta( $job_id, '_abcc_job_error' );
+}
+
+/**
  * Check whether WP-Cron is available for background jobs.
  *
  * @return bool
@@ -305,7 +414,7 @@ function abcc_process_generation_job( $job_id ) {
 		if ( isset( $payload['type'] ) && 'seo_regen' === $payload['type'] ) {
 			$target_post_id = isset( $payload['post_id'] ) ? (int) $payload['post_id'] : 0;
 			$model          = isset( $payload['model'] ) ? $payload['model'] : '';
-			$regen          = abcc_run_seo_regen( $target_post_id, $model );
+			$regen          = abcc_run_seo_regen( $target_post_id, $model, $job_id );
 
 			if ( is_wp_error( $regen ) ) {
 				abcc_mark_job_failed( $job_id, $regen->get_error_message(), $started, $regen->get_error_code() );
@@ -318,14 +427,16 @@ function abcc_process_generation_job( $job_id ) {
 			update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
 			update_post_meta( $job_id, '_abcc_job_result_post_id', $target_post_id );
 			delete_post_meta( $job_id, '_abcc_job_error' );
+			abcc_append_job_usage_note( $job_id );
 			abcc_mark_job_succeeded_for_topic( abcc_get_job_topic_id( $job_id ) );
 			return;
 		}
 
 		$api_key = abcc_check_api_key( $payload['model'] ?? '' );
 
-		if ( empty( $api_key ) ) {
-			abcc_mark_job_failed( $job_id, __( 'API key not configured for the selected model.', 'automated-blog-content-creator' ), $started, 'abcc_no_api_key' );
+		// A keyless local endpoint has no key by design; its auth says so.
+		if ( empty( $api_key ) && ! abcc_model_is_ready( $payload['model'] ?? '' ) ) {
+			abcc_mark_job_failed( $job_id, __( 'No API key is set for the selected model. Add one under Connections > API Keys.', 'automated-blog-content-creator' ), $started, 'abcc_no_api_key' );
 			return;
 		}
 
@@ -355,6 +466,7 @@ function abcc_process_generation_job( $job_id ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( $duration, 2 ) );
 		update_post_meta( $job_id, '_abcc_job_result_post_id', (int) $result );
 		delete_post_meta( $job_id, '_abcc_job_error' );
+		abcc_record_generation_success();
 		abcc_mark_job_succeeded_for_topic( abcc_get_job_topic_id( $job_id ) );
 	} catch ( Throwable $throwable ) {
 		abcc_debug_log(
@@ -383,10 +495,41 @@ add_action( 'abcc_process_generation_job', 'abcc_process_generation_job' );
 function abcc_append_job_log_note( $job_id, $note ) {
 	$notes = get_post_meta( (int) $job_id, '_abcc_job_notes', true );
 	$notes = is_array( $notes ) ? $notes : array();
+	$note  = sanitize_text_field( $note );
 
-	$notes[] = sanitize_text_field( $note );
+	// One job makes several calls; the same note from each of them is one event.
+	if ( in_array( $note, $notes, true ) ) {
+		return;
+	}
+
+	$notes[] = $note;
 
 	update_post_meta( (int) $job_id, '_abcc_job_notes', $notes );
+}
+
+/**
+ * Append the current usage summary once to a terminal job.
+ *
+ * @since 4.6.0
+ * @param int $job_id Job ID.
+ * @return void
+ */
+function abcc_append_job_usage_note( $job_id ) {
+	if ( ! function_exists( 'abcc_format_job_usage_note' ) ) {
+		return;
+	}
+
+	$note = abcc_format_job_usage_note( $job_id );
+	if ( '' === $note ) {
+		return;
+	}
+
+	$notes = get_post_meta( (int) $job_id, '_abcc_job_notes', true );
+	if ( is_array( $notes ) && in_array( $note, $notes, true ) ) {
+		return;
+	}
+
+	abcc_append_job_log_note( $job_id, $note );
 }
 
 /**
@@ -426,11 +569,13 @@ function abcc_mark_job_succeeded_for_topic( $topic_id ) {
  */
 function abcc_mark_job_failed( $job_id, $message, $started = false, $code = '' ) {
 	update_post_meta( $job_id, '_abcc_job_status', ABCC_Job::STATUS_FAILED );
+	abcc_record_generation_failure();
 	update_post_meta( $job_id, '_abcc_job_completed_at', current_time( 'mysql' ) );
 	// Provider error text can echo the key; the stored copy is shown in the dashboard.
 	$stored_message = function_exists( 'abcc_redact_secrets' ) ? abcc_redact_secrets( (string) $message ) : (string) $message;
 	update_post_meta( $job_id, '_abcc_job_error', sanitize_text_field( str_replace( array( '→', '←' ), array( '>', '<' ), $stored_message ) ) );
 	update_post_meta( $job_id, '_abcc_job_error_code', sanitize_key( (string) $code ) );
+	abcc_append_job_usage_note( $job_id );
 
 	if ( false !== $started ) {
 		update_post_meta( $job_id, '_abcc_job_duration', round( microtime( true ) - $started, 2 ) );
@@ -503,12 +648,15 @@ function abcc_send_job_failure_email( $source, $topic_id, $code, $message ) {
  */
 function abcc_get_job_source_label( $source ) {
 	$labels = array(
-		'manual'     => __( 'Manual', 'automated-blog-content-creator' ),
-		'scheduled'  => __( 'Scheduled', 'automated-blog-content-creator' ),
-		'bulk'       => __( 'Bulk', 'automated-blog-content-creator' ),
-		'regenerate' => __( 'Regenerate', 'automated-blog-content-creator' ),
-		'legacy'     => __( 'Legacy', 'automated-blog-content-creator' ),
-		'seo_regen'  => __( 'SEO Regen', 'automated-blog-content-creator' ),
+		'manual'      => __( 'Manual', 'automated-blog-content-creator' ),
+		'scheduled'   => __( 'Scheduled', 'automated-blog-content-creator' ),
+		'bulk'        => __( 'Bulk', 'automated-blog-content-creator' ),
+		'regenerate'  => __( 'Regenerate', 'automated-blog-content-creator' ),
+		'legacy'      => __( 'Legacy', 'automated-blog-content-creator' ),
+		'seo_regen'   => __( 'SEO Regen', 'automated-blog-content-creator' ),
+		'topic'       => __( 'Topic', 'automated-blog-content-creator' ),
+		'rewrite'     => __( 'Rewrite', 'automated-blog-content-creator' ),
+		'infographic' => __( 'Infographic', 'automated-blog-content-creator' ),
 	);
 
 	return $labels[ $source ] ?? ucfirst( (string) $source );
@@ -529,6 +677,54 @@ function abcc_get_job_status_label( $status ) {
 	);
 
 	return $labels[ $status ] ?? ucfirst( (string) $status );
+}
+
+/**
+ * What the log's Template column shows for a job.
+ *
+ * A job that carries a topic (a topic run, or a regeneration of its post)
+ * writes from the topic's own prompt, not from a content template.
+ *
+ * @since 4.6.0
+ * @param int    $job_id   Job ID.
+ * @param string $template Template slug stored on the job.
+ * @return string Plain text; the caller escapes.
+ */
+function abcc_get_job_template_label( $job_id, $template ) {
+	$topic_id = abcc_get_job_topic_id( $job_id );
+	if ( $topic_id <= 0 ) {
+		return abcc_get_content_template_name( $template ? $template : 'default' );
+	}
+
+	$topic = function_exists( 'abcc_get_topic' ) ? abcc_get_topic( $topic_id ) : null;
+	if ( empty( $topic['title'] ) ) {
+		return __( 'Topic prompt', 'automated-blog-content-creator' );
+	}
+
+	return sprintf(
+		/* translators: %s: topic name */
+		__( 'Topic: %s', 'automated-blog-content-creator' ),
+		$topic['title']
+	);
+}
+
+/**
+ * Plain-language progress line shown next to a button while its job is polled.
+ *
+ * @since 4.6.0
+ * @param string $status Status slug.
+ * @return string
+ */
+function abcc_get_job_progress_label( $status ) {
+	if ( ABCC_Job::STATUS_QUEUED === $status ) {
+		return __( 'Waiting to start…', 'automated-blog-content-creator' );
+	}
+
+	if ( ABCC_Job::STATUS_RUNNING === $status ) {
+		return __( 'Working on it… this can take a minute or two.', 'automated-blog-content-creator' );
+	}
+
+	return abcc_get_job_status_label( $status );
 }
 
 /**
@@ -625,7 +821,7 @@ function abcc_render_job_log_rows( $args = array() ) {
 				<td><?php echo esc_html( abcc_get_job_source_label( $source ) ); ?></td>
 				<td><small><?php echo esc_html( $model ? abcc_get_model_display_name( $model ) : 'n/a' ); ?></small></td>
 				<td><small><?php echo esc_html( ! empty( $keywords ) ? implode( ', ', $keywords ) : 'n/a' ); ?></small></td>
-				<td><small><?php echo esc_html( abcc_get_content_template_name( $template ? $template : 'default' ) ); ?></small></td>
+				<td><small><?php echo esc_html( abcc_get_job_template_label( $job->ID, (string) $template ) ); ?></small></td>
 				<td><small><?php echo esc_html( $created_at ? get_date_from_gmt( get_gmt_from_date( $created_at ), 'Y-m-d H:i' ) : 'n/a' ); ?></small></td>
 				<td>
 					<?php
@@ -828,13 +1024,14 @@ function abcc_get_job_data( $job_id ) {
 	$job_notes      = get_post_meta( $job_id, '_abcc_job_notes', true );
 
 	return array(
-		'id'          => $job_id,
-		'status'      => get_post_meta( $job_id, '_abcc_job_status', true ),
-		'statusLabel' => abcc_get_job_status_label( get_post_meta( $job_id, '_abcc_job_status', true ) ),
-		'message'     => get_post_meta( $job_id, '_abcc_job_error', true ),
-		'nextStep'    => abcc_get_generation_error_next_step( (string) get_post_meta( $job_id, '_abcc_job_error_code', true ) ),
-		'notes'       => is_array( $job_notes ) ? $job_notes : array(),
-		'post_id'     => $result_post_id,
-		'edit_url'    => $result_post_id && current_user_can( 'edit_post', $result_post_id ) ? get_edit_post_link( $result_post_id, 'raw' ) : '',
+		'id'            => $job_id,
+		'status'        => get_post_meta( $job_id, '_abcc_job_status', true ),
+		'statusLabel'   => abcc_get_job_status_label( get_post_meta( $job_id, '_abcc_job_status', true ) ),
+		'progressLabel' => abcc_get_job_progress_label( get_post_meta( $job_id, '_abcc_job_status', true ) ),
+		'message'       => get_post_meta( $job_id, '_abcc_job_error', true ),
+		'nextStep'      => abcc_get_generation_error_next_step( (string) get_post_meta( $job_id, '_abcc_job_error_code', true ) ),
+		'notes'         => is_array( $job_notes ) ? $job_notes : array(),
+		'post_id'       => $result_post_id,
+		'edit_url'      => $result_post_id && current_user_can( 'edit_post', $result_post_id ) ? get_edit_post_link( $result_post_id, 'raw' ) : '',
 	);
 }

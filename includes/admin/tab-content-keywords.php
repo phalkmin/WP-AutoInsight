@@ -26,16 +26,16 @@ $abcc_global_char_limit   = (int) abcc_get_setting( 'openai_char_limit', 200 );
  * @return void
  */
 $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group_model_choices, $abcc_global_model_label, $abcc_global_char_limit ) {
-	$group_model = isset( $group['model'] ) ? (string) $group['model'] : '';
+	$group_model = isset( $group['model'] ) ? abcc_get_live_model_selection( (string) $group['model'] ) : '';
 	$group_limit = isset( $group['char_limit'] ) ? (int) $group['char_limit'] : 0;
 	$is_open     = '' !== $group_model || $group_limit > 0;
 	?>
 	<details class="abcc-group-advanced" <?php echo $is_open ? 'open' : ''; ?>>
 		<summary><?php esc_html_e( 'Advanced', 'automated-blog-content-creator' ); ?></summary>
-		<div class="abcc-group-advanced-fields">
+		<div class="abcc-group-advanced-fields abcc-cost-scope">
 			<div class="abcc-group-advanced-field">
 				<label class="abcc-field-label" for="abcc_group_model_<?php echo esc_attr( $index_attr ); ?>"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></label>
-				<select id="abcc_group_model_<?php echo esc_attr( $index_attr ); ?>" name="abcc_group_model[<?php echo esc_attr( $index_attr ); ?>]">
+				<select id="abcc_group_model_<?php echo esc_attr( $index_attr ); ?>" name="abcc_group_model[<?php echo esc_attr( $index_attr ); ?>]" data-abcc-cost-model>
 					<option value="" <?php selected( '', $group_model ); ?>>
 						<?php
 						printf(
@@ -45,10 +45,11 @@ $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group
 						);
 						?>
 					</option>
-					<?php foreach ( $abcc_group_model_choices as $choice_group ) : ?>
+					<?php foreach ( $abcc_group_model_choices as $choice_provider_id => $choice_group ) : ?>
 						<optgroup label="<?php echo esc_attr( $choice_group['group'] ); ?>">
 							<?php foreach ( $choice_group['options'] as $choice_id => $choice_data ) : ?>
-								<option value="<?php echo esc_attr( $choice_id ); ?>" <?php selected( $choice_id, $group_model ); ?>><?php echo esc_html( abcc_format_model_option_label( $choice_id, $choice_data ) ); ?></option>
+								<?php $choice_value = abcc_build_model_selection( $choice_provider_id, $choice_id ); ?>
+								<option value="<?php echo esc_attr( $choice_value ); ?>" <?php selected( $choice_value, $group_model ); ?>><?php echo esc_html( abcc_format_model_option_label( $choice_id, $choice_data ) ); ?></option>
 							<?php endforeach; ?>
 						</optgroup>
 					<?php endforeach; ?>
@@ -58,10 +59,11 @@ $abcc_render_group_advanced = function ( $index_attr, $group ) use ( $abcc_group
 			<div class="abcc-group-advanced-field">
 				<label class="abcc-field-label" for="abcc_group_char_limit_<?php echo esc_attr( $index_attr ); ?>"><?php esc_html_e( 'Length (tokens)', 'automated-blog-content-creator' ); ?></label>
 				<input type="number" id="abcc_group_char_limit_<?php echo esc_attr( $index_attr ); ?>" name="abcc_group_char_limit[<?php echo esc_attr( $index_attr ); ?>]"
-					min="0" max="4000" step="100" class="small-text"
+					min="0" max="4000" step="100" class="abcc-group-length-input" data-abcc-cost-length
 					value="<?php echo $group_limit > 0 ? esc_attr( $group_limit ) : ''; ?>"
 					placeholder="<?php echo esc_attr( sprintf( /* translators: %d: current global length */ __( 'Default (%d)', 'automated-blog-content-creator' ), $abcc_global_char_limit ) ); ?>">
-				<p class="description"><?php esc_html_e( '0 or blank = use the global setting.', 'automated-blog-content-creator' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Leave blank to use your global length. 100 tokens is about 75 words.', 'automated-blog-content-creator' ); ?></p>
+				<?php abcc_render_cost_estimate( $group_limit > 0 ? $group_limit : $abcc_global_char_limit, $group_model ); ?>
 			</div>
 		</div>
 	</details>
@@ -202,8 +204,20 @@ $abcc_render_group = function ( $index_attr, $group ) use ( $content_templates, 
 					</select>
 				</td>
 			</tr>
+			<tr>
+				<th scope="row">
+					<label for="abcc_content_audience"><?php esc_html_e( 'Audience', 'automated-blog-content-creator' ); ?></label>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Who the posts are written for. Leave empty to describe readers by the post\'s category or keyword.', 'automated-blog-content-creator' ) ) ); ?>
+				</th>
+				<td>
+					<input type="text" id="abcc_content_audience" name="abcc_content_audience" data-autosave-key="abcc_content_audience"
+						value="<?php echo esc_attr( abcc_get_setting( 'abcc_content_audience', '' ) ); ?>" class="regular-text"
+						placeholder="<?php esc_attr_e( 'e.g. first-time home buyers in Brazil', 'automated-blog-content-creator' ); ?>">
+				</td>
+			</tr>
 		</table>
 
-		<?php submit_button( __( 'Save Content Settings', 'automated-blog-content-creator' ) ); ?>
+		<p class="description abcc-save-scope"><?php esc_html_e( 'Writing Style saves by itself as you change it. Keyword groups and templates are saved by the button below.', 'automated-blog-content-creator' ); ?></p>
+		<?php submit_button( __( 'Save Groups and Templates', 'automated-blog-content-creator' ) ); ?>
 	</form>
 </div>

@@ -22,9 +22,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string[]
  */
 function abcc_get_retryable_generation_error_codes() {
+	// 402 and a format mismatch never retry on the same target; a backup may still serve.
 	return array(
 		'abcc_provider_rate_limited',
 		'abcc_provider_server_error',
+		'abcc_provider_payment_required',
+		'abcc_provider_cannot_comply',
 		'http_request_failed',
 	);
 }
@@ -103,6 +106,72 @@ function abcc_get_fallback_chain() {
 }
 
 /**
+ * Save the backup slot from the Connections form.
+ *
+ * @since 4.6.0
+ * @param string $provider Provider ID; '' means no backup.
+ * @param string $model    Model ID.
+ * @return void
+ */
+function abcc_save_fallback_choice( $provider, $model ) {
+	$provider = (string) $provider;
+	$model    = (string) $model;
+	$chain    = array();
+
+	if ( '' !== $provider && '' !== $model ) {
+		$chain[] = array(
+			'provider' => $provider,
+			'model'    => $model,
+		);
+	}
+
+	abcc_update_setting( 'abcc_fallback_chain', abcc_sanitize_fallback_chain( $chain ) );
+}
+
+/**
+ * Backup to offer beside the Connections field while none is saved.
+ *
+ * The form never preselects it: a save made for another reason must not turn
+ * a backup on.
+ *
+ * @since 4.6.0
+ * @param string $primary_provider Provider of the primary model.
+ * @param array  $choices          Keyed providers other than the primary: id => { name, models: id => label }.
+ * @return array{provider: string, model: string}|array{} Empty when a backup is saved or nothing can be offered.
+ */
+function abcc_get_fallback_suggestion( $primary_provider, $choices ) {
+	if ( empty( $choices ) || ! is_array( $choices ) || ! empty( abcc_get_fallback_chain() ) ) {
+		return array();
+	}
+
+	$provider = (string) array_keys( $choices )[0];
+	$model    = (string) abcc_get_provider_default_model( $provider );
+
+	// With an OpenRouter key, suggest a cheap model from another vendor than the primary.
+	if ( isset( $choices['openrouter'] ) ) {
+		$openrouter = abcc_get_openrouter_fallback_suggestion( (string) $primary_provider );
+		if ( '' !== $openrouter && isset( $choices['openrouter']['models'][ $openrouter ] ) ) {
+			$provider = 'openrouter';
+			$model    = $openrouter;
+		}
+	}
+
+	$models = isset( $choices[ $provider ]['models'] ) ? (array) $choices[ $provider ]['models'] : array();
+	if ( ! isset( $models[ $model ] ) ) {
+		$model = empty( $models ) ? '' : (string) array_keys( $models )[0];
+	}
+
+	if ( '' === $model ) {
+		return array();
+	}
+
+	return array(
+		'provider' => $provider,
+		'model'    => $model,
+	);
+}
+
+/**
  * Short, translatable reason for a fallback note.
  *
  * @since 4.5.0
@@ -125,6 +194,13 @@ function abcc_get_fallback_reason_label( $error ) {
 			return __( 'prompt too long', 'automated-blog-content-creator' );
 		case 'abcc_provider_auth_error':
 			return __( 'key rejected', 'automated-blog-content-creator' );
+		case 'abcc_provider_payment_required':
+			return __( 'out of credits', 'automated-blog-content-creator' );
+		case 'abcc_provider_cannot_comply':
+		case 'cannot_comply':
+			return __( 'cannot return the required format', 'automated-blog-content-creator' );
+		case 'abcc_reasoning_only':
+			return __( 'reasoning used the whole budget', 'automated-blog-content-creator' );
 	}
 
 	return __( 'error', 'automated-blog-content-creator' );
@@ -158,7 +234,7 @@ function abcc_note_generation_event( array $context, $message ) {
 		abcc_append_job_log_note( $job_id, $message );
 	}
 
-	abcc_debug_log( 'Fallback: ' . $message );
+	abcc_debug_log( 'Generation: ' . $message );
 }
 
 /**
@@ -174,11 +250,16 @@ function abcc_note_generation_event( array $context, $message ) {
  *               + 'served_provider', 'served_model', 'attempt' => int.
  */
 function abcc_execute_fallback_chain( $provider, $model, $prompt, $opts, $context = array() ) {
-	$result = abcc_call_provider_api( $provider, $model, $prompt, $opts );
+	$operation = isset( $opts['operation'] ) ? (string) $opts['operation'] : 'article';
+	$result    = abcc_call_provider_api( $provider, $model, $prompt, $opts );
+
+	$sent_model = ! empty( $result['served_model'] ) ? (string) $result['served_model'] : abcc_get_model_id_from_selection( $model );
+
+	abcc_record_generation_usage( $context, $provider, $sent_model, $result, $operation );
 
 	$result['fallback_from']   = null;
 	$result['served_provider'] = $provider;
-	$result['served_model']    = $model;
+	$result['served_model']    = $sent_model;
 	$result['attempt']         = 1;
 
 	if ( ! abcc_is_retryable_generation_error( $result['error'] ) ) {
@@ -195,14 +276,15 @@ function abcc_execute_fallback_chain( $provider, $model, $prompt, $opts, $contex
 	$attempt       = 1;
 
 	foreach ( $chain as $entry ) {
-		if ( $entry['provider'] === $provider && $entry['model'] === $model ) {
+		// Chain entries are bare IDs; the primary may be qualified or retired.
+		if ( $entry['provider'] === $provider && $entry['model'] === $sent_model ) {
 			continue;
 		}
 
 		$label = abcc_get_fallback_provider_label( $entry['provider'] );
 
 		$key = abcc_get_provider_api_key( $entry['provider'] );
-		if ( '' === (string) $key ) {
+		if ( ! abcc_provider_is_ready( $entry['provider'] ) ) {
 			abcc_note_generation_event(
 				$context,
 				sprintf(
@@ -215,8 +297,23 @@ function abcc_execute_fallback_chain( $provider, $model, $prompt, $opts, $contex
 			continue;
 		}
 
+		$can_serve = abcc_provider_can_serve_request( $entry['provider'], $entry['model'], $opts );
+		if ( is_wp_error( $can_serve ) ) {
+			abcc_note_generation_event(
+				$context,
+				sprintf(
+					/* translators: 1: provider name, 2: short reason */
+					__( '%1$s skipped (%2$s)', 'automated-blog-content-creator' ),
+					$label,
+					abcc_get_fallback_reason_label( $can_serve )
+				)
+			);
+			continue;
+		}
+
 		$requested = isset( $opts['max_tokens'] ) ? (int) $opts['max_tokens'] : 800;
-		if ( abcc_calculate_available_tokens( $prompt, $requested, $entry['model'] ) <= 0 ) {
+		$sent_text = isset( $opts['system'] ) ? (string) $opts['system'] . "\n" . $prompt : $prompt;
+		if ( abcc_calculate_available_tokens( $sent_text, $requested, $entry['model'], $entry['provider'] ) <= 0 ) {
 			abcc_note_generation_event(
 				$context,
 				sprintf(
@@ -235,7 +332,10 @@ function abcc_execute_fallback_chain( $provider, $model, $prompt, $opts, $contex
 		$retry_opts            = $opts;
 		$retry_opts['api_key'] = $key;
 
-		$retry = abcc_call_provider_api( $entry['provider'], $entry['model'], $prompt, $retry_opts );
+		$retry       = abcc_call_provider_api( $entry['provider'], $entry['model'], $prompt, $retry_opts );
+		$retry_model = ! empty( $retry['served_model'] ) ? (string) $retry['served_model'] : $entry['model'];
+
+		abcc_record_generation_usage( $context, $entry['provider'], $retry_model, $retry, $operation );
 
 		if ( ! is_wp_error( $retry['error'] ) ) {
 			abcc_note_generation_event(
@@ -254,7 +354,7 @@ function abcc_execute_fallback_chain( $provider, $model, $prompt, $opts, $contex
 				'model'    => $model,
 			);
 			$retry['served_provider'] = $entry['provider'];
-			$retry['served_model']    = $entry['model'];
+			$retry['served_model']    = $retry_model;
 			$retry['attempt']         = $attempt;
 
 			return $retry;

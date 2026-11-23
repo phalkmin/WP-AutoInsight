@@ -17,9 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 function abcc_get_provider_registry() {
 	static $registry = null;
 
-	if ( null !== $registry ) {
+	if ( null !== $registry && empty( $GLOBALS['abcc_provider_registry_dirty'] ) ) {
 		return $registry;
 	}
+	unset( $GLOBALS['abcc_provider_registry_dirty'] );
 
 	$registry = array(
 		'openai'     => array(
@@ -33,6 +34,13 @@ function abcc_get_provider_registry() {
 			'text_generation_callback' => 'abcc_openai_generate_text',
 			'connection_test_callback' => 'abcc_test_openai_connection',
 			'connection_test_model'    => 'gpt-5.4-mini',
+			'transport'                => 'openai_compatible',
+			'endpoint'                 => 'https://api.openai.com/v1/chat/completions',
+			'auth'                     => 'bearer',
+			'extra_headers'            => array(),
+			'default_temperature'      => 0.8,
+			'timeout'                  => 60,
+			'pricing_date'             => '2026-11-05',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => true,
@@ -40,37 +48,156 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => true,
 			),
 			'text_models'              => array(
+				// GPT-5.x and GPT-6 take max_completion_tokens and no sampling
+				// parameters; the floor guards tiny budgets. Prices are USD per 1M tokens.
 				'gpt-5.4-mini'            => array(
-					'name'          => 'GPT-5.4 mini',
-					'description'   => 'Fast and cost-effective — current default tier',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0002,
+					'name'              => 'GPT-5.4 mini',
+					'description'       => 'Fast and cost-effective — current default tier',
+					'cost_tier'         => '1',
+					'cost_per_post'     => 0.0002,
+					'context_window'    => 400000,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => false,
+					'reasoning_effort'  => 'none',
+					'min_output_tokens' => 1000,
+					'price_input'       => 0.75,
+					'price_output'      => 4.5,
+				),
+				'gpt-6-luna'              => array(
+					'name'              => 'GPT-6 Luna',
+					'description'       => 'Newest economy tier — fast and very cheap',
+					'cost_tier'         => '1',
+					'cost_per_post'     => 0.0001,
+					'context_window'    => 1047576,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => false,
+					'reasoning_effort'  => 'none',
+					'min_output_tokens' => 1000,
+					'price_input'       => 0.10,
+					'price_output'      => 0.50,
+				),
+				'gpt-6.1-terra'           => array(
+					'name'              => 'GPT-6.1 Terra',
+					'description'       => 'Balanced — strong writing at a mid price',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.002,
+					'context_window'    => 1047576,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => false,
+					'reasoning_effort'  => 'none',
+					'min_output_tokens' => 1000,
+					'price_input'       => 1.0,
+					'price_output'      => 5.0,
 				),
 				'gpt-5.4'                 => array(
-					'name'          => 'GPT-5.4',
-					'description'   => 'Balanced performance — best coding and instruction following',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.003,
+					'name'              => 'GPT-5.4',
+					'description'       => 'Balanced performance — best coding and instruction following',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.003,
+					'context_window'    => 1047576,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => false,
+					'reasoning_effort'  => 'none',
+					'min_output_tokens' => 1000,
+					'price_input'       => 2.5,
+					'price_output'      => 15.0,
+				),
+				// No reasoning_effort 'none': hidden reasoning bills against the budget.
+				'gpt-6.1-sol'             => array(
+					'name'              => 'GPT-6.1 Sol',
+					'description'       => 'Most capable mid-tier model — always reasons',
+					'cost_tier'         => '3',
+					'cost_per_post'     => 0.006,
+					'context_window'    => 1047576,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => true,
+					'reasoning_effort'  => 'low',
+					'min_output_tokens' => 4000,
+					'price_input'       => 2.0,
+					'price_output'      => 10.0,
 				),
 				'gpt-5.5'                 => array(
-					'name'          => 'GPT-5.5',
-					'description'   => 'Most capable OpenAI model for complex reasoning',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.015,
+					'name'              => 'GPT-5.5',
+					'description'       => 'Most capable OpenAI model for complex reasoning',
+					'cost_tier'         => '3',
+					'cost_per_post'     => 0.015,
+					'context_window'    => 1047576,
+					'max_output'        => 128000,
+					'token_param'       => 'max_completion_tokens',
+					'temperature'       => false,
+					'reasoning'         => false,
+					'reasoning_effort'  => 'none',
+					'min_output_tokens' => 1000,
+					'price_input'       => 5.0,
+					'price_output'      => 30.0,
 				),
 				'gpt-4.1-mini-2025-04-14' => array(
-					'name'          => 'GPT-4.1 Mini',
-					'description'   => 'Fast and affordable with 1M context window',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0002,
-					'legacy'        => true,
+					'name'           => 'GPT-4.1 Mini',
+					'description'    => 'Retires January 14, 2027',
+					'cost_tier'      => '1',
+					'cost_per_post'  => 0.0002,
+					'context_window' => 1047576,
+					'max_output'     => 32768,
+					'legacy'         => true,
+					'retires'        => '2027-01-14',
+					'successor'      => 'gpt-6-luna',
+					'price_input'    => 0.40,
+					'price_output'   => 1.60,
 				),
 				'gpt-4.1-2025-04-14'      => array(
-					'name'          => 'GPT-4.1',
-					'description'   => 'Excellent coding and instruction following',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.003,
-					'legacy'        => true,
+					'name'           => 'GPT-4.1',
+					'description'    => 'Retires January 14, 2027',
+					'cost_tier'      => '2',
+					'cost_per_post'  => 0.003,
+					'context_window' => 1047576,
+					'max_output'     => 32768,
+					'legacy'         => true,
+					'retires'        => '2027-01-14',
+					'successor'      => 'gpt-6-luna',
+					'price_input'    => 2.0,
+					'price_output'   => 8.0,
+				),
+				'o4-mini'                 => array(
+					'name'           => 'o4-mini',
+					'description'    => 'Shut down October 23, 2026',
+					'context_window' => 200000,
+					'legacy'         => true,
+					'retires'        => '2026-10-23',
+					'successor'      => 'gpt-6-luna',
+				),
+				'o4-mini-2025-04-16'      => array(
+					'name'           => 'o4-mini',
+					'description'    => 'Shut down October 23, 2026',
+					'context_window' => 200000,
+					'legacy'         => true,
+					'retires'        => '2026-10-23',
+					'successor'      => 'gpt-6-luna',
+				),
+				'gpt-4.1-nano'            => array(
+					'name'           => 'GPT-4.1 Nano',
+					'description'    => 'Shut down October 23, 2026',
+					'context_window' => 1047576,
+					'legacy'         => true,
+					'retires'        => '2026-10-23',
+					'successor'      => 'gpt-6-luna',
+				),
+				'gpt-4.1-nano-2025-04-14' => array(
+					'name'           => 'GPT-4.1 Nano',
+					'description'    => 'Shut down October 23, 2026',
+					'context_window' => 1047576,
+					'legacy'         => true,
+					'retires'        => '2026-10-23',
+					'successor'      => 'gpt-6-luna',
 				),
 			),
 		),
@@ -85,6 +212,12 @@ function abcc_get_provider_registry() {
 			'text_generation_callback' => 'abcc_claude_generate_text',
 			'connection_test_callback' => 'abcc_test_claude_connection',
 			'connection_test_model'    => 'claude-haiku-4-5-20251001',
+			'transport'                => 'anthropic',
+			'endpoint'                 => 'https://api.anthropic.com/v1/messages',
+			'auth'                     => 'x-api-key',
+			'extra_headers'            => array( 'anthropic-version' => '2023-06-01' ),
+			'timeout'                  => 60,
+			'pricing_date'             => '2026-11-05',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => false,
@@ -92,23 +225,106 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => false,
 			),
 			'text_models'              => array(
-				'claude-haiku-4-5-20251001' => array(
-					'name'          => 'Claude Haiku 4.5',
-					'description'   => 'Fastest model with near-frontier intelligence',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.0003,
+				// Claude 5.5 thinks adaptively, billed against max_tokens (hence the low effort), and rejects sampling parameters.
+				'claude-haiku-5-5'           => array(
+					'name'              => 'Claude Haiku 5.5',
+					'description'       => 'Fastest and cheapest Claude',
+					'cost_tier'         => '1',
+					'cost_per_post'     => 0.0002,
+					'context_window'    => 1000000,
+					'max_output'        => 128000,
+					'temperature'       => false,
+					'reasoning'         => true,
+					'reasoning_effort'  => 'low',
+					'min_output_tokens' => 4000,
+					'price_input'       => 0.10,
+					'price_output'      => 0.50,
 				),
-				'claude-sonnet-4-6'         => array(
-					'name'          => 'Claude Sonnet 4.6',
-					'description'   => 'Best combination of speed and intelligence',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.004,
+				'claude-sonnet-5-5'          => array(
+					'name'              => 'Claude Sonnet 5.5',
+					'description'       => 'Best combination of speed and intelligence',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.004,
+					'context_window'    => 1000000,
+					'max_output'        => 128000,
+					'temperature'       => false,
+					'reasoning'         => true,
+					'reasoning_effort'  => 'low',
+					'min_output_tokens' => 4000,
+					'price_input'       => 2.0,
+					'price_output'      => 10.0,
 				),
-				'claude-opus-4-8'           => array(
-					'name'          => 'Claude Opus 4.8',
-					'description'   => 'Most capable model for complex reasoning',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.015,
+				'claude-opus-5-5'            => array(
+					'name'              => 'Claude Opus 5.5',
+					'description'       => 'Most capable Claude for complex writing',
+					'cost_tier'         => '3',
+					'cost_per_post'     => 0.01,
+					'context_window'    => 1000000,
+					'max_output'        => 128000,
+					'temperature'       => false,
+					'reasoning'         => true,
+					'reasoning_effort'  => 'low',
+					'min_output_tokens' => 4000,
+					'price_input'       => 4.0,
+					'price_output'      => 20.0,
+				),
+				'claude-haiku-4-5-20251001'  => array(
+					'name'           => 'Claude Haiku 4.5',
+					'description'    => 'Previous generation; may be retired on 60 days notice',
+					'cost_tier'      => '1',
+					'cost_per_post'  => 0.0003,
+					'context_window' => 200000,
+					'max_output'     => 64000,
+					'legacy'         => true,
+					'successor'      => 'claude-haiku-5-5',
+					'price_input'    => 1.0,
+					'price_output'   => 5.0,
+				),
+				'claude-sonnet-4-6'          => array(
+					'name'           => 'Claude Sonnet 4.6',
+					'description'    => 'Previous generation',
+					'cost_tier'      => '2',
+					'cost_per_post'  => 0.004,
+					'context_window' => 1000000,
+					'max_output'     => 128000,
+					'legacy'         => true,
+					'successor'      => 'claude-sonnet-5-5',
+					'price_input'    => 3.0,
+					'price_output'   => 15.0,
+				),
+				'claude-opus-4-8'            => array(
+					'name'           => 'Claude Opus 4.8',
+					'description'    => 'Previous generation',
+					'cost_tier'      => '3',
+					'cost_per_post'  => 0.015,
+					'context_window' => 1000000,
+					'max_output'     => 128000,
+					'legacy'         => true,
+					'successor'      => 'claude-opus-5-5',
+					'price_input'    => 5.0,
+					'price_output'   => 25.0,
+				),
+				'claude-sonnet-4-5'          => array(
+					'name'           => 'Claude Sonnet 4.5',
+					'description'    => 'Retires November 30, 2026',
+					'context_window' => 200000,
+					'max_output'     => 64000,
+					'legacy'         => true,
+					'retires'        => '2026-11-30',
+					'successor'      => 'claude-sonnet-5-5',
+					'price_input'    => 3.0,
+					'price_output'   => 15.0,
+				),
+				'claude-sonnet-4-5-20250929' => array(
+					'name'           => 'Claude Sonnet 4.5 (2025-09-29)',
+					'description'    => 'Retires November 30, 2026',
+					'context_window' => 200000,
+					'max_output'     => 64000,
+					'legacy'         => true,
+					'retires'        => '2026-11-30',
+					'successor'      => 'claude-sonnet-5-5',
+					'price_input'    => 3.0,
+					'price_output'   => 15.0,
 				),
 			),
 		),
@@ -123,6 +339,13 @@ function abcc_get_provider_registry() {
 			'text_generation_callback' => 'abcc_gemini_generate_text',
 			'connection_test_callback' => 'abcc_test_gemini_connection',
 			'connection_test_model'    => 'gemini-2.5-flash-lite',
+			'default_model'            => 'gemini-3.5-flash-lite',
+			'transport'                => 'gemini',
+			'endpoint'                 => 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+			'auth'                     => 'x-goog-api-key',
+			'extra_headers'            => array(),
+			'timeout'                  => 60,
+			'pricing_date'             => '2026-11-05',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => true,
@@ -130,32 +353,94 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => false,
 			),
 			'text_models'              => array(
+				// Gemini 2.5 takes thinking_budget (0 = off). Gemini 3+ rejects it,
+				// takes thinking_level and cannot turn thinking off.
 				'gemini-2.5-flash-lite' => array(
 					'name'            => 'Gemini 2.5 Flash-Lite',
-					'description'     => 'Fastest and most budget-friendly model',
+					'description'     => 'Cheapest model — still served, no retirement announced',
 					'cost_tier'       => '1',
 					'cost_per_post'   => 0.0001,
+					'context_window'  => 1048576,
+					'max_output'      => 65536,
 					'thinking_budget' => 0,
+					'price_input'     => 0.10,
+					'price_output'    => 0.40,
+				),
+				'gemini-3.5-flash-lite' => array(
+					'name'              => 'Gemini 3.5 Flash-Lite',
+					'description'       => 'Current budget tier with light reasoning',
+					'cost_tier'         => '1',
+					'cost_per_post'     => 0.0003,
+					'context_window'    => 1048576,
+					'max_output'        => 65536,
+					'thinking_level'    => 'minimal',
+					'min_output_tokens' => 1024,
+					'price_input'       => 0.30,
+					'price_output'      => 2.50,
+				),
+				'gemini-3.8-flash'      => array(
+					'name'              => 'Gemini 3.8 Flash',
+					'description'       => 'Current Flash — best price-performance',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.0008,
+					'context_window'    => 1048576,
+					'max_output'        => 65536,
+					'thinking_level'    => 'low',
+					'min_output_tokens' => 2048,
+					'price_input'       => 0.75,
+					'price_output'      => 3.75,
+				),
+				'gemini-3.6-flash'      => array(
+					'name'              => 'Gemini 3.6 Flash',
+					'description'       => 'Previous Flash generation',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.0008,
+					'context_window'    => 1048576,
+					'max_output'        => 65536,
+					'thinking_level'    => 'minimal',
+					'min_output_tokens' => 1024,
+					'price_input'       => 0.75,
+					'price_output'      => 3.75,
 				),
 				'gemini-2.5-flash'      => array(
 					'name'            => 'Gemini 2.5 Flash',
-					'description'     => 'Best price-performance with thinking capabilities',
+					'description'     => 'Google routes it to 3.5 Flash-Lite from December 1, 2026',
 					'cost_tier'       => '2',
 					'cost_per_post'   => 0.0002,
+					'context_window'  => 1048576,
+					'max_output'      => 65536,
 					'thinking_budget' => 0,
+					'legacy'          => true,
+					'retires'         => '2026-12-01',
+					'successor'       => 'gemini-3.5-flash-lite',
+					'price_input'     => 0.30,
+					'price_output'    => 2.50,
 				),
 				'gemini-2.5-pro'        => array(
 					'name'            => 'Gemini 2.5 Pro',
-					'description'     => 'Most advanced reasoning model for complex problems',
+					'description'     => 'Google routes it to 3.8 Flash from December 1, 2026',
 					'cost_tier'       => '3',
 					'cost_per_post'   => 0.002,
+					'context_window'  => 1048576,
+					'max_output'      => 65536,
 					'thinking_budget' => 128,
+					'legacy'          => true,
+					'retires'         => '2026-12-01',
+					'successor'       => 'gemini-3.8-flash',
+					'price_input'     => 1.25,
+					'price_output'    => 10.0,
 				),
+				// Google already routes this ID to 3.6 Flash; the swap just makes it explicit.
 				'gemini-3.5-flash'      => array(
-					'name'          => 'Gemini 3.5 Flash',
-					'description'   => 'Latest generation — best for agentic and complex tasks',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.0003,
+					'name'           => 'Gemini 3.5 Flash',
+					'description'    => 'Routed by Google to Gemini 3.6 Flash',
+					'cost_tier'      => '2',
+					'cost_per_post'  => 0.0008,
+					'context_window' => 1048576,
+					'max_output'     => 65536,
+					'legacy'         => true,
+					'retires'        => '2026-11-05',
+					'successor'      => 'gemini-3.6-flash',
 				),
 			),
 		),
@@ -170,6 +455,13 @@ function abcc_get_provider_registry() {
 			'text_generation_callback' => 'abcc_perplexity_generate_text',
 			'connection_test_callback' => 'abcc_test_perplexity_connection',
 			'connection_test_model'    => 'sonar',
+			'transport'                => 'openai_compatible',
+			'endpoint'                 => 'https://api.perplexity.ai/chat/completions',
+			'auth'                     => 'bearer',
+			'extra_headers'            => array( 'X-Pplx-Integration' => 'wp-autoinsight' ),
+			'request_body_callback'    => 'abcc_perplexity_request_body',
+			'timeout'                  => 60,
+			'pricing_date'             => '2026-11-05',
 			'capabilities'             => array(
 				'text_generation'     => true,
 				'image_generation'    => false,
@@ -177,33 +469,82 @@ function abcc_get_provider_registry() {
 				'audio_transcription' => false,
 			),
 			'text_models'              => array(
+				// Sonar chat completions ended 2026-09-27; Perplexity reformulates
+				// these requests server-side. Search fees are not in the token prices.
 				'sonar'               => array(
-					'name'          => 'Sonar',
-					'description'   => 'Fast web-grounded search with citations',
-					'cost_tier'     => '1',
-					'cost_per_post' => 0.001,
+					'name'              => 'Sonar',
+					'description'       => 'Fast web-grounded search with citations',
+					'cost_tier'         => '1',
+					'cost_per_post'     => 0.001,
+					'context_window'    => 128000,
+					'min_output_tokens' => 800,
+					'price_input'       => 0.25,
+					'price_output'      => 2.50,
 				),
 				'sonar-pro'           => array(
-					'name'          => 'Sonar Pro',
-					'description'   => 'Deeper context with 2x more search results',
-					'cost_tier'     => '2',
-					'cost_per_post' => 0.005,
+					'name'              => 'Sonar Pro',
+					'description'       => 'Deeper context with 2x more search results',
+					'cost_tier'         => '2',
+					'cost_per_post'     => 0.005,
+					'context_window'    => 200000,
+					'min_output_tokens' => 800,
+					'legacy'            => true,
 				),
 				'sonar-reasoning-pro' => array(
-					'name'          => 'Sonar Reasoning Pro',
-					'description'   => 'Advanced multi-step reasoning with citations',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.01,
+					'name'              => 'Sonar Reasoning Pro',
+					'description'       => 'Advanced multi-step reasoning with citations',
+					'cost_tier'         => '3',
+					'cost_per_post'     => 0.01,
+					'context_window'    => 128000,
+					'reasoning'         => true,
+					'min_output_tokens' => 800,
+					'legacy'            => true,
 				),
 				'sonar-deep-research' => array(
-					'name'          => 'Sonar Deep Research',
-					'description'   => 'In-depth multi-source synthesis — charges per citation + reasoning token',
-					'cost_tier'     => '3',
-					'cost_per_post' => 0.82,
-					'cost_warning'  => true,
+					'name'              => 'Sonar Deep Research',
+					'description'       => 'In-depth multi-source synthesis — charges per citation + reasoning token',
+					'cost_tier'         => '3',
+					'cost_per_post'     => 0.82,
+					'cost_warning'      => true,
+					'context_window'    => 128000,
+					'reasoning'         => true,
+					'min_output_tokens' => 800,
+					'timeout'           => 300,
+					'legacy'            => true,
 				),
 			),
 		),
+		// A gateway: any catalog model may be sent, so unlisted IDs are expected.
+		'openrouter' => array(
+			'id'                       => 'openrouter',
+			'name'                     => 'OpenRouter',
+			'group_label'              => 'OpenRouter Models',
+			'help_url'                 => 'https://openrouter.ai/settings/keys',
+			'constant'                 => 'OPENROUTER_API',
+			'option_name'              => 'openrouter_api_key',
+			'wp_connector_id'          => '',
+			'text_generation_callback' => '',
+			'connection_test_callback' => '',
+			'connection_test_model'    => 'openai/gpt-6-luna',
+			'transport'                => 'openai_compatible',
+			'endpoint'                 => 'https://openrouter.ai/api/v1/chat/completions',
+			'auth'                     => 'bearer',
+			'extra_headers'            => abcc_get_openrouter_headers(),
+			'request_body_callback'    => 'abcc_openrouter_request_body',
+			'cost_note_callback'       => 'abcc_get_openrouter_cost_note',
+			'gateway'                  => true,
+			'default_context_window'   => 16384,
+			'timeout'                  => 120,
+			'pricing_date'             => '2026-11-10',
+			'capabilities'             => array(
+				'text_generation'     => true,
+				'image_generation'    => false,
+				'citations'           => false,
+				'audio_transcription' => false,
+			),
+			'text_models'              => abcc_get_openrouter_registry_models(),
+		),
+		'custom'     => abcc_get_custom_endpoint_provider_entry(),
 		'stability'  => array(
 			'id'                       => 'stability',
 			'name'                     => 'Stability AI',
@@ -224,25 +565,25 @@ function abcc_get_provider_registry() {
 		),
 	);
 
+	$registry = abcc_merge_custom_models( $registry );
+	$registry = abcc_openrouter_overlay_live_models( $registry );
+
 	$registry = apply_filters( 'abcc_provider_registry', $registry );
 
 	return $registry;
 }
 
 /**
- * The clock retirement checks use.
+ * Rebuild the registry on its next read.
  *
- * @since 4.5.3
- * @return int Unix time.
+ * Needed when something that feeds the abcc_provider_registry filter changes
+ * within a request (a saved custom model, a refreshed catalog).
+ *
+ * @since 4.6.0
+ * @return void
  */
-function abcc_get_retirement_now() {
-	/**
-	 * Filter the time retirement dates are compared against.
-	 *
-	 * @since 4.5.3
-	 * @param int $now Unix time.
-	 */
-	return (int) apply_filters( 'abcc_retirement_now', time() );
+function abcc_flush_provider_registry_cache() {
+	$GLOBALS['abcc_provider_registry_dirty'] = true;
 }
 
 /**
@@ -324,7 +665,10 @@ function abcc_provider_supports_audio_transcription( $provider ) {
 }
 
 /**
- * Get the first registered model for a provider.
+ * The model a provider starts new users on.
+ *
+ * The registry's `default_model` when it names a registered text model,
+ * otherwise the first model listed.
  *
  * @param string $provider Provider ID.
  * @return string
@@ -336,9 +680,14 @@ function abcc_get_provider_default_model( $provider ) {
 		return '';
 	}
 
+	$default = isset( $provider_config['default_model'] ) ? (string) $provider_config['default_model'] : '';
+	if ( '' !== $default && isset( $provider_config['text_models'][ $default ] ) ) {
+		return $default;
+	}
+
 	$models = array_keys( $provider_config['text_models'] );
 
-	return $models[0];
+	return (string) $models[0];
 }
 
 /**
@@ -384,7 +733,7 @@ function abcc_get_provider_connection_test_model( $provider ) {
  * @return string
  */
 function abcc_get_default_text_model() {
-	return (string) abcc_get_setting_default( 'prompt_select', 'gpt-5.4-mini' );
+	return (string) abcc_get_setting_default( 'prompt_select', 'openai::gpt-5.4-mini' );
 }
 
 /**
@@ -400,13 +749,25 @@ function abcc_get_available_text_model_options() {
 			continue;
 		}
 
-		if ( empty( abcc_get_provider_api_key( $provider_id ) ) ) {
+		if ( ! abcc_provider_is_ready( $provider_id ) ) {
+			continue;
+		}
+
+		// Retired models are hidden here and swapped for the successor at call time.
+		$models = array();
+		foreach ( $provider['text_models'] as $model_id => $model ) {
+			if ( abcc_resolve_retired_model( $provider_id, $model_id ) === $model_id ) {
+				$models[ $model_id ] = $model;
+			}
+		}
+
+		if ( empty( $models ) ) {
 			continue;
 		}
 
 		$options[ $provider_id ] = array(
 			'group'   => $provider['group_label'],
-			'options' => $provider['text_models'],
+			'options' => $models,
 		);
 	}
 
@@ -414,21 +775,78 @@ function abcc_get_available_text_model_options() {
 }
 
 /**
- * Get the provider for a text model.
+ * Split a stored model selection into provider and model.
  *
- * @param string $model Model identifier.
- * @return string
+ * 'provider::model' resolves through the registry only; the model may be
+ * unlisted (a catalog pick). A bare ID resolves by registry membership, then
+ * by the legacy substring guess, never for IDs containing '/'.
+ *
+ * @since 4.6.0
+ * @param string $selection Stored selection or bare model ID.
+ * @return array{provider: string, model: string, qualified: bool, known: bool}
+ *               'provider' is '' when nothing resolves; 'known' is true only
+ *               when the model is listed under the resolved provider.
  */
-function abcc_get_provider_for_model( $model ) {
-	$model = ! empty( $model ) ? $model : abcc_get_setting( 'prompt_select' );
+function abcc_parse_model_selection( $selection ) {
+	$selection = trim( (string) $selection );
+	$result    = array(
+		'provider'  => '',
+		'model'     => $selection,
+		'qualified' => false,
+		'known'     => false,
+	);
+
+	if ( '' === $selection ) {
+		return $result;
+	}
+
+	if ( false !== strpos( $selection, '::' ) ) {
+		list( $provider, $model ) = explode( '::', $selection, 2 );
+		$provider                 = sanitize_key( $provider );
+		$model                    = trim( $model );
+
+		$result['qualified'] = true;
+		$result['model']     = $model;
+
+		if ( '' === $model || ! abcc_provider_supports_text_generation( $provider ) ) {
+			return $result;
+		}
+
+		$config             = abcc_get_provider( $provider );
+		$result['provider'] = $provider;
+		$result['known']    = isset( $config['text_models'][ $model ] );
+
+		return $result;
+	}
 
 	foreach ( abcc_get_provider_registry() as $provider_id => $provider ) {
-		if ( isset( $provider['text_models'][ $model ] ) ) {
-			return $provider_id;
+		if ( isset( $provider['text_models'][ $selection ] ) && abcc_provider_supports_text_generation( $provider_id ) ) {
+			$result['provider'] = $provider_id;
+			$result['known']    = true;
+			return $result;
 		}
 	}
 
-	// Backward-compatible fallback while older saved models still exist.
+	// A '/' marks a gateway catalog ID; guessing would route it to the native key.
+	if ( false !== strpos( $selection, '/' ) ) {
+		return $result;
+	}
+
+	$result['provider'] = abcc_guess_provider_from_model_id( $selection );
+
+	return $result;
+}
+
+/**
+ * Legacy substring guess for bare model IDs saved before the registry listed them.
+ *
+ * @since 4.6.0
+ * @param string $model Bare model ID.
+ * @return string Provider ID or ''.
+ */
+function abcc_guess_provider_from_model_id( $model ) {
+	$model = (string) $model;
+
 	if ( false !== strpos( $model, 'claude' ) ) {
 		return 'claude';
 	}
@@ -449,28 +867,198 @@ function abcc_get_provider_for_model( $model ) {
 }
 
 /**
- * Whether a model ID names a registered text model of a text-capable provider.
+ * Build the stored form of a model selection.
+ *
+ * @since 4.6.0
+ * @param string $provider Provider ID.
+ * @param string $model    Bare model ID.
+ * @return string 'provider::model', or '' when either part is empty.
+ */
+function abcc_build_model_selection( $provider, $model ) {
+	$provider = sanitize_key( (string) $provider );
+	$model    = trim( (string) $model );
+
+	if ( '' === $provider || '' === $model ) {
+		return '';
+	}
+
+	return $provider . '::' . $model;
+}
+
+/**
+ * Rewrite a selection to its qualified form when the provider resolves.
+ *
+ * Unknown strings pass through unchanged so they fail downstream exactly as
+ * they do today instead of being silently dropped.
+ *
+ * @since 4.6.0
+ * @param string $selection Stored selection or bare model ID.
+ * @return string
+ */
+function abcc_normalize_model_selection( $selection ) {
+	$parsed = abcc_parse_model_selection( $selection );
+
+	if ( '' === $parsed['provider'] ) {
+		return trim( (string) $selection );
+	}
+
+	return abcc_build_model_selection( $parsed['provider'], $parsed['model'] );
+}
+
+/**
+ * Bare model ID of a selection, for request bodies and registry lookups.
+ *
+ * @since 4.6.0
+ * @param string $selection Stored selection or bare model ID.
+ * @return string
+ */
+function abcc_get_model_id_from_selection( $selection ) {
+	$parsed = abcc_parse_model_selection( $selection );
+
+	return $parsed['model'];
+}
+
+/**
+ * Registry definition of a text model, or null when it is not listed.
+ *
+ * @since 4.6.0
+ * @param string $selection Stored selection or bare model ID.
+ * @param string $provider  Optional provider ID when the caller already knows it.
+ * @return array|null
+ */
+function abcc_get_model_definition( $selection, $provider = '' ) {
+	$parsed = abcc_parse_model_selection( $selection );
+	$pid    = '' !== $provider ? sanitize_key( (string) $provider ) : $parsed['provider'];
+	$config = abcc_get_provider( $pid );
+
+	if ( ! $config || ! isset( $config['text_models'][ $parsed['model'] ] ) || ! is_array( $config['text_models'][ $parsed['model'] ] ) ) {
+		return null;
+	}
+
+	return $config['text_models'][ $parsed['model'] ];
+}
+
+/**
+ * The clock retirement checks use.
+ *
+ * @since 4.5.3
+ * @return int Unix time.
+ */
+function abcc_get_retirement_now() {
+	/**
+	 * Filter the time retirement dates are compared against.
+	 *
+	 * @since 4.5.3
+	 * @param int $now Unix time.
+	 */
+	return (int) apply_filters( 'abcc_retirement_now', time() );
+}
+
+/**
+ * The model the provider still serves for a stored selection.
+ *
+ * Past its 'retires' date (Y-m-d) a model is swapped for its 'successor', so
+ * saved settings and scheduled topics survive a provider shutdown.
+ *
+ * @since 4.6.0
+ * @param string   $provider Provider ID.
+ * @param string   $model    Model ID or selection.
+ * @param int|null $now      Unix time; null means now.
+ * @return string Bare model ID.
+ */
+function abcc_resolve_retired_model( $provider, $model, $now = null ) {
+	$model = abcc_get_model_id_from_selection( $model );
+	$now   = null === $now ? abcc_get_retirement_now() : (int) $now;
+
+	for ( $hops = 0; $hops < 3; $hops++ ) {
+		$definition = abcc_get_model_definition( $model, $provider );
+		if ( empty( $definition['retires'] ) || empty( $definition['successor'] ) ) {
+			return $model;
+		}
+
+		$retires = strtotime( (string) $definition['retires'] . ' UTC' );
+		if ( false === $retires || $now < $retires ) {
+			return $model;
+		}
+
+		$model = (string) $definition['successor'];
+	}
+
+	return $model;
+}
+
+/**
+ * A stored selection with a retired model replaced by its successor, qualified.
+ *
+ * Pickers and the validator compare against this, so a retired saved model
+ * is never replaced with another provider's first model.
+ *
+ * @since 4.6.0
+ * @param string $selection Stored selection or bare model ID.
+ * @return string 'provider::model', or the trimmed input when it does not resolve.
+ */
+function abcc_get_live_model_selection( $selection ) {
+	$parsed = abcc_parse_model_selection( $selection );
+
+	if ( '' === $parsed['provider'] ) {
+		return trim( (string) $selection );
+	}
+
+	return abcc_build_model_selection( $parsed['provider'], abcc_resolve_retired_model( $parsed['provider'], $parsed['model'] ) );
+}
+
+/**
+ * Selection to start on from a grouped options array (as abcc_get_available_text_model_options() returns).
+ *
+ * The first provider's default model when it is offered, otherwise its first option.
+ *
+ * @since 4.6.0
+ * @param array $grouped_options provider_id => array( 'group' => string, 'options' => array ).
+ * @return string 'provider::model', or '' when nothing is available.
+ */
+function abcc_get_first_available_model_selection( array $grouped_options ) {
+	foreach ( $grouped_options as $provider_id => $group ) {
+		if ( ! empty( $group['options'] ) && is_array( $group['options'] ) ) {
+			$default = abcc_get_provider_default_model( $provider_id );
+			if ( '' !== $default && isset( $group['options'][ $default ] ) ) {
+				return abcc_build_model_selection( $provider_id, $default );
+			}
+
+			reset( $group['options'] );
+			return abcc_build_model_selection( $provider_id, key( $group['options'] ) );
+		}
+	}
+
+	return '';
+}
+
+/**
+ * Get the provider for a text model.
+ *
+ * @param string $model Model identifier or 'provider::model' selection.
+ * @return string
+ */
+function abcc_get_provider_for_model( $model ) {
+	$model  = ! empty( $model ) ? $model : abcc_get_setting( 'prompt_select' );
+	$parsed = abcc_parse_model_selection( $model );
+
+	return $parsed['provider'];
+}
+
+/**
+ * Whether a selection names a listed text model of a text-capable provider.
  *
  * Membership only: no substring guessing, so a made-up ID that contains a
  * provider word is rejected.
  *
  * @since 4.5.2
- * @param string $model Model ID.
+ * @param string $model Model ID or 'provider::model' selection.
  * @return bool
  */
 function abcc_is_valid_text_model( $model ) {
-	$model = trim( (string) $model );
-	if ( '' === $model ) {
-		return false;
-	}
+	$parsed = abcc_parse_model_selection( $model );
 
-	foreach ( abcc_get_provider_registry() as $provider_id => $provider ) {
-		if ( isset( $provider['text_models'][ $model ] ) && abcc_provider_supports_text_generation( $provider_id ) ) {
-			return true;
-		}
-	}
-
-	return false;
+	return '' !== $parsed['provider'] && $parsed['known'];
 }
 
 /**
@@ -566,7 +1154,11 @@ function abcc_get_provider_credential_source( $provider ) {
  * @return array
  */
 function abcc_get_provider_health_snapshot( $provider, $health_rows = null ) {
-	$source     = abcc_get_provider_credential_source( $provider );
+	$source = abcc_get_provider_credential_source( $provider );
+	// A keyless local endpoint has no credential but is still usable.
+	if ( 'none' === $source && abcc_provider_is_ready( $provider ) ) {
+		$source = 'keyless';
+	}
 	$last_check = get_transient( 'abcc_last_validation_' . $provider );
 
 	if ( ! is_array( $health_rows ) ) {
@@ -586,7 +1178,7 @@ function abcc_get_provider_health_snapshot( $provider, $health_rows = null ) {
 		} elseif ( 'failed' === ( $row['status'] ?? '' ) ) {
 			$last_check = array(
 				'status'    => 'failed',
-				'message'   => __( 'Connection failed', 'automated-blog-content-creator' ),
+				'message'   => ! empty( $row['message'] ) ? (string) $row['message'] : __( 'Connection failed', 'automated-blog-content-creator' ),
 				'timestamp' => $timestamp,
 			);
 		}
@@ -654,9 +1246,11 @@ function abcc_record_provider_validation( $provider, $ok, $message = '', $ttl = 
 	$rows = get_option( 'abcc_provider_health', array() );
 	$rows = is_array( $rows ) ? $rows : array();
 
+	// The failure reason outlives the transient so the dashboard can still say why.
 	$rows[ $provider ] = array(
 		'status'    => $ok ? 'connected' : 'failed',
 		'timestamp' => $now,
+		'message'   => $ok ? '' : sanitize_text_field( $message ),
 	);
 	update_option( 'abcc_provider_health', $rows );
 }
@@ -807,6 +1401,11 @@ function abcc_test_provider_connection( $provider, $api_key ) {
 	$callback = abcc_get_provider_connection_test_callback( $provider );
 
 	if ( empty( $callback ) || ! is_callable( $callback ) ) {
+		// Providers on a transport need no callback of their own.
+		if ( '' !== abcc_get_provider_transport( $provider ) ) {
+			return abcc_test_transport_connection( $provider, $api_key );
+		}
+
 		return new WP_Error(
 			'abcc_invalid_provider',
 			__( 'Invalid provider', 'automated-blog-content-creator' )
@@ -814,6 +1413,53 @@ function abcc_test_provider_connection( $provider, $api_key ) {
 	}
 
 	return call_user_func( $callback, $api_key );
+}
+
+/**
+ * Connection test for any provider on a transport: reachable, key accepted, model answers.
+ *
+ * A key with no credits is still a valid key, so 402 passes with a warning.
+ *
+ * @since 4.6.0
+ * @param string $provider Provider ID.
+ * @param string $api_key  API key ('' for keyless local endpoints).
+ * @return array{success: bool, error?: string, message?: string, probe: array}
+ */
+function abcc_test_transport_connection( $provider, $api_key ) {
+	$probe = abcc_test_provider_generation( $provider, $api_key );
+	$name  = abcc_get_fallback_provider_label( $provider );
+
+	if ( $probe['success'] ) {
+		return array(
+			'success' => true,
+			'probe'   => $probe,
+		);
+	}
+
+	if ( 'abcc_provider_payment_required' === $probe['code'] ) {
+		return array(
+			'success' => true,
+			'message' => __( 'The key is valid but has no credits: paid models will fail until you add some.', 'automated-blog-content-creator' ),
+			'probe'   => $probe,
+		);
+	}
+
+	if ( ! $probe['reachable'] ) {
+		/* translators: 1: provider name, 2: error detail */
+		$error = sprintf( __( 'Could not reach %1$s: %2$s', 'automated-blog-content-creator' ), $name, $probe['error'] );
+	} elseif ( ! $probe['authenticated'] ) {
+		/* translators: %s: provider name */
+		$error = sprintf( __( '%s rejected the key. Check that it was copied in full and is still active.', 'automated-blog-content-creator' ), $name );
+	} else {
+		/* translators: 1: provider name, 2: error detail */
+		$error = sprintf( __( '%1$s accepted the key, but the test model did not answer: %2$s', 'automated-blog-content-creator' ), $name, $probe['error'] );
+	}
+
+	return array(
+		'success' => false,
+		'error'   => function_exists( 'abcc_redact_secrets' ) ? abcc_redact_secrets( $error ) : $error,
+		'probe'   => $probe,
+	);
 }
 
 /**
@@ -851,13 +1497,12 @@ function abcc_get_model_display_name( $model_id ) {
 		return '';
 	}
 
-	foreach ( abcc_get_provider_registry() as $provider ) {
-		if ( ! empty( $provider['text_models'][ $model_id ]['name'] ) ) {
-			return $provider['text_models'][ $model_id ]['name'];
-		}
+	$definition = abcc_get_model_definition( $model_id );
+	if ( ! empty( $definition['name'] ) ) {
+		return $definition['name'];
 	}
 
-	return $model_id;
+	return abcc_get_model_id_from_selection( $model_id );
 }
 
 /**
@@ -879,5 +1524,23 @@ function abcc_format_model_option_label( $model_id, $model ) {
 	if ( is_array( $model ) && ! empty( $model['legacy'] ) ) {
 		$label .= ' ' . __( '(legacy)', 'automated-blog-content-creator' );
 	}
+	if ( is_array( $model ) && ! empty( $model['free'] ) ) {
+		$label = abcc_get_free_model_label( $label );
+	}
 	return $label;
+}
+
+/**
+ * Label for a free model: its name plus "(free, experimental)".
+ *
+ * Catalog names of free variants already end in "(free)"; that copy is dropped.
+ *
+ * @since 4.6.0
+ * @param string $name Model name.
+ * @return string Unescaped label (caller must escape).
+ */
+function abcc_get_free_model_label( $name ) {
+	$name = (string) preg_replace( '/\s*\(free\)\s*$/i', '', (string) $name );
+
+	return $name . ' ' . __( '(free, experimental)', 'automated-blog-content-creator' );
 }

@@ -225,7 +225,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						</div>
 						<div class="abcc-provider-info">
 							<h3><?php esc_html_e( 'Perplexity', 'automated-blog-content-creator' ); ?></h3>
-							<p><?php esc_html_e( 'Sonar Pro - Web-grounded content with citations', 'automated-blog-content-creator' ); ?></p>
+							<p><?php echo esc_html( sprintf( /* translators: %s: model name */ __( '%s • Web-grounded content with citations', 'automated-blog-content-creator' ), abcc_get_model_display_name( abcc_get_provider_default_model( 'perplexity' ) ) ) ); ?></p>
 						</div>
 						<div class="abcc-provider-status perplexity-status"></div>
 					</div>
@@ -265,6 +265,60 @@ if ( ! defined( 'ABSPATH' ) ) {
 										<span class="dashicons dashicons-info"></span>
 										<strong><?php esc_html_e( 'Note:', 'automated-blog-content-creator' ); ?></strong>
 										<?php esc_html_e( 'Perplexity API requires a paid plan. Content includes web citations automatically.', 'automated-blog-content-creator' ); ?>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<!-- OpenRouter -->
+				<div class="abcc-api-provider" data-provider="openrouter">
+					<div class="abcc-provider-header">
+						<div class="abcc-provider-logo">
+							<span class="dashicons dashicons-randomize" role="img" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s logo', 'automated-blog-content-creator' ), 'OpenRouter' ) ); ?>"></span>
+						</div>
+						<div class="abcc-provider-info">
+							<h3><?php esc_html_e( 'OpenRouter', 'automated-blog-content-creator' ); ?></h3>
+							<p><?php esc_html_e( 'One key for hundreds of models from many vendors', 'automated-blog-content-creator' ); ?></p>
+						</div>
+						<div class="abcc-provider-status openrouter-status"></div>
+					</div>
+					<div class="abcc-provider-content">
+						<?php if ( defined( 'OPENROUTER_API' ) && ! empty( OPENROUTER_API ) ) : ?>
+							<div class="abcc-wp-config-notice">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'API key configured in wp-config.php - excellent security!', 'automated-blog-content-creator' ); ?>
+							</div>
+							<div class="abcc-api-input">
+								<button class="button button-secondary abcc-test-api" data-provider="openrouter" data-wp-config="true">
+									<?php esc_html_e( 'Test Connection', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+						<?php else : ?>
+							<div class="abcc-api-input">
+								<input type="password" id="openrouter-api-key" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: provider name */ __( '%s API key', 'automated-blog-content-creator' ), 'OpenRouter' ) ); ?>" placeholder="<?php esc_attr_e( 'sk-or-...', 'automated-blog-content-creator' ); ?>" />
+								<button class="button button-secondary abcc-test-api" data-provider="openrouter">
+									<?php esc_html_e( 'Test', 'automated-blog-content-creator' ); ?>
+								</button>
+							</div>
+							<div class="abcc-api-help">
+								<button type="button" class="abcc-help-toggle" data-provider="openrouter">
+									<span class="dashicons dashicons-book-alt"></span>
+									<?php esc_html_e( 'How to get your OpenRouter API key', 'automated-blog-content-creator' ); ?>
+									<span class="abcc-help-arrow">▼</span>
+								</button>
+								<div class="abcc-help-content" data-provider="openrouter" style="display: none;">
+									<ol>
+										<li><?php esc_html_e( 'Visit', 'automated-blog-content-creator' ); ?> <a href="https://openrouter.ai/settings/keys" target="_blank">openrouter.ai/settings/keys</a></li>
+										<li><?php esc_html_e( 'Sign up for an account or log in', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Click "Create API Key" and give it a name', 'automated-blog-content-creator' ); ?></li>
+										<li><?php esc_html_e( 'Copy the API key (starts with "sk-or-...")', 'automated-blog-content-creator' ); ?></li>
+									</ol>
+									<div class="abcc-help-note">
+										<span class="dashicons dashicons-info"></span>
+										<strong><?php esc_html_e( 'Note:', 'automated-blog-content-creator' ); ?></strong>
+										<?php esc_html_e( 'Paid models need credits on your OpenRouter account. Free models work without credits but are limited to a few posts a day.', 'automated-blog-content-creator' ); ?>
 									</div>
 								</div>
 							</div>

@@ -43,6 +43,7 @@ class ABCC_Topics_List_Table extends WP_List_Table {
 		return array(
 			'title'     => __( 'Topic', 'automated-blog-content-creator' ),
 			'frequency' => __( 'Frequency', 'automated-blog-content-creator' ),
+			'model'     => __( 'Model', 'automated-blog-content-creator' ),
 			'status'    => __( 'Status', 'automated-blog-content-creator' ),
 			'next_run'  => __( 'Next Run', 'automated-blog-content-creator' ),
 			'last_run'  => __( 'Last Run', 'automated-blog-content-creator' ),
@@ -133,6 +134,16 @@ class ABCC_Topics_List_Table extends WP_List_Table {
 		);
 
 		return esc_html( $labels[ $item['frequency'] ] ?? $item['frequency'] );
+	}
+
+	/**
+	 * Model column.
+	 *
+	 * @param array $item Topic row.
+	 * @return string
+	 */
+	public function column_model( $item ) {
+		return esc_html( abcc_get_topic_model_label( $item ) );
 	}
 
 	/**

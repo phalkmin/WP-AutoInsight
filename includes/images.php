@@ -181,6 +181,7 @@ function abcc_generate_featured_image( $text_model, $keywords, $category_names =
 
 		if ( empty( $image_service['service'] ) ) {
 			abcc_debug_log( 'No available image generation service' );
+			abcc_set_last_image_error( __( 'No image provider is set up. Featured images need an OpenAI, Gemini or Stability AI key under Connections > API Keys. To stop trying, turn featured images off under Media.', 'automated-blog-content-creator' ) );
 			return false;
 		}
 

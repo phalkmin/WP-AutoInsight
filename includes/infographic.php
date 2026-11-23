@@ -112,6 +112,10 @@ function abcc_handle_create_infographic() {
 		return;
 	}
 
+	// A log row is opened only once a provider call is about to be made.
+	$job_id      = 0;
+	$job_started = false;
+
 	try {
 		// Get post content.
 		$post = get_post( $post_id );
@@ -123,7 +127,7 @@ function abcc_handle_create_infographic() {
 		$api_key = abcc_check_api_key();
 		$model   = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 
-		if ( empty( $api_key ) ) {
+		if ( empty( $api_key ) && ! abcc_model_is_ready( $model ) ) {
 			throw new Exception( __( 'API key not configured', 'automated-blog-content-creator' ) );
 		}
 
@@ -133,7 +137,26 @@ function abcc_handle_create_infographic() {
 			abcc_bound_prompt_input( wp_strip_all_tags( $post->post_content ) )
 		);
 
-		$description_result = abcc_generate_content_detailed( $api_key, $description_prompt, $model, 300, array( 'source' => 'infographic' ) );
+		$job_started = microtime( true );
+		$job_id      = abcc_start_inline_job(
+			'infographic',
+			array(
+				'model'   => $model,
+				'post_id' => $post_id,
+				'label'   => $post->post_title,
+			)
+		);
+
+		$description_result = abcc_generate_content_detailed(
+			$api_key,
+			$description_prompt,
+			$model,
+			300,
+			array(
+				'source' => 'infographic',
+				'job_id' => $job_id,
+			)
+		);
 
 		if ( is_wp_error( $description_result['error'] ) || empty( $description_result['content'] ) ) {
 			throw new Exception(
@@ -232,6 +255,16 @@ function abcc_handle_create_infographic() {
 		// Get the attachment URL.
 		$attachment_url = wp_get_attachment_url( $attachment_id );
 
+		abcc_finish_inline_job(
+			$job_id,
+			true,
+			array(
+				'post_id' => $post_id,
+				'note'    => __( 'Infographic saved to the Media Library and attached to the post.', 'automated-blog-content-creator' ),
+			),
+			$job_started
+		);
+
 		wp_send_json_success(
 			array(
 				'message'        => __( 'Infographic saved to the Media Library. It is attached to this post but not inserted into it.', 'automated-blog-content-creator' ),
@@ -241,7 +274,23 @@ function abcc_handle_create_infographic() {
 		);
 
 	} catch ( Exception $e ) {
+		abcc_finish_inline_job(
+			$job_id,
+			false,
+			array(
+				'message' => $e->getMessage(),
+				'code'    => abcc_get_last_generation_error_code(),
+			),
+			$job_started
+		);
+
 		wp_send_json_error( array( 'message' => $e->getMessage() ) );
+	} catch ( Throwable $e ) {
+		// A PHP error must still close the log row; its text stays in the server log.
+		error_log( 'WP-AutoInsight infographic failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		$message = __( 'The infographic failed unexpectedly.', 'automated-blog-content-creator' );
+		abcc_finish_inline_job( $job_id, false, array( 'message' => $message ), $job_started );
+		wp_send_json_error( array( 'message' => $message ) );
 	}
 }
 add_action( 'wp_ajax_abcc_create_infographic', 'abcc_handle_create_infographic' );

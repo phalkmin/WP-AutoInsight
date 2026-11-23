@@ -168,3 +168,37 @@ abcc_test(
 		$GLOBALS['abcc_http_queue'] = array();
 	}
 );
+
+abcc_test(
+	'a failed check keeps its reason after the cached validation expires',
+	function () {
+		abcc_update_setting( 'claude_api_key', 'sk-bad-key' );
+		abcc_record_provider_validation( 'claude', false, 'Claude rejected the key. Check that it was copied in full and is still active.' );
+		delete_transient( 'abcc_last_validation_claude' );
+
+		$snapshot = abcc_get_provider_health_snapshot( 'claude' );
+		abcc_assert_same( 'failed', $snapshot['health'] );
+		abcc_assert_true( false !== strpos( $snapshot['last_check']['message'], 'rejected the key' ), $snapshot['last_check']['message'] );
+
+		// A later success clears the stored reason.
+		abcc_record_provider_validation( 'claude', true );
+		$rows = get_option( 'abcc_provider_health', array() );
+		abcc_assert_same( '', $rows['claude']['message'] );
+	}
+);
+
+abcc_test(
+	'the daily health check records why a provider failed',
+	function () {
+		$GLOBALS['abcc_test_options'] = array( 'claude_api_key' => 'sk-bad-key' );
+		$GLOBALS['abcc_http_queue'][] = array(
+			'response' => array( 'code' => 401 ),
+			'body'     => wp_json_encode( array( 'error' => array( 'message' => 'invalid key' ) ) ),
+		);
+
+		$probe = abcc_probe_provider_connection( 'claude', 'sk-bad-key' );
+		abcc_assert_false( $probe['ok'] );
+		abcc_assert_true( '' !== $probe['reason'], 'A failed probe must say why.' );
+		abcc_assert_false( false !== strpos( $probe['reason'], 'sk-bad-key' ), 'The reason must not echo the key.' );
+	}
+);

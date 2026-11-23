@@ -674,9 +674,10 @@
 
 /* Provider health list */
 .abcc-health-list { margin: 0; padding: 0; list-style: none; }
-.abcc-health-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.abcc-health-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 5px 0; font-size: 13px; }
 .abcc-health-name { flex: 1; }
 .abcc-health-status { color: #646970; font-size: 12px; }
+.abcc-health-reason { flex-basis: 100%; padding-left: 18px; color: #646970; font-size: 12px; }
 
 /* About card */
 .abcc-about-version { color: #646970; font-size: 12px; margin-top: -8px; margin-bottom: 12px; }
@@ -987,8 +988,34 @@
 	font-weight: 600;
 	margin-bottom: 4px;
 }
-.abcc-composer__field select {
+.abcc-composer__field select,
+.abcc-composer__field textarea {
 	width: 100%;
+}
+.abcc-composer__field--wide {
+	grid-column: 1 / -1;
+}
+.abcc-composer__estimate,
+.abcc-cost-estimate {
+	color: #646970;
+	font-size: 12px;
+}
+.abcc-composer__estimate {
+	padding: 0 18px 14px;
+}
+.abcc-composer__estimate .abcc-cost-estimate {
+	margin: 0;
+}
+.abcc-cost-estimate__summary {
+	display: block;
+	color: #1d2327;
+	font-weight: 600;
+}
+.abcc-cost-estimate__summary::first-letter {
+	text-transform: uppercase;
+}
+.abcc-cost-estimate__detail {
+	display: block;
 }
 .abcc-composer__seg label {
 	display: inline;
@@ -1077,7 +1104,18 @@
 	.abcc-composer__fields,
 	.abcc-capability-grid,
 	.abcc-status-rail {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.abcc-dashboard-card__header,
+	.abcc-activity-item {
+		flex-wrap: wrap;
+	}
+	.abcc-dashboard-card__header {
+		gap: 8px;
+	}
+	.abcc-activity-title {
+		flex-basis: calc(100% - 30px);
+		white-space: normal;
 	}
 }
 
@@ -1116,4 +1154,40 @@
 	.abcc-topic-form-wrap .regular-text,
 	.abcc-topic-form-wrap .large-text,
 	.abcc-topic-form-wrap select { width: 100%; max-width: 100%; box-sizing: border-box; }
+}
+
+/* User-added models (Connections) */
+.abcc-custom-models {
+	margin-top: 12px;
+}
+.abcc-custom-models summary {
+	cursor: pointer;
+	color: #2271b1;
+}
+.abcc-custom-model-fields label {
+	display: inline-block;
+	max-width: 100%;
+	margin: 0 12px 8px 0;
+}
+.abcc-custom-model-fields input {
+	display: block;
+	max-width: 100%;
+}
+.abcc-custom-model-list li,
+.abcc-openrouter-results li {
+	margin: 0 0 6px;
+}
+.abcc-openrouter-results {
+	max-height: 260px;
+	overflow-y: auto;
+}
+.abcc-custom-model-feedback.abcc-error {
+	color: #b32d2e;
+}
+.abcc-custom-endpoint-card .abcc-inline-label {
+	margin-left: 12px;
+}
+
+.abcc-group-length-input {
+	width: 9em;
 }

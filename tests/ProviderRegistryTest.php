@@ -40,7 +40,10 @@ abcc_test(
 		abcc_assert_array_has_key( 'gpt-5.4-mini', $models );
 		abcc_assert_array_has_key( 'gpt-5.4', $models );
 		abcc_assert_array_has_key( 'gpt-5.5', $models );
-		abcc_assert_false( isset( $models['o4-mini-2025-04-16'] ), 'o4-mini should be removed.' );
+		foreach ( array( 'o4-mini', 'o4-mini-2025-04-16', 'gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14' ) as $removed_alias ) {
+			abcc_assert_array_has_key( $removed_alias, $models );
+			abcc_assert_true( ! empty( $models[ $removed_alias ]['legacy'] ), $removed_alias . ' must remain only as legacy compatibility data.' );
+		}
 		abcc_assert_false( isset( $models['o3-pro'] ), 'o3-pro must NOT be added (unconfirmed API model).' );
 
 		// Legacy 4.1 entries retained and flagged.
@@ -72,7 +75,13 @@ abcc_test(
 abcc_test(
 	'abcc_format_model_option_label appends (legacy) for legacy models',
 	function () {
-		$label = abcc_format_model_option_label( 'gpt-4', array( 'name' => 'GPT-4', 'legacy' => true ) );
+		$label = abcc_format_model_option_label(
+			'gpt-4',
+			array(
+				'name'   => 'GPT-4',
+				'legacy' => true,
+			)
+		);
 		abcc_assert_true( false !== strpos( $label, '(legacy)' ), 'Legacy model must include "(legacy)" in label.' );
 		abcc_assert_true( 0 === strpos( $label, 'GPT-4' ), 'Label must start with the model name.' );
 	}
@@ -116,7 +125,7 @@ abcc_test(
 				continue;
 			}
 			abcc_assert_false(
-				false !== strpos( file_get_contents( $file ), 'gpt-4.1-mini-2025-04-14' ),
+				false !== strpos( file_get_contents( $file ), 'gpt-4.1-mini-2025-04-14' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 				basename( $file ) . ' must read the default model from abcc_get_default_text_model().'
 			);
 		}

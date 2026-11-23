@@ -134,7 +134,7 @@ abcc_test(
 		);
 
 		// Payload reflects the overrides...
-		abcc_assert_same( 'claude-opus-4-8', $payload['model'] );
+		abcc_assert_same( 'claude::claude-opus-4-8', $payload['model'] );
 		abcc_assert_same( 'publish', $payload['post_status'] );
 		// ...but globals are untouched.
 		abcc_assert_same( 'gpt-4.1-mini-2025-04-14', abcc_get_setting( 'prompt_select' ) );

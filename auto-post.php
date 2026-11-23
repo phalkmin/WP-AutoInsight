@@ -3,14 +3,14 @@
  * Plugin Name:       WP-AutoInsight
  * Plugin URI:        https://phalkmin.me/en/project/automated-blog-content-creator/
  * Description:       Writes posts on a schedule with your own OpenAI, Claude, Gemini or Perplexity keys, adds images and SEO metadata, and saves drafts for review.
- * Version:           4.5.3
+ * Version:           4.6.0
  * Author:            Paulo H. Alkmin
  * Author URI:        https://phalkmin.me/
  * Text Domain:       automated-blog-content-creator
  * Domain Path:       /languages
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Requires at least: 6.8
+ * Requires at least: 7.0
  * Requires PHP:      7.4
  *
  * @package WP-AutoInsight
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin version.
-define( 'ABCC_VERSION', '4.5.3' );
+define( 'ABCC_VERSION', '4.6.0' );
 
 // Format requirements appended to every AI content generation prompt.
 // Defined here so they are enforced regardless of which template is active.
@@ -39,6 +39,11 @@ require_once __DIR__ . '/includes/class-abcc-job.php';
 require_once __DIR__ . '/includes/class-abcc-openai-client.php';
 require_once __DIR__ . '/includes/token-handling.php';
 require_once __DIR__ . '/includes/providers.php';
+require_once __DIR__ . '/includes/transport.php';
+require_once __DIR__ . '/includes/custom-models.php';
+require_once __DIR__ . '/includes/openrouter.php';
+require_once __DIR__ . '/includes/custom-endpoint.php';
+require_once __DIR__ . '/includes/usage.php';
 require_once __DIR__ . '/includes/api-keys.php';
 require_once __DIR__ . '/includes/blocks.php';
 require_once __DIR__ . '/includes/seo.php';
@@ -55,6 +60,7 @@ require_once __DIR__ . '/includes/admin-buttons.php';
 require_once __DIR__ . '/includes/audio.php';
 require_once __DIR__ . '/includes/infographic.php';
 require_once __DIR__ . '/includes/onboarding.php';
+require_once __DIR__ . '/includes/review-notice.php';
 require_once __DIR__ . '/includes/meta-boxes.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/gpt.php';

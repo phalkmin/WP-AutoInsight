@@ -137,6 +137,11 @@ abcc_test(
 		abcc_assert_same( ABCC_Job::STATUS_SUCCESS, get_post_meta( $job_id, '_abcc_job_status', true ) );
 		abcc_assert_same( 'Fresh Comet Title', get_post( $post_id )->post_title );
 		abcc_assert_same( (string) $post_id, (string) get_post_meta( $job_id, '_abcc_job_result_post_id', true ) );
+		abcc_assert_same( 1, count( abcc_get_job_usage( $job_id ) ) );
+		abcc_assert_true(
+			false !== strpos( implode( ' | ', (array) get_post_meta( $job_id, '_abcc_job_notes', true ) ), 'Usage: 1 call' ),
+			'A successful SEO job must narrate its usage.'
+		);
 	}
 );
 

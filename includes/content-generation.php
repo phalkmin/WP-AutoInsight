@@ -159,6 +159,7 @@ function abcc_resolve_composer_source( $token ) {
 				'topic_id' => $topic_id,
 				'prompt'   => (string) $topic['prompt'],
 				'label'    => $topic['title'],
+				'notes'    => isset( $topic['source_notes'] ) ? (string) $topic['source_notes'] : '',
 			);
 		}
 		// Stale/deleted topic -> fall through to group fallback.
@@ -201,7 +202,7 @@ function abcc_resolve_composer_source( $token ) {
  */
 function abcc_apply_composer_overrides( $payload, $overrides ) {
 	if ( ! empty( $overrides['model'] ) && abcc_is_valid_text_model( $overrides['model'] ) ) {
-		$payload['model'] = sanitize_text_field( $overrides['model'] );
+		$payload['model'] = abcc_normalize_model_selection( sanitize_text_field( $overrides['model'] ) );
 	}
 	if ( ! empty( $overrides['post_status'] ) ) {
 		$payload['post_status'] = abcc_sanitize_post_status( $overrides['post_status'] );
@@ -252,7 +253,7 @@ function abcc_resolve_group_generation_params( array $group ) {
 	$override_model = isset( $group['model'] ) ? trim( (string) $group['model'] ) : '';
 	if ( '' !== $override_model ) {
 		$provider = abcc_get_provider_for_model( $override_model );
-		if ( '' !== $provider && '' !== (string) abcc_get_provider_api_key( $provider ) ) {
+		if ( '' !== $provider && abcc_provider_is_ready( $provider ) ) {
 			$model = $override_model;
 		}
 	}
@@ -294,6 +295,10 @@ function abcc_build_generation_tracking_meta( $payload, $served_model = '' ) {
 				'category'      => (int) $payload['category'],
 				'template'      => $payload['template'],
 				'source'        => $payload['source'],
+				'topic_id'      => isset( $payload['topic_id'] ) ? (int) $payload['topic_id'] : 0,
+				'prompt'        => isset( $payload['prompt'] ) ? (string) $payload['prompt'] : '',
+				'source_notes'  => isset( $payload['source_notes'] ) ? (string) $payload['source_notes'] : '',
+				'answer_mode'   => ! empty( $payload['answer_mode'] ),
 			)
 		),
 	);
@@ -344,7 +349,9 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		$focus_keyword  = abcc_pick_focus_keyword( (array) $keywords );
 		$focus_keywords = '' !== $focus_keyword ? array( $focus_keyword ) : (array) $keywords;
 
-		$payload     = abcc_build_generation_payload(
+		$topic_id     = isset( $options['topic_id'] ) ? (int) $options['topic_id'] : 0;
+		$source_notes = isset( $options['source_notes'] ) ? abcc_sanitize_source_notes( $options['source_notes'] ) : '';
+		$payload      = abcc_build_generation_payload(
 			array(
 				'keywords'      => $keywords,
 				'focus_keyword' => $focus_keyword,
@@ -355,11 +362,15 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				'category'      => isset( $options['category'] ) ? (int) $options['category'] : 0,
 				'template'      => isset( $options['template'] ) ? $options['template'] : 'default',
 				'source'        => isset( $options['source'] ) ? sanitize_text_field( $options['source'] ) : ( $auto_create ? 'scheduled' : 'manual' ),
+				'topic_id'      => $topic_id,
+				'prompt'        => isset( $options['prompt'] ) ? (string) $options['prompt'] : '',
+				'source_notes'  => $source_notes,
+				'answer_mode'   => isset( $options['answer_mode'] ) ? (bool) $options['answer_mode'] : abcc_resolve_answer_mode( $topic_id ),
 			)
 		);
-		$category_id = (int) $payload['category'];
-		$template    = $payload['template'];
-		$source      = $payload['source'];
+		$category_id  = (int) $payload['category'];
+		$template     = $payload['template'];
+		$source       = $payload['source'];
 
 		// Shared by every provider call this post makes; hooks and fallback
 		// notes key off job_id, the body call carries the payload source.
@@ -367,6 +378,17 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			'job_id' => isset( $options['job_id'] ) ? (int) $options['job_id'] : 0,
 			'source' => $source,
 		);
+
+		$recent_titles = abcc_get_recent_titles(
+			array(
+				'topic_id'  => $topic_id,
+				'category'  => $category_id,
+				'post_type' => $post_type,
+			)
+		);
+		if ( ! empty( $recent_titles ) ) {
+			$call_context['recent_titles'] = $recent_titles;
+		}
 
 		// Topic jobs: the title and SEO calls should follow the brief, not just the keyword.
 		if ( ! empty( $options['prompt'] ) ) {
@@ -404,6 +426,18 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$seo_data = array();
 		}
 
+		abcc_note_generation_event(
+			$call_context,
+			sprintf(
+				/* translators: %s: post title */
+				__( 'Title chosen: “%s”', 'automated-blog-content-creator' ),
+				$title
+			)
+		);
+		if ( true === $generate_seo && ! empty( $seo_data ) ) {
+			abcc_note_generation_event( $call_context, __( 'SEO metadata written', 'automated-blog-content-creator' ) );
+		}
+
 		// Then, generate the content.
 		$generation_result = abcc_generate_post_content_with_template(
 			$api_key,
@@ -418,6 +452,9 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 				'keywords_all'  => (array) $keywords,
 				// Topic Library: a topic's own prompt replaces the stored template.
 				'custom_prompt' => isset( $options['prompt'] ) ? (string) $options['prompt'] : '',
+				'source_notes'  => $source_notes,
+				'recent_titles' => $recent_titles,
+				'answer_mode'   => ! empty( $payload['answer_mode'] ),
 			),
 			$call_context
 		);
@@ -437,14 +474,21 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 		}
 
 		$content_array = abcc_filter_generated_content_lines( $content_array );
+		$content_array = abcc_drop_repeated_title_heading( $content_array, $title );
+
+		// A fallback may have written the body; repair, citations and tracking
+		// all follow the provider that actually answered.
+		$served_model    = ! empty( $generation_result['served_model'] ) ? (string) $generation_result['served_model'] : $prompt_select;
+		$served_provider = ! empty( $generation_result['served_provider'] ) ? (string) $generation_result['served_provider'] : abcc_get_provider_for_model( $prompt_select );
 
 		// The provider hit its token ceiling — trim the fragment and close the article.
 		if ( ! empty( $generation_result['truncated'] ) ) {
-			$repair = abcc_repair_truncated_content(
+			$repair_key = $served_provider === abcc_get_provider_for_model( $prompt_select ) ? $api_key : abcc_get_provider_api_key( $served_provider );
+			$repair     = abcc_repair_truncated_content(
 				$content_array,
 				array(
-					'model'   => $prompt_select,
-					'api_key' => $api_key,
+					'model'   => abcc_build_model_selection( $served_provider, $served_model ),
+					'api_key' => $repair_key,
 					'title'   => $title,
 					'job_id'  => $call_context['job_id'],
 				)
@@ -463,10 +507,15 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			abcc_debug_log( 'Truncation repair: ' . $repair_note );
 		}
 
-		// A fallback may have written the body; citations and tracking follow
-		// the provider that actually answered.
-		$served_model    = ! empty( $generation_result['served_model'] ) ? (string) $generation_result['served_model'] : $prompt_select;
-		$served_provider = ! empty( $generation_result['served_provider'] ) ? (string) $generation_result['served_provider'] : abcc_get_provider_for_model( $prompt_select );
+		abcc_note_generation_event(
+			$call_context,
+			sprintf(
+				/* translators: 1: word count, 2: model name */
+				__( 'Body drafted: %1$s words with %2$s', 'automated-blog-content-creator' ),
+				number_format_i18n( abcc_count_content_words( $content_array ) ),
+				abcc_get_model_display_name( $served_model )
+			)
+		);
 
 		// Process Perplexity citations if applicable.
 		if ( abcc_provider_supports_citations( $served_provider ) ) {
@@ -508,6 +557,10 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 			$post_data['meta_input'] = array();
 		}
 		$post_data['meta_input'] = array_merge( $post_data['meta_input'], abcc_build_generation_tracking_meta( $payload, $served_model ) );
+		// Links the post to its topic so later runs can list what the topic already covered.
+		if ( $topic_id > 0 ) {
+			$post_data['meta_input']['_abcc_topic_id'] = $topic_id;
+		}
 
 		// wp_insert_post() expects slashed input and unslashes every field,
 		// meta_input included; unslashed JSON with escaped quotes would break.
@@ -564,6 +617,9 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 						false !== $attached,
 						false !== $attached ? '' : __( 'The image was generated but could not be attached to the post.', 'automated-blog-content-creator' )
 					);
+					if ( false !== $attached ) {
+						abcc_note_generation_event( $call_context, __( 'Featured image generated and attached', 'automated-blog-content-creator' ) );
+					}
 				} else {
 					$reason = abcc_get_last_image_error();
 					abcc_record_image_generation_attempt(
@@ -580,6 +636,11 @@ function abcc_openai_generate_post( $api_key, $keywords, $prompt_select, $tone =
 
 		if ( abcc_get_setting( 'openai_email_notifications', false ) ) {
 			abcc_send_post_notification( $post_id );
+		}
+
+		$usage_note = $call_context['job_id'] > 0 ? abcc_format_job_usage_note( $call_context['job_id'] ) : '';
+		if ( '' !== $usage_note ) {
+			abcc_note_generation_event( $call_context, $usage_note );
 		}
 
 		return $post_id;
@@ -642,8 +703,7 @@ function abcc_filter_generated_content_lines( array $content_array ) {
  * Cutting back to the last complete block means the reader sees a short article
  * instead of one that stops mid-sentence.
  *
- * Recognizes both HTML block closes and Markdown structure: the output format
- * is HTML today and Markdown after the planned v4.6/v4.7 refactor.
+ * Recognizes both HTML block closes and Markdown structure.
  *
  * @since 4.4.0
  * @param array $lines Content lines.
@@ -724,7 +784,7 @@ function abcc_repair_truncated_content( $lines, $context ) {
 	$api_key = isset( $context['api_key'] ) ? (string) $context['api_key'] : '';
 	$title   = isset( $context['title'] ) ? (string) $context['title'] : '';
 
-	if ( '' === $model || '' === $api_key ) {
+	if ( '' === $model || ( '' === $api_key && ! abcc_model_is_ready( $model ) ) ) {
 		return array(
 			'lines'    => $trimmed,
 			'repaired' => false,
@@ -806,6 +866,11 @@ function abcc_repair_truncated_content( $lines, $context ) {
 function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limit, $context = array() ) {
 	$provider = abcc_get_model_provider( $service );
 
+	// The system block has its own filter and is not part of the hook context.
+	$context = (array) $context;
+	$system  = isset( $context['system'] ) ? (string) $context['system'] : '';
+	unset( $context['system'] );
+
 	// One credential-free context per logical generation; every hook below
 	// receives this same array so extensions can correlate before/after.
 	$hook_context = abcc_hook_safe_context(
@@ -822,17 +887,24 @@ function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limi
 	do_action( 'abcc_before_generate', $hook_context );
 
 	$prompt = apply_filters( 'abcc_generation_prompt', $prompt, $hook_context );
+	$system = (string) apply_filters( 'abcc_generation_system_prompt', $system, $hook_context );
 
-	$result = abcc_execute_fallback_chain(
-		$provider,
-		$service,
-		$prompt,
-		array(
-			'api_key'    => $api_key,
-			'max_tokens' => $char_limit,
-		),
-		$hook_context
+	$call_opts = array(
+		'api_key'    => $api_key,
+		'max_tokens' => $char_limit,
+		'operation'  => abcc_get_generation_operation( (array) $context ),
 	);
+	if ( '' !== trim( $system ) ) {
+		$call_opts['system'] = $system;
+	}
+	if ( ! empty( $context['require_json'] ) ) {
+		$call_opts['require_json'] = true;
+	}
+	if ( ! empty( $context['response_format'] ) && is_array( $context['response_format'] ) ) {
+		$call_opts['response_format'] = $context['response_format'];
+	}
+
+	$result = abcc_execute_fallback_chain( $provider, $service, $prompt, $call_opts, $hook_context );
 
 	// A fallback may have served the request; hooks and the citation stash
 	// need the provider that actually answered.
@@ -869,6 +941,46 @@ function abcc_generate_content_detailed( $api_key, $prompt, $service, $char_limi
 	do_action( 'abcc_after_generate', $hook_context, $result );
 
 	return $result;
+}
+
+/**
+ * Visible words in generated lines, tags removed; counts any script.
+ *
+ * @since 4.6.0
+ * @param array $lines Content lines.
+ * @return int
+ */
+function abcc_count_content_words( $lines ) {
+	$text = wp_strip_all_tags( implode( ' ', (array) $lines ) );
+
+	return (int) preg_match_all( '/\S+/u', $text );
+}
+
+/**
+ * Operation a call performs, so the transport can check a target against it.
+ *
+ * Explicit 'operation' in the context wins; otherwise it follows the source.
+ *
+ * @since 4.6.0
+ * @param array $context Generation context.
+ * @return string article|title|seo_json|conclusion|rewrite|audio|infographic.
+ */
+function abcc_get_generation_operation( array $context ) {
+	if ( ! empty( $context['operation'] ) ) {
+		return sanitize_key( (string) $context['operation'] );
+	}
+
+	$by_source = array(
+		'title'       => 'title',
+		'seo'         => 'seo_json',
+		'repair'      => 'conclusion',
+		'rewrite'     => 'rewrite',
+		'audio'       => 'audio',
+		'infographic' => 'infographic',
+	);
+	$source    = isset( $context['source'] ) ? (string) $context['source'] : '';
+
+	return isset( $by_source[ $source ] ) ? $by_source[ $source ] : 'article';
 }
 
 /**
@@ -961,7 +1073,13 @@ function abcc_extract_generated_title( $lines ) {
  */
 function abcc_generate_title( $api_key, $keywords, $prompt_select, $context = array() ) {
 	$language = abcc_resolve_content_language();
-	$context  = array_merge( (array) $context, array( 'source' => 'title' ) );
+	$context  = array_merge(
+		(array) $context,
+		array(
+			'source' => 'title',
+			'system' => abcc_build_auxiliary_system_prompt(),
+		)
+	);
 
 	$prompt = sprintf(
 		'Create a blog post title in %1$s about: %2$s. ',
@@ -972,6 +1090,9 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select, $context = ar
 		$brief   = rtrim( (string) $context['brief'] );
 		$brief   = '.' === substr( $brief, -1 ) ? substr( $brief, 0, -1 ) : $brief;
 		$prompt .= sprintf( 'The article follows this brief: %s. The title must match the brief\'s subject. ', $brief );
+	}
+	if ( ! empty( $context['recent_titles'] ) ) {
+		$prompt .= abcc_get_recent_titles_instruction( $context['recent_titles'] );
 	}
 	$prompt .= 'Under 60 characters. No quotes, no colons unless essential. Concrete over clever. ';
 	$prompt .= 'Respond with only the title itself on a single line — no introduction, no list of alternatives, no numbering, and no quotation marks.';
@@ -1003,46 +1124,27 @@ function abcc_generate_title( $api_key, $keywords, $prompt_select, $context = ar
 }
 
 /**
- * Body prompt used when no content template is stored.
+ * Generates post content when no content template is stored.
  *
- * @since 4.5.2
- * @param string $title      Post title.
- * @param array  $keywords   Keywords (index 0 is the focus keyword).
- * @param int    $char_limit Requested tokens, drives {word_count}.
- * @return string
- */
-function abcc_build_legacy_content_prompt( $title, $keywords, $char_limit ) {
-	return abcc_expand_content_prompt(
-		'Write a blog post in {language} titled "{title}", using these keywords: {keywords}.',
-		$title,
-		(array) $keywords,
-		array(
-			'char_limit'   => (int) $char_limit,
-			'keywords_all' => (array) $keywords,
-		)
-	);
-}
-
-/**
- * Generates post content.
+ * Builds the same system + brief pair as the built-in default template.
  *
  * @param string $api_key API key for the selected service
  * @param array  $keywords Keywords to focus the content on
  * @param string $prompt_select Which AI service to use
  * @param string $title The post title
- * @param int    $char_limit Maximum token limit
+ * @param int    $char_limit Content length setting
  * @param array  $context    Optional. Generation context (e.g. 'job_id').
+ * @param array  $args       Optional. Substitution data (see abcc_build_article_prompt()). @since 4.6.0.
  * @return array Detailed result array( 'content', 'usage', 'truncated', 'error', 'raw' ).
  */
-function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context = array() ) {
-	$prompt = abcc_build_legacy_content_prompt( $title, $keywords, $char_limit );
-
-	// Perplexity needs a minimum token floor to complete a structured HTML post without truncation.
-	if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
-		$char_limit = max( $char_limit, 800 );
+function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context = array(), $args = array() ) {
+	$default            = abcc_get_default_content_template();
+	$args['char_limit'] = (int) $char_limit;
+	if ( empty( $args['keywords_all'] ) ) {
+		$args['keywords_all'] = (array) $keywords;
 	}
 
-	return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
+	return abcc_generate_article_body( $api_key, (string) $default['prompt'], (array) $keywords, $prompt_select, $title, $char_limit, $args, $context );
 }
 
 /**
@@ -1058,37 +1160,53 @@ function abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title
  * @return array Detailed result array( 'content', 'usage', 'truncated', 'error', 'raw' ).
  */
 function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_select, $title, $char_limit, $args = array(), $context = array() ) {
+	$args['char_limit'] = $char_limit;
+
 	// Topic Library: a topic's own prompt takes the template's place. It goes
 	// through the same placeholder substitution, so {keyword}/{title}/... work.
 	if ( ! empty( $args['custom_prompt'] ) ) {
-		$args['char_limit'] = $char_limit;
-		$prompt             = abcc_expand_content_prompt( (string) $args['custom_prompt'], $title, $keywords, $args );
-
-		if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
-			$char_limit = max( $char_limit, 800 );
-		}
-
-		return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
+		return abcc_generate_article_body( $api_key, (string) $args['custom_prompt'], $keywords, $prompt_select, $title, $char_limit, $args, $context );
 	}
 
 	$template_slug = $args['template'] ?? 'default';
 	$templates     = abcc_get_setting( 'abcc_content_templates', array() );
 	$template      = $templates[ $template_slug ] ?? ( $templates['default'] ?? array() );
 
-	if ( empty( $template ) ) {
-		// Fallback to legacy style if no templates exist.
-		return abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context );
+	if ( empty( $template ) || empty( $template['prompt'] ) ) {
+		return abcc_generate_post_content( $api_key, $keywords, $prompt_select, $title, $char_limit, $context, $args );
 	}
 
-	$args['char_limit'] = $char_limit;
-	$prompt             = abcc_build_content_template_prompt( $template_slug, $title, $keywords, $args );
+	return abcc_generate_article_body( $api_key, (string) $template['prompt'], $keywords, $prompt_select, $title, $char_limit, $args, $context );
+}
 
-	// Perplexity needs a minimum token floor to complete a structured HTML post without truncation.
-	if ( 0 === strpos( $prompt_select, 'sonar' ) ) {
-		$char_limit = max( $char_limit, 800 );
-	}
+/**
+ * Send one article body call: system block + brief, budgeted from the word target.
+ *
+ * @since 4.6.0
+ * @param string $api_key       API key.
+ * @param string $raw_prompt    Template or topic prompt with placeholders.
+ * @param array  $keywords      Keywords (index 0 is the focus keyword).
+ * @param string $prompt_select Model selection.
+ * @param string $title         Post title.
+ * @param int    $char_limit    Content length setting.
+ * @param array  $args          Substitution data (see abcc_build_article_prompt()).
+ * @param array  $context       Generation context.
+ * @return array Detailed result tuple.
+ */
+function abcc_generate_article_body( $api_key, $raw_prompt, $keywords, $prompt_select, $title, $char_limit, $args, $context ) {
+	$args['char_limit'] = (int) $char_limit;
+	$parts              = abcc_build_article_prompt( $raw_prompt, $title, (array) $keywords, $args );
 
-	return abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $char_limit, $context );
+	$context           = (array) $context;
+	$context['system'] = $parts['system'];
+
+	return abcc_generate_content_detailed(
+		$api_key,
+		$parts['user'],
+		$prompt_select,
+		abcc_get_body_token_request( (int) $char_limit ),
+		$context
+	);
 }
 
 /**
@@ -1102,13 +1220,25 @@ function abcc_generate_post_content_with_template( $api_key, $keywords, $prompt_
  * @return string Truncated text, with a marker when it was cut.
  */
 function abcc_bound_prompt_input( $text, $max_words = 3000 ) {
-	$text = (string) $text;
+	$text      = (string) $text;
+	$max_words = max( 1, (int) $max_words );
+	$marker    = ' […truncated for length]';
 
-	if ( str_word_count( $text ) <= $max_words ) {
-		return $text;
+	// str_word_count() only sees ASCII letters, so it never bounds Cyrillic, Greek or Arabic text.
+	$words = preg_split( '/\s+/u', trim( $text ), -1, PREG_SPLIT_NO_EMPTY );
+	$count = is_array( $words ) ? count( $words ) : str_word_count( $text );
+
+	if ( $count > $max_words ) {
+		$text = wp_trim_words( $text, $max_words, $marker );
 	}
 
-	return wp_trim_words( $text, $max_words, ' […truncated for length]' );
+	// Scripts written without spaces are one "word" however long they run.
+	$max_chars = $max_words * 8;
+	if ( mb_strlen( $text ) > $max_chars ) {
+		$text = mb_substr( $text, 0, $max_chars ) . $marker;
+	}
+
+	return $text;
 }
 
 /**
@@ -1208,6 +1338,48 @@ function abcc_build_rewrite_prompt( $title, $content_html ) {
 }
 
 /**
+ * Remove a leading heading that only repeats the post title.
+ *
+ * The theme already prints the title; some models open the body with it anyway.
+ *
+ * @since 4.6.0
+ * @param array  $lines Content lines.
+ * @param string $title Post title.
+ * @return array
+ */
+function abcc_drop_repeated_title_heading( $lines, $title ) {
+	$lines = array_values( (array) $lines );
+	$title = abcc_normalize_heading_text( $title );
+
+	if ( '' === $title || empty( $lines ) || ! preg_match( '/^\s*<h[1-3]\b/i', (string) $lines[0] ) ) {
+		return $lines;
+	}
+
+	if ( abcc_normalize_heading_text( $lines[0] ) !== $title ) {
+		return $lines;
+	}
+
+	array_shift( $lines );
+
+	return $lines;
+}
+
+/**
+ * Lowercase plain text of a heading or title, without tags, entities or edge punctuation.
+ *
+ * @since 4.6.0
+ * @param string $text Heading HTML or title.
+ * @return string
+ */
+function abcc_normalize_heading_text( $text ) {
+	$text = html_entity_decode( wp_strip_all_tags( (string) $text ), ENT_QUOTES, 'UTF-8' );
+	$text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+	$text = trim( $text, " \t\n\r\0\x0B\"'.:!?" );
+
+	return function_exists( 'mb_strtolower' ) ? mb_strtolower( $text, 'UTF-8' ) : strtolower( $text );
+}
+
+/**
  * Drop fences, trailing model commentary and a repeated title from rewrite output.
  *
  * @since 4.5.2
@@ -1267,10 +1439,11 @@ function abcc_line_leaves_pre_open( $line, $was_open ) {
 }
 
 /**
- * Builds the full content-generation prompt for a given template.
+ * Builds a stored template's prompt as one string, format rules included.
  *
- * Pure helper extracted from abcc_generate_post_content_with_template so the
- * substitution logic can be unit-tested without hitting an AI provider.
+ * The pipeline sends article bodies through abcc_build_article_prompt()
+ * (system block + brief); this single-string form stays for code that wants
+ * the expanded template without a provider call.
  *
  * @since 4.2.0
  * @param string $template_slug Template slug to look up in abcc_content_templates.
@@ -1314,26 +1487,492 @@ function abcc_expand_brief( $raw_prompt, $keywords, $args = array() ) {
 	$category_id  = isset( $args['category'] ) ? (int) $args['category'] : 0;
 
 	$replacements = array(
-		'{keyword}'    => isset( $keywords[0] ) ? (string) $keywords[0] : '',
-		'{keywords}'   => implode( ', ', $keywords_all ),
-		'{tone}'       => isset( $args['tone'] ) ? (string) $args['tone'] : 'professional',
-		'{site_name}'  => get_bloginfo( 'name' ),
-		'{category}'   => $category_id ? get_cat_name( $category_id ) : 'General',
-		'{language}'   => abcc_resolve_content_language(),
-		'{title}'      => 'this post',
-		'{word_count}' => '',
+		'{keyword}'          => isset( $keywords[0] ) ? (string) $keywords[0] : '',
+		'{keywords}'         => implode( ', ', $keywords_all ),
+		'{tone}'             => isset( $args['tone'] ) ? (string) $args['tone'] : 'professional',
+		'{site_name}'        => get_bloginfo( 'name' ),
+		'{category}'         => $category_id ? get_cat_name( $category_id ) : 'General',
+		'{language}'         => abcc_resolve_content_language(),
+		'{title}'            => 'this post',
+		'{word_count}'       => '',
+		'{audience}'         => abcc_get_content_audience( $category_id, isset( $keywords[0] ) ? (string) $keywords[0] : '' ),
+		'{site_description}' => get_bloginfo( 'description' ),
+		'{section_count}'    => '',
+		'{format_block}'     => '',
+		'{source_notes}'     => '',
+		'{recent_titles}'    => '',
 	);
 
-	$brief = str_replace( array_keys( $replacements ), array_values( $replacements ), (string) $raw_prompt );
+	$brief = strtr( (string) $raw_prompt, $replacements );
 	$brief = preg_replace( '/\s+([.,;:!?])/', '$1', $brief );
 
 	return trim( preg_replace( '/\s{2,}/', ' ', $brief ) );
 }
 
 /**
+ * The format rules every article body follows, without leading blank lines.
+ *
+ * @since 4.6.0
+ * @return string
+ */
+function abcc_get_format_block() {
+	return trim( ABCC_CONTENT_FORMAT_REQUIREMENTS );
+}
+
+/**
+ * Who the article is written for: the setting, or a default built from the category or keyword.
+ *
+ * @since 4.6.0
+ * @param int    $category_id   Category ID (0 = none).
+ * @param string $focus_keyword Focus keyword.
+ * @return string
+ */
+function abcc_get_content_audience( $category_id = 0, $focus_keyword = '' ) {
+	$audience = trim( (string) abcc_get_setting( 'abcc_content_audience', '' ) );
+	if ( '' !== $audience ) {
+		return $audience;
+	}
+
+	$subject = (int) $category_id > 0 ? (string) get_cat_name( (int) $category_id ) : trim( (string) $focus_keyword );
+	if ( '' === $subject ) {
+		$subject = 'this topic';
+	}
+
+	return 'people searching for practical answers about ' . $subject;
+}
+
+/**
+ * Section headings a post of N words should have.
+ *
+ * Under 400 words there are none; up to 900 words a section runs about 150
+ * words; past that each further section covers about 300.
+ *
+ * @since 4.6.0
+ * @param int $words Word target.
+ * @return string '0' or a number.
+ */
+function abcc_get_section_count( $words ) {
+	$words = (int) $words;
+
+	if ( $words < 400 ) {
+		return '0';
+	}
+	if ( $words <= 900 ) {
+		return (string) max( 3, (int) round( $words / 150 ) );
+	}
+
+	return (string) ( 6 + (int) round( ( $words - 900 ) / 300 ) );
+}
+
+/**
+ * Phrases generated articles should not use.
+ *
+ * @since 4.6.0
+ * @param array $context Optional prompt context (word_count, language).
+ * @return string[]
+ */
+function abcc_get_banned_phrases( $context = array() ) {
+	$phrases = array(
+		"in today's fast-paced world",
+		"in today's digital age",
+		'in the ever-evolving',
+		'delve into',
+		"it's important to note",
+		'it is worth noting',
+		'game-changer',
+		'unlock the power',
+		'look no further',
+		'a testament to',
+		'when it comes to',
+		'in conclusion',
+	);
+
+	/**
+	 * Filter the phrases generated articles are told to avoid.
+	 *
+	 * @since 4.6.0
+	 * @param string[] $phrases Phrases, lowercase.
+	 * @param array    $context Prompt context (word_count, language).
+	 */
+	$phrases = apply_filters( 'abcc_banned_phrases', $phrases, (array) $context );
+
+	return array_values( array_filter( array_map( 'strval', (array) $phrases ), 'strlen' ) );
+}
+
+/**
+ * Titles of the most recent generated posts for the same topic or category.
+ *
+ * @since 4.6.0
+ * @param array $context topic_id (int), category (int), post_type (string).
+ * @param int   $limit   How many titles.
+ * @return string[]
+ */
+function abcc_get_recent_titles( $context = array(), $limit = 10 ) {
+	$topic_id = isset( $context['topic_id'] ) ? (int) $context['topic_id'] : 0;
+	$category = isset( $context['category'] ) ? (int) $context['category'] : 0;
+
+	$meta_query = array(
+		array(
+			'key'   => '_abcc_generated',
+			'value' => '1',
+		),
+	);
+	if ( $topic_id > 0 ) {
+		$meta_query[] = array(
+			'key'   => '_abcc_topic_id',
+			'value' => (string) $topic_id,
+		);
+	}
+
+	$query = array(
+		'post_type'        => ! empty( $context['post_type'] ) ? (string) $context['post_type'] : 'post',
+		'post_status'      => array( 'publish', 'future', 'draft', 'pending' ),
+		'posts_per_page'   => max( 1, (int) $limit ),
+		'orderby'          => 'date',
+		'order'            => 'DESC',
+		'meta_query'       => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- one bounded query per generation.
+		'no_found_rows'    => true,
+		'suppress_filters' => false,
+	);
+	if ( 0 === $topic_id && $category > 0 ) {
+		$query['cat'] = $category;
+	}
+
+	$titles = array();
+	foreach ( (array) get_posts( $query ) as $post ) {
+		$title = isset( $post->post_title ) ? trim( wp_strip_all_tags( (string) $post->post_title ) ) : '';
+		if ( '' !== $title ) {
+			$titles[] = $title;
+		}
+		if ( count( $titles ) >= (int) $limit ) {
+			break;
+		}
+	}
+
+	return array_values( array_unique( $titles ) );
+}
+
+/**
+ * Render recent titles as prompt lines.
+ *
+ * @since 4.6.0
+ * @param array $titles Titles.
+ * @return string '' when there are none.
+ */
+function abcc_format_recent_titles( $titles ) {
+	$lines = array();
+	foreach ( (array) $titles as $title ) {
+		$title = trim( (string) $title );
+		if ( '' !== $title ) {
+			$lines[] = '- ' . $title;
+		}
+	}
+
+	return implode( "\n", $lines );
+}
+
+/**
+ * Clean user-supplied facts for a prompt: plain text, bounded.
+ *
+ * @since 4.6.0
+ * @param mixed $notes Raw notes.
+ * @return string
+ */
+function abcc_sanitize_source_notes( $notes ) {
+	$notes = is_string( $notes ) ? sanitize_textarea_field( $notes ) : '';
+
+	return trim( abcc_bound_prompt_input( $notes, 600 ) );
+}
+
+/**
+ * Whether a generation uses the answer-focused structure.
+ *
+ * The topic's own choice ('on' / 'off') beats the global setting.
+ *
+ * @since 4.6.0
+ * @param int $topic_id Topic ID, or 0.
+ * @return bool
+ */
+function abcc_resolve_answer_mode( $topic_id = 0 ) {
+	$topic_id = (int) $topic_id;
+	if ( $topic_id > 0 ) {
+		$override = (string) get_post_meta( $topic_id, '_abcc_topic_answer_mode', true );
+		if ( 'on' === $override ) {
+			return true;
+		}
+		if ( 'off' === $override ) {
+			return false;
+		}
+	}
+
+	$value = abcc_get_setting( 'abcc_answer_engine_mode', false );
+
+	return true === $value || 1 === $value || '1' === $value;
+}
+
+/**
+ * Answer-focused structure rules, or '' when the post is too short for them.
+ *
+ * Everything fits inside the word target. No rule asks for citations:
+ * without supplied sources that invites invented URLs. The two fixed headings
+ * are described, never quoted: models copy a quoted English heading into a
+ * post in any language.
+ *
+ * @since 4.6.0
+ * @param int    $words    Word target.
+ * @param string $language Content language name; '' resolves it.
+ * @return string
+ */
+function abcc_get_answer_mode_block( $words, $language = '' ) {
+	if ( (int) $words < 400 ) {
+		return '';
+	}
+
+	$language = '' !== (string) $language ? (string) $language : abcc_resolve_content_language();
+
+	return implode(
+		"\n",
+		array(
+			'Answer-focused structure (all of it inside the word target, not in addition to it):',
+			'- Phrase each section heading as a question a reader would ask, and answer it in the first 40 to 60 words under that heading.',
+			'- Define a specialist term once, the first time it appears.',
+			sprintf( '- After the opening, add a section with exactly 3 short bullet points in a <ul> list. Give it a short heading, written in %s, that tells readers these are the main points to remember.', $language ),
+			sprintf( '- End with a section of common questions: an <h2> heading, written in %s, that introduces them, then 3 to 5 questions as <h3> headings, each followed by a one-paragraph answer.', $language ),
+		)
+	);
+}
+
+/**
+ * System block for an article body: persona, language, length, structure,
+ * grounding rules, then the format block.
+ *
+ * @since 4.6.0
+ * @param array $context word_count (int), focus_keyword (string), category (int),
+ *                       has_source_notes (bool), has_recent_titles (bool),
+ *                       include_format_block (bool, default true),
+ *                       answer_mode (bool).
+ * @return string
+ */
+function abcc_build_system_prompt( $context = array() ) {
+	$context       = (array) $context;
+	$words         = isset( $context['word_count'] ) ? max( 1, (int) $context['word_count'] ) : abcc_get_word_target( (int) abcc_get_setting( 'openai_char_limit', 200 ) );
+	$focus_keyword = isset( $context['focus_keyword'] ) ? trim( (string) $context['focus_keyword'] ) : '';
+	$category_id   = isset( $context['category'] ) ? (int) $context['category'] : 0;
+	$language      = abcc_resolve_content_language();
+	$sections      = abcc_get_section_count( $words );
+
+	$site_name        = trim( (string) get_bloginfo( 'name' ) );
+	$site_description = trim( (string) get_bloginfo( 'description' ) );
+
+	$persona  = '' !== $site_name
+		? sprintf( 'You are a staff writer for %s', $site_name ) . ( '' !== $site_description ? sprintf( ' (%s)', $site_description ) : '' ) . '.'
+		: 'You are a staff writer for this website.';
+	$persona .= sprintf( ' You write for %s.', abcc_get_content_audience( $category_id, $focus_keyword ) );
+
+	$lines   = array( $persona, '', sprintf( 'Write the entire article in %s.', $language ), '', 'Length and structure:' );
+	$lines[] = sprintf( '- Aim for about %d words. Finish inside that length with a complete closing paragraph; never stop mid-thought.', $words );
+
+	if ( '0' === $sections ) {
+		// The format block below still describes heading markup; say when it applies.
+		$lines[] = '- Unless the brief asks for a different structure, answer directly in a few short paragraphs with no section headings. The heading rules under "Format requirements" apply only if the brief asks for headings.';
+	} else {
+		// Each section's share of the target, less about 100 words for the hook and the takeaway.
+		$section_words = (int) ( round( max( 100, $words - 100 ) / (int) $sections / 10 ) * 10 );
+		$lines[]       = sprintf(
+			'- Unless the brief asks for a different structure: open with a short hook paragraph before any heading, then write about %1$s sections of roughly %2$d words each, every one answering one question under its own heading, then close with a takeaway.',
+			$sections,
+			$section_words
+		);
+	}
+	$lines[] = '- Keep paragraphs short: two or three sentences each.';
+
+	$lines[] = '';
+	$lines[] = 'Accuracy:';
+	$lines[] = '- Do not invent statistics, studies, quotes, prices or dates. Practical figures a reader needs to follow the advice (quantities, times, steps) are welcome when they are common knowledge; any other number must come from facts supplied in the brief.';
+	$lines[] = '- Do not claim firsthand experience, product testing or interviews.';
+	if ( ! empty( $context['has_source_notes'] ) ) {
+		$lines[] = '- The brief includes "Facts to use". Build on them, and cite only URLs that appear there.';
+	}
+
+	$lines[] = '';
+	$lines[] = 'Style:';
+	if ( '' !== $focus_keyword ) {
+		$lines[] = '0' === $sections
+			? sprintf( '- Use the focus keyword "%s" in the first paragraph.', $focus_keyword )
+			: sprintf( '- Use the focus keyword "%s" in the first paragraph and in one heading.', $focus_keyword );
+	}
+	$banned = abcc_get_banned_phrases(
+		array(
+			'word_count' => $words,
+			'language'   => $language,
+		)
+	);
+	if ( ! empty( $banned ) ) {
+		$lines[] = sprintf( '- Never use these phrases or their equivalents in %1$s: %2$s.', $language, implode( '; ', $banned ) );
+	}
+	if ( ! empty( $context['has_recent_titles'] ) ) {
+		$lines[] = '- The brief lists articles already published on this site. Take a different angle and do not repeat their points.';
+	}
+
+	if ( ! empty( $context['answer_mode'] ) ) {
+		$answer_block = abcc_get_answer_mode_block( $words, $language );
+		if ( '' !== $answer_block ) {
+			$lines[] = '';
+			$lines[] = $answer_block;
+		}
+	}
+
+	if ( ! isset( $context['include_format_block'] ) || $context['include_format_block'] ) {
+		$lines[] = '';
+		$lines[] = abcc_get_format_block();
+	}
+
+	return implode( "\n", $lines );
+}
+
+/**
+ * Short system block for title and SEO calls: no article rules.
+ *
+ * @since 4.6.0
+ * @return string
+ */
+function abcc_build_auxiliary_system_prompt() {
+	$site_name = trim( (string) get_bloginfo( 'name' ) );
+
+	return sprintf(
+		'You write headlines and search metadata for %1$s. Write in %2$s. Return only what is asked for, with no commentary.',
+		'' !== $site_name ? $site_name : 'a website',
+		abcc_resolve_content_language()
+	);
+}
+
+/**
+ * One prompt line listing titles a new title must differ from.
+ *
+ * @since 4.6.0
+ * @param array $titles Recent titles.
+ * @return string '' when there are none.
+ */
+function abcc_get_recent_titles_instruction( $titles ) {
+	$titles = array_slice( array_values( array_filter( array_map( 'strval', (array) $titles ), 'strlen' ) ), 0, 10 );
+	if ( empty( $titles ) ) {
+		return '';
+	}
+
+	return 'These articles already exist on the site, so choose a clearly different angle: "' . implode( '"; "', $titles ) . '". ';
+}
+
+/**
+ * System block and brief for an article body.
+ *
+ * @since 4.6.0
+ * @param string $raw_prompt Template or topic prompt with placeholders.
+ * @param string $title      Post title.
+ * @param array  $keywords   Keywords (index 0 is the focus keyword).
+ * @param array  $args       tone, category, char_limit, keywords_all, source_notes (string),
+ *                           recent_titles (array), answer_mode (bool).
+ * @return array{system: string, user: string}
+ */
+function abcc_build_article_prompt( $raw_prompt, $title, $keywords, $args = array() ) {
+	$raw_prompt = (string) $raw_prompt;
+	$keywords   = array_values( (array) $keywords );
+	$char_limit = isset( $args['char_limit'] ) ? (int) $args['char_limit'] : (int) abcc_get_setting( 'openai_char_limit', 200 );
+
+	$args['source_notes']  = isset( $args['source_notes'] ) ? abcc_sanitize_source_notes( $args['source_notes'] ) : '';
+	$args['recent_titles'] = isset( $args['recent_titles'] ) ? (array) $args['recent_titles'] : array();
+
+	$system = abcc_build_system_prompt(
+		array(
+			'word_count'           => abcc_get_word_target( $char_limit ),
+			'focus_keyword'        => isset( $keywords[0] ) ? (string) $keywords[0] : '',
+			'category'             => isset( $args['category'] ) ? (int) $args['category'] : 0,
+			'has_source_notes'     => '' !== $args['source_notes'],
+			'has_recent_titles'    => ! empty( $args['recent_titles'] ),
+			'include_format_block' => false === strpos( $raw_prompt, '{format_block}' ),
+			'answer_mode'          => ! empty( $args['answer_mode'] ),
+		)
+	);
+
+	return array(
+		'system' => $system,
+		'user'   => abcc_expand_prompt_placeholders( $raw_prompt, $title, $keywords, $args ),
+	);
+}
+
+/**
+ * Expand placeholders in a prompt; no format block is appended.
+ *
+ * Adds the language sentence when the prompt has no {language} token, and the
+ * source notes and recent titles as labelled blocks when it has no token for
+ * them, so prompts written before those existed still carry all three.
+ *
+ * @since 4.6.0
+ * @param string $raw_prompt Prompt text with {placeholder} tokens.
+ * @param string $title      Post title.
+ * @param array  $keywords   Keywords (index 0 is the focus keyword).
+ * @param array  $args       tone, category, char_limit, keywords_all, source_notes, recent_titles.
+ * @return string
+ */
+function abcc_expand_prompt_placeholders( $raw_prompt, $title, $keywords, $args = array() ) {
+	$raw_prompt    = (string) $raw_prompt;
+	$keywords      = array_values( (array) $keywords );
+	$category_id   = isset( $args['category'] ) ? (int) $args['category'] : 0;
+	$category_name = $category_id ? get_cat_name( $category_id ) : 'General';
+	$char_limit    = isset( $args['char_limit'] ) ? (int) $args['char_limit'] : 200;
+	$focus_keyword = isset( $keywords[0] ) ? (string) $keywords[0] : '';
+	$keywords_all  = ! empty( $args['keywords_all'] ) ? (array) $args['keywords_all'] : $keywords;
+	$words         = abcc_get_word_target( $char_limit );
+	$source_notes  = isset( $args['source_notes'] ) ? trim( (string) $args['source_notes'] ) : '';
+	$recent_titles = isset( $args['recent_titles'] ) ? abcc_format_recent_titles( $args['recent_titles'] ) : '';
+
+	$language = abcc_resolve_content_language();
+
+	$replacements = array(
+		'{keyword}'          => $focus_keyword,
+		'{keywords}'         => implode( ', ', $keywords_all ),
+		'{title}'            => (string) $title,
+		'{tone}'             => isset( $args['tone'] ) ? (string) $args['tone'] : 'professional',
+		'{site_name}'        => get_bloginfo( 'name' ),
+		'{site_description}' => get_bloginfo( 'description' ),
+		'{category}'         => $category_name,
+		'{audience}'         => abcc_get_content_audience( $category_id, $focus_keyword ),
+		'{word_count}'       => $words,
+		'{section_count}'    => abcc_get_section_count( $words ),
+		'{language}'         => $language,
+		'{format_block}'     => abcc_get_format_block(),
+		'{source_notes}'     => $source_notes,
+		'{recent_titles}'    => $recent_titles,
+	);
+
+	// strtr() never rescans inserted text, so a title or note containing a token stays literal.
+	$prompt = strtr( $raw_prompt, $replacements );
+
+	if ( '' !== $source_notes && false === strpos( $raw_prompt, '{source_notes}' ) ) {
+		$prompt .= "\n\nFacts to use:\n" . $source_notes;
+	}
+
+	if ( '' !== $recent_titles && false === strpos( $raw_prompt, '{recent_titles}' ) ) {
+		$prompt .= "\n\nAlready published on this site (take a different angle):\n" . $recent_titles;
+	}
+
+	// Templates and Topic prompts without a {language} token still need the
+	// language instruction, or non-English sites get English content.
+	if ( false === strpos( $raw_prompt, '{language}' ) ) {
+		$prompt .= sprintf(
+			/* translators: %s: language name, e.g. "Brazilian Portuguese" */
+			"\n\n" . __( 'Write the entire response in %s.', 'automated-blog-content-creator' ),
+			$language
+		);
+	}
+
+	return $prompt;
+}
+
+/**
  * Expand placeholders in a content prompt and append format requirements.
  *
- * Substitution core shared by stored templates and Topic Library prompts.
+ * The single-string form, for calls that send no system block (Rewrite, audio).
+ * Article bodies use abcc_build_article_prompt().
  *
  * @since 4.2.0
  * @param string $raw_prompt Prompt text with {placeholder} tokens.
@@ -1343,37 +1982,11 @@ function abcc_expand_brief( $raw_prompt, $keywords, $args = array() ) {
  * @return string
  */
 function abcc_expand_content_prompt( $raw_prompt, $title, $keywords, $args = array() ) {
-	$category_id   = isset( $args['category'] ) ? (int) $args['category'] : 0;
-	$category_name = $category_id ? get_cat_name( $category_id ) : 'General';
-	$char_limit    = isset( $args['char_limit'] ) ? (int) $args['char_limit'] : 200;
-	$focus_keyword = isset( $keywords[0] ) ? (string) $keywords[0] : '';
-	$keywords_all  = ! empty( $args['keywords_all'] ) ? (array) $args['keywords_all'] : (array) $keywords;
+	$prompt = abcc_expand_prompt_placeholders( $raw_prompt, $title, $keywords, $args );
 
-	$language = abcc_resolve_content_language();
-
-	$replacements = array(
-		'{keyword}'    => $focus_keyword,
-		'{keywords}'   => implode( ', ', $keywords_all ),
-		'{title}'      => $title,
-		'{tone}'       => $args['tone'] ?? 'professional',
-		'{site_name}'  => get_bloginfo( 'name' ),
-		'{category}'   => $category_name,
-		'{word_count}' => round( $char_limit * 0.75 ),
-		'{language}'   => $language,
-	);
-
-	$had_language_token = false !== strpos( $raw_prompt, '{language}' );
-
-	$prompt = str_replace( array_keys( $replacements ), array_values( $replacements ), $raw_prompt );
-
-	// Templates and Topic prompts without a {language} token still need the
-	// language instruction, or non-English sites get English content.
-	if ( ! $had_language_token ) {
-		$prompt .= sprintf(
-			/* translators: %s: language name, e.g. "Brazilian Portuguese" */
-			"\n\n" . __( 'Write the entire response in %s.', 'automated-blog-content-creator' ),
-			$language
-		);
+	// A prompt that placed {format_block} itself already carries the rules.
+	if ( false !== strpos( (string) $raw_prompt, '{format_block}' ) ) {
+		return $prompt;
 	}
 
 	return $prompt . ABCC_CONTENT_FORMAT_REQUIREMENTS;

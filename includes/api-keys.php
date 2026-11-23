@@ -109,10 +109,49 @@ function abcc_get_provider_api_key( $provider ) {
 
 	$constant_name = abcc_get_provider_constant_name( $provider );
 	if ( ! empty( $constant_name ) && defined( $constant_name ) ) {
+		if ( 'custom' === $provider ) {
+			$settings = abcc_get_custom_endpoint_settings();
+			$current  = abcc_get_custom_endpoint_origin( $settings['base_url'] );
+			$bound    = $settings['constant_key_origin'];
+			if ( '' !== $bound && $bound !== $current ) {
+				return '';
+			}
+		}
+
 		return constant( $constant_name );
 	}
 
 	return abcc_get_provider_saved_api_key( $provider );
+}
+
+/**
+ * Whether a provider can be called: it has a key, or it is a keyless local endpoint.
+ *
+ * @since 4.6.0
+ * @param string $provider Provider slug.
+ * @return bool
+ */
+function abcc_provider_is_ready( $provider ) {
+	if ( '' !== (string) abcc_get_provider_api_key( $provider ) ) {
+		return true;
+	}
+
+	$config = abcc_get_provider( $provider );
+
+	return is_array( $config ) && isset( $config['auth'] ) && 'none' === $config['auth'] && ! empty( $config['endpoint'] );
+}
+
+/**
+ * Whether the provider behind a model selection can be called.
+ *
+ * @since 4.6.0
+ * @param string $model Model selection; '' means the global model.
+ * @return bool
+ */
+function abcc_model_is_ready( $model = '' ) {
+	$provider = abcc_get_model_provider( $model );
+
+	return '' !== (string) $provider && abcc_provider_is_ready( $provider );
 }
 
 /**

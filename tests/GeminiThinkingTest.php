@@ -50,8 +50,10 @@ abcc_test(
 );
 
 abcc_test(
-	'gemini 3.5 flash carries no thinkingConfig until the model audit confirms it',
+	'gemini 3.5 flash is sent as 3.6 flash with a thinkingLevel and no thinkingBudget',
 	function () {
+		// The 2026-11-05 audit: Google routes gemini-3.5-flash to 3.6 Flash, and
+		// Gemini 3 rejects thinkingBudget.
 		abcc_test_queue_http_response( abcc_test_gemini_body( array( array( 'text' => 'ok' ) ) ) );
 		abcc_call_provider_api(
 			'gemini',
@@ -62,8 +64,11 @@ abcc_test(
 				'max_tokens' => 300,
 			)
 		);
-		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
-		abcc_assert_false( isset( $body['generationConfig']['thinkingConfig'] ) );
+		$request = $GLOBALS['abcc_http_last_request'];
+		$body    = json_decode( $request['args']['body'], true );
+		abcc_assert_true( false !== strpos( $request['url'], '/models/gemini-3.6-flash:generateContent' ) );
+		abcc_assert_same( 'MINIMAL', $body['generationConfig']['thinkingConfig']['thinkingLevel'] );
+		abcc_assert_false( isset( $body['generationConfig']['thinkingConfig']['thinkingBudget'] ) );
 	}
 );
 
@@ -168,7 +173,7 @@ abcc_test(
 );
 
 abcc_test(
-	'gemini body with no parts and a SAFETY finish is a parse error, not an empty completion',
+	'gemini body with no parts and a SAFETY finish is a content-blocked error',
 	function () {
 		abcc_test_queue_http_response( abcc_test_gemini_body( null, 'SAFETY' ) );
 		$result = abcc_call_provider_api(
@@ -180,6 +185,6 @@ abcc_test(
 				'max_tokens' => 300,
 			)
 		);
-		abcc_assert_same( 'abcc_provider_parse_error', $result['error']->get_error_code() );
+		abcc_assert_same( 'abcc_provider_content_blocked', $result['error']->get_error_code() );
 	}
 );

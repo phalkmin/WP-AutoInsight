@@ -20,7 +20,7 @@ function abcc_get_default_content_template() {
 		'prompt' => 'Write a {tone} blog post in {language} titled "{title}", focused on {keyword}, '
 			. 'for readers interested in {category}. Work these related keywords in naturally where they fit: {keywords}. '
 			. 'Open with a concrete hook — a specific detail or scenario — never a broad scene-setting cliché. '
-			. 'Prefer short paragraphs and concrete examples over abstractions.',
+			. 'Prefer short paragraphs and concrete examples over abstractions, and close with a takeaway the reader can act on.',
 	);
 }
 
@@ -162,8 +162,17 @@ function abcc_get_settings_schema() {
 				'default'  => 'site',
 				'sanitize' => 'abcc_sanitize_content_language',
 			),
+			// '' means the audience is derived from the category or keyword.
+			'abcc_content_audience'           => array(
+				'default'  => '',
+				'sanitize' => 'sanitize_text_field',
+			),
+			'abcc_answer_engine_mode'         => array(
+				'default'  => false,
+				'sanitize' => 'rest_sanitize_boolean',
+			),
 			'abcc_selected_post_types'        => array( 'default' => array( 'post' ) ),
-			'prompt_select'                   => array( 'default' => 'gpt-5.4-mini' ),
+			'prompt_select'                   => array( 'default' => 'openai::gpt-5.4-mini' ),
 			'abcc_fallback_chain'             => array(
 				'default'  => array(),
 				'sanitize' => 'abcc_sanitize_fallback_chain',
@@ -177,11 +186,33 @@ function abcc_get_settings_schema() {
 			'gemini_api_key'                  => array( 'default' => '' ),
 			'claude_api_key'                  => array( 'default' => '' ),
 			'perplexity_api_key'              => array( 'default' => '' ),
+			'openrouter_api_key'              => array( 'default' => '' ),
+			'custom_api_key'                  => array( 'default' => '' ),
+			// Kept on reset with its key: a key left behind would be sent to the next host entered.
+			'abcc_custom_endpoint'            => array(
+				'reset'    => false,
+				'default'  => array(
+					'base_url'            => '',
+					'model'               => '',
+					'context_window'      => 8192,
+					'max_output'          => 4096,
+					'allow_local'         => false,
+					'is_local'            => false,
+					'constant_key_origin' => '',
+				),
+				'sanitize' => 'abcc_sanitize_custom_endpoint',
+			),
+			// provider => model ID => definition; merged into the registry on read.
+			'abcc_custom_models'              => array(
+				'default'  => array(),
+				'sanitize' => 'abcc_sanitize_custom_models',
+			),
 			'stability_api_key'               => array( 'default' => '' ),
 			'abcc_perplexity_citation_style'  => array( 'default' => 'inline' ),
 			'abcc_perplexity_recency_filter'  => array( 'default' => '' ),
 			'openai_auto_create'              => array( 'default' => '' ),
-			'openai_char_limit'               => array( 'default' => 200 ),
+			// 1200 ≈ 900 words. Installs from before 4.6 that never saved a length are pinned to 200 on upgrade.
+			'openai_char_limit'               => array( 'default' => 1200 ),
 			'openai_email_notifications'      => array( 'default' => false ),
 			'openai_generate_images'          => array( 'default' => true ),
 			'preferred_image_service'         => array( 'default' => 'auto' ),
@@ -213,6 +244,21 @@ function abcc_get_settings_schema() {
 				'sanitize' => 'abcc_sanitize_infographic_provider',
 			),
 			'abcc_topics_last_sweep'          => array(
+				'default'  => 0,
+				'export'   => false,
+				'sanitize' => 'absint',
+			),
+			'abcc_first_generation_at'        => array(
+				'default'  => 0,
+				'export'   => false,
+				'sanitize' => 'absint',
+			),
+			'abcc_generation_success_count'   => array(
+				'default'  => 0,
+				'export'   => false,
+				'sanitize' => 'absint',
+			),
+			'abcc_last_generation_error_at'   => array(
 				'default'  => 0,
 				'export'   => false,
 				'sanitize' => 'absint',
@@ -366,8 +412,9 @@ function abcc_get_exportable_settings() {
  *
  * Uses the export rule: credentials and `'export' => false` entries (version,
  * onboarding and other install state) are kept, since resetting them would
- * re-run migrations and reopen the wizard. The capability grant follows the
- * restored role list.
+ * re-run migrations and reopen the wizard. `'reset' => false` entries (the
+ * custom endpoint) are kept too. The capability grant follows the restored
+ * role list.
  *
  * @since 4.5.2
  * @return void
@@ -376,7 +423,7 @@ function abcc_reset_settings() {
 	$schema = abcc_get_settings_schema();
 
 	foreach ( $schema['settings'] as $key => $def ) {
-		if ( '_api_key' === substr( $key, -8 ) || ( isset( $def['export'] ) && false === $def['export'] ) ) {
+		if ( '_api_key' === substr( $key, -8 ) || ( isset( $def['export'] ) && false === $def['export'] ) || ( isset( $def['reset'] ) && false === $def['reset'] ) ) {
 			continue;
 		}
 		abcc_update_setting( $key, is_array( $def ) && array_key_exists( 'default', $def ) ? $def['default'] : null );
@@ -515,18 +562,152 @@ function abcc_handle_dismiss_draft_mode_notice() {
 add_action( 'wp_ajax_abcc_dismiss_draft_mode_notice', 'abcc_handle_dismiss_draft_mode_notice' );
 
 /**
+ * One-time notice after upgrading to 4.6: what the current length costs and
+ * what a full article would cost. Shown on the plugin's screens and the
+ * Dashboard while the length is below the new default; dismissal is per user.
+ *
+ * @since 4.6.0
+ * @return void
+ */
+function abcc_display_length_notice() {
+	if ( ! current_user_can( 'manage_options' ) || ! abcc_is_length_notice_screen() ) {
+		return;
+	}
+
+	if ( 1 !== (int) get_option( 'abcc_length_notice', 0 ) ) {
+		return;
+	}
+
+	if ( get_user_meta( get_current_user_id(), 'abcc_length_notice_dismissed', true ) ) {
+		return;
+	}
+
+	$text = abcc_get_length_notice_text();
+	if ( '' === $text['message'] ) {
+		return;
+	}
+
+	$settings_url = admin_url( 'admin.php?page=automated-blog-content-creator-post&tab=settings' );
+	?>
+	<div class="notice notice-info is-dismissible" data-abcc-notice="length">
+		<p>
+			<strong><?php esc_html_e( 'WP-AutoInsight 4.6:', 'automated-blog-content-creator' ); ?></strong>
+			<?php echo esc_html( $text['message'] ); ?>
+			<a href="<?php echo esc_url( $settings_url ); ?>"><?php esc_html_e( 'Change post length', 'automated-blog-content-creator' ); ?></a>
+		</p>
+	</div>
+	<script>
+	jQuery( function ( $ ) {
+		$( document ).on( 'click', '[data-abcc-notice="length"] .notice-dismiss', function () {
+			$.post( ajaxurl, {
+				action: 'abcc_dismiss_length_notice',
+				nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_dismiss_length_notice_nonce' ) ); ?>'
+			} );
+		} );
+	} );
+	</script>
+	<?php
+}
+add_action( 'admin_notices', 'abcc_display_length_notice' );
+
+/**
+ * The plugin's own screens and the WordPress Dashboard; never the whole admin.
+ *
+ * @since 4.6.0
+ * @return bool
+ */
+function abcc_is_length_notice_screen() {
+	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+	if ( ! $screen || empty( $screen->id ) ) {
+		return false;
+	}
+	$id = (string) $screen->id;
+
+	return 'dashboard' === $id || false !== strpos( $id, 'automated-blog-content-creator' );
+}
+
+/**
+ * Text of the 4.6 length notice, or an empty message when the length is already at the new default.
+ *
+ * @since 4.6.0
+ * @return array{message: string}
+ */
+function abcc_get_length_notice_text() {
+	$current_limit = (int) abcc_get_setting( 'openai_char_limit', 200 );
+	$full_limit    = (int) abcc_get_setting_default( 'openai_char_limit', 1200 );
+
+	if ( $current_limit >= $full_limit ) {
+		return array( 'message' => '' );
+	}
+
+	$current = abcc_get_length_cost_text( $current_limit );
+	$full    = abcc_get_length_cost_text( $full_limit );
+
+	if ( null === $current['cost'] || null === $full['cost'] ) {
+		$message = sprintf(
+			/* translators: 1: current word count, 2: word count of a full article */
+			__( 'Your posts are still set to about %1$s words. You can now write full articles of about %2$s words. Longer posts cost more, and the price of your current model is unknown.', 'automated-blog-content-creator' ),
+			number_format_i18n( $current['words'] ),
+			number_format_i18n( $full['words'] )
+		);
+	} else {
+		$message = sprintf(
+			/* translators: 1: current word count, 2: current cost, 3: word count of a full article, 4: its cost */
+			__( 'Your posts are still set to about %1$s words (≈$%2$s each). You can now write full articles of about %3$s words for ≈$%4$s each with your current model.', 'automated-blog-content-creator' ),
+			number_format_i18n( $current['words'] ),
+			abcc_format_cost_amount( $current['cost'] ),
+			number_format_i18n( $full['words'] ),
+			abcc_format_cost_amount( $full['cost'] )
+		);
+	}
+
+	return array( 'message' => $message );
+}
+
+/**
+ * Persist per-user dismissal of the 4.6 length notice.
+ *
+ * @since 4.6.0
+ * @return void
+ */
+function abcc_handle_dismiss_length_notice() {
+	check_ajax_referer( 'abcc_dismiss_length_notice_nonce', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error();
+		return;
+	}
+
+	update_user_meta( get_current_user_id(), 'abcc_length_notice_dismissed', 1 );
+	wp_send_json_success();
+}
+add_action( 'wp_ajax_abcc_dismiss_length_notice', 'abcc_handle_dismiss_length_notice' );
+
+/**
  * Run settings migrations.
  *
  * @return void
  */
 function abcc_run_settings_migrations() {
 	$had_version = false !== get_option( 'abcc_version' );
-	// No version and none of the options every install writes: nothing to migrate.
+	// No version and no current or legacy install options: nothing to migrate.
 	$is_fresh = ! $had_version
 		&& false === get_option( 'openai_api_key' )
 		&& false === get_option( 'abcc_content_templates' )
 		&& false === get_option( 'abcc_keyword_groups' )
-		&& false === get_option( 'prompt_select' );
+		&& false === get_option( 'prompt_select' )
+		&& false === get_option( 'openai_keywords' )
+		&& false === get_option( 'openai_selected_categories' );
+
+	if ( $is_fresh ) {
+		$schema = abcc_get_settings_schema();
+		foreach ( $schema['settings'] as $key => $definition ) {
+			if ( 0 === strpos( $key, 'openai_' ) && false !== get_option( $key ) ) {
+				$is_fresh = false;
+				break;
+			}
+		}
+	}
 
 	$installed_version = get_option( 'abcc_version', '1.0.0' );
 	$start_version     = $installed_version;
@@ -654,6 +835,17 @@ function abcc_run_settings_migrations() {
 		if ( is_array( $abcc_templates ) ) {
 			$abcc_templates['default'] = abcc_get_default_content_template();
 			abcc_update_setting( 'abcc_content_templates', $abcc_templates );
+		}
+
+		// 4.6 raised the default length from 200 to 1200. An install that never
+		// saved one keeps writing 150-word posts until its owner chooses otherwise.
+		if ( ! $is_fresh && version_compare( $start_version, '4.6.0', '<' ) ) {
+			if ( false === get_option( 'openai_char_limit' ) ) {
+				abcc_update_setting( 'openai_char_limit', 200 );
+			}
+			if ( false === get_option( 'abcc_length_notice' ) ) {
+				update_option( 'abcc_length_notice', 1 );
+			}
 		}
 
 		abcc_update_setting( 'abcc_version', ABCC_VERSION );

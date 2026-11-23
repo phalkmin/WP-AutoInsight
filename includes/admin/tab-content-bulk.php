@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $model_options = abcc_get_ai_model_options();
-$current_model = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
+$current_model = abcc_get_live_model_selection( abcc_get_setting( 'prompt_select', abcc_get_default_text_model() ) );
 $templates     = abcc_get_setting( 'abcc_content_templates', array() );
 
 // Bulk runs on the keywords pasted below, but a site with no keyword groups
@@ -57,7 +57,7 @@ foreach ( (array) abcc_get_setting( 'abcc_keyword_groups', array() ) as $abcc_bu
 		</div>
 	<?php endif; ?>
 
-	<div class="abcc-bulk-form">
+	<div class="abcc-bulk-form abcc-cost-scope">
 		<div class="abcc-bulk-keywords">
 			<label for="abcc-bulk-keywords-input">
 				<strong><?php esc_html_e( 'Keywords (one per line)', 'automated-blog-content-creator' ); ?></strong>
@@ -75,16 +75,16 @@ foreach ( (array) abcc_get_setting( 'abcc_keyword_groups', array() ) as $abcc_bu
 			<label for="abcc-bulk-template"><?php esc_html_e( 'Template:', 'automated-blog-content-creator' ); ?></label>
 			<select id="abcc-bulk-template">
 				<?php foreach ( $templates as $slug => $tpl ) : ?>
-					<option value="<?php echo esc_attr( $slug ); ?>"><?php echo esc_html( $tpl['name'] ); ?></option>
+					<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( 'default', $slug ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
 				<?php endforeach; ?>
 			</select>
 
 			<label for="abcc-bulk-model"><?php esc_html_e( 'Model:', 'automated-blog-content-creator' ); ?></label>
-			<select id="abcc-bulk-model">
-				<?php foreach ( $model_options as $provider_data ) : ?>
+			<select id="abcc-bulk-model" data-abcc-cost-model>
+				<?php foreach ( $model_options as $bulk_provider_id => $provider_data ) : ?>
 					<optgroup label="<?php echo esc_attr( $provider_data['group'] ); ?>">
 						<?php foreach ( $provider_data['options'] as $model_id => $model_data ) : ?>
-							<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $current_model, $model_id ); ?>>
+							<option value="<?php echo esc_attr( abcc_build_model_selection( $bulk_provider_id, $model_id ) ); ?>" <?php selected( $current_model, abcc_build_model_selection( $bulk_provider_id, $model_id ) ); ?>>
 								<?php echo esc_html( abcc_format_model_option_label( $model_id, $model_data ) ); ?>
 							</option>
 						<?php endforeach; ?>
@@ -98,6 +98,8 @@ foreach ( (array) abcc_get_setting( 'abcc_keyword_groups', array() ) as $abcc_bu
 				<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Draft mode lets you review all generated posts before publishing. Strongly recommended when generating multiple posts at once.', 'automated-blog-content-creator' ) ) ); ?>
 			</label>
 		</div>
+
+		<?php abcc_render_cost_estimate( (int) abcc_get_setting( 'openai_char_limit', 200 ), $current_model ); ?>
 
 		<button type="button" id="abcc-bulk-start" class="button button-primary" disabled>
 			<?php esc_html_e( 'Generate 0 Posts', 'automated-blog-content-creator' ); ?>

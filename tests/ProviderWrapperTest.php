@@ -178,11 +178,11 @@ abcc_test(
 );
 
 abcc_test(
-	'openai o-series requests keep low reasoning with an enlarged budget',
+	'retired openai o-series requests send the successor and its parameter rules',
 	function () {
 		$GLOBALS['abcc_http_queue'][] = abcc_test_chat_completion_response( 'ok' );
 
-		abcc_call_provider_api(
+		$result = abcc_call_provider_api(
 			'openai',
 			'o4-mini',
 			'prompt',
@@ -193,8 +193,11 @@ abcc_test(
 		);
 
 		$body = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
-		abcc_assert_same( 'low', $body['reasoning_effort'], 'o-series has no reasoning_effort=none; must send low.' );
-		abcc_assert_true( $body['max_completion_tokens'] >= 4000, 'Active reasoning bills hidden tokens against the budget; floor must cover them.' );
+		abcc_assert_same( null, $result['error'] );
+		abcc_assert_same( 'gpt-6-luna', $result['served_model'] );
+		abcc_assert_same( 'gpt-6-luna', $body['model'], 'A scheduled legacy selection must not call the dead ID.' );
+		abcc_assert_same( 'none', $body['reasoning_effort'] );
+		abcc_assert_true( $body['max_completion_tokens'] >= 1000 );
 	}
 );
 

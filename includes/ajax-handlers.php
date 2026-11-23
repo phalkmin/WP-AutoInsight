@@ -74,6 +74,16 @@ function abcc_handle_create_post() {
 			$payload_args['source']   = 'topic';
 		}
 
+		// Facts to use: the topic's own notes, then anything typed for this post.
+		$source_notes = isset( $source['notes'] ) ? (string) $source['notes'] : '';
+		if ( isset( $_POST['source_notes'] ) ) {
+			$source_notes = trim( $source_notes . "\n" . sanitize_textarea_field( wp_unslash( $_POST['source_notes'] ) ) );
+		}
+		$source_notes = abcc_sanitize_source_notes( $source_notes );
+		if ( '' !== $source_notes ) {
+			$payload_args['source_notes'] = $source_notes;
+		}
+
 		$payload = abcc_build_generation_payload( $payload_args );
 
 		// Per-call overrides (model / save-as) — applied to this payload only.
@@ -101,9 +111,9 @@ function abcc_handle_create_post() {
 		// successful queue, never on validation failure.
 		abcc_update_setting( 'abcc_composer_last_source', $source['token'] );
 
-		$message = esc_html__( 'Generation job queued successfully.', 'automated-blog-content-creator' );
+		$message = esc_html__( 'Your post is in the queue.', 'automated-blog-content-creator' );
 		if ( $requested_publish && 'draft' === $payload['post_status'] ) {
-			$message = esc_html__( 'Generation job queued. Your role cannot publish this post type, so the post will be saved as a draft.', 'automated-blog-content-creator' );
+			$message = esc_html__( 'Your post is in the queue. Your role cannot publish this post type, so it will be saved as a draft.', 'automated-blog-content-creator' );
 		}
 
 		wp_send_json_success(
@@ -152,6 +162,10 @@ function abcc_handle_rewrite_post() {
 		return;
 	}
 
+	// A log row is opened only once a provider call is about to be made.
+	$job_id      = 0;
+	$job_started = false;
+
 	try {
 		$post = get_post( $post_id );
 		if ( ! $post ) {
@@ -162,7 +176,7 @@ function abcc_handle_rewrite_post() {
 		$prompt_select = abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 		$char_limit    = (int) abcc_get_setting( 'openai_char_limit', 200 );
 
-		if ( empty( $api_key ) ) {
+		if ( empty( $api_key ) && ! abcc_model_is_ready( $prompt_select ) ) {
 			throw new Exception( __( 'API key not configured', 'automated-blog-content-creator' ) );
 		}
 
@@ -187,7 +201,26 @@ function abcc_handle_rewrite_post() {
 		$budget = max( $char_limit, (int) ceil( abcc_estimate_tokens( $input ) * 1.3 ) );
 		$budget = min( $budget, 8000 );
 
-		$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $budget, array( 'source' => 'rewrite' ) );
+		$job_started = microtime( true );
+		$job_id      = abcc_start_inline_job(
+			'rewrite',
+			array(
+				'model'   => $prompt_select,
+				'post_id' => $post_id,
+				'label'   => $post->post_title,
+			)
+		);
+
+		$detailed = abcc_generate_content_detailed(
+			$api_key,
+			$prompt,
+			$prompt_select,
+			$budget,
+			array(
+				'source' => 'rewrite',
+				'job_id' => $job_id,
+			)
+		);
 
 		if ( is_wp_error( $detailed['error'] ) || empty( $detailed['content'] ) ) {
 			throw new Exception(
@@ -213,6 +246,16 @@ function abcc_handle_rewrite_post() {
 
 		$markup = abcc_gutenberg_blocks( abcc_create_blocks( $lines ) );
 
+		abcc_finish_inline_job(
+			$job_id,
+			true,
+			array(
+				'post_id' => $post_id,
+				'note'    => __( 'Rewrite returned to the editor. Nothing is saved until the post is updated.', 'automated-blog-content-creator' ),
+			),
+			$job_started
+		);
+
 		wp_send_json_success(
 			array(
 				'content'    => $markup,
@@ -221,11 +264,27 @@ function abcc_handle_rewrite_post() {
 		);
 
 	} catch ( Exception $e ) {
+		abcc_finish_inline_job(
+			$job_id,
+			false,
+			array(
+				'message' => $e->getMessage(),
+				'code'    => abcc_get_last_generation_error_code(),
+			),
+			$job_started
+		);
+
 		wp_send_json_error(
 			array(
 				'message' => $e->getMessage(),
 			)
 		);
+	} catch ( Throwable $e ) {
+		// A PHP error must still close the log row; its text stays in the server log.
+		error_log( 'WP-AutoInsight rewrite failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		$message = __( 'The rewrite failed unexpectedly. Nothing was changed.', 'automated-blog-content-creator' );
+		abcc_finish_inline_job( $job_id, false, array( 'message' => $message ), $job_started );
+		wp_send_json_error( array( 'message' => $message ) );
 	}
 }
 add_action( 'wp_ajax_abcc_rewrite_post', 'abcc_handle_rewrite_post' );
@@ -252,10 +311,16 @@ function abcc_handle_validate_api_key() {
 		return;
 	}
 
+	// On multisite the custom endpoint and its key belong to the network admin.
+	if ( 'custom' === $provider && ! abcc_current_user_can_manage_custom_endpoint() ) {
+		wp_send_json_error( array( 'message' => __( 'Only a network administrator can change the custom endpoint.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	$submitted_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$api_key       = '' !== $submitted_key ? $submitted_key : (string) abcc_get_provider_api_key( $provider );
 
-	if ( '' === trim( $api_key ) ) {
+	if ( '' === trim( $api_key ) && ! abcc_provider_is_ready( $provider ) ) {
 		wp_send_json_error( array( 'message' => __( 'Enter an API key first.', 'automated-blog-content-creator' ) ) );
 		return;
 	}
@@ -308,9 +373,7 @@ function abcc_handle_bulk_generate_single() {
 	$run_id     = isset( $_POST['run_id'] ) ? sanitize_key( wp_unslash( $_POST['run_id'] ) ) : '';
 	$draft_only = isset( $_POST['draft'] ) && rest_sanitize_boolean( wp_unslash( $_POST['draft'] ) );
 
-	if ( '' !== $model && ! abcc_is_valid_text_model( $model ) ) {
-		$model = '';
-	}
+	$model = abcc_is_valid_text_model( $model ) ? abcc_normalize_model_selection( $model ) : '';
 
 	if ( empty( $keyword ) ) {
 		wp_send_json_error( array( 'message' => __( 'Empty keyword.', 'automated-blog-content-creator' ) ) );
@@ -454,16 +517,20 @@ function abcc_handle_regenerate_post() {
 	try {
 		$payload = abcc_build_generation_payload(
 			array(
-				'keywords'   => $params['keywords'],
-				'model'      => $params['model'],
-				'tone'       => $params['tone'],
-				'char_limit' => $params['char_limit'],
-				'post_type'  => $params['post_type'] ?? 'post',
-				'category'   => $params['category'] ?? 0,
-				'template'   => $params['template'] ?? 'default',
-				'source'     => 'regenerate',
+				'keywords'     => $params['keywords'],
+				'model'        => $params['model'],
+				'tone'         => $params['tone'],
+				'char_limit'   => $params['char_limit'],
+				'post_type'    => $params['post_type'] ?? 'post',
+				'category'     => $params['category'] ?? 0,
+				'template'     => $params['template'] ?? 'default',
+				'topic_id'     => $params['topic_id'] ?? 0,
+				'prompt'       => $params['prompt'] ?? '',
+				'source_notes' => $params['source_notes'] ?? '',
+				'answer_mode'  => $params['answer_mode'] ?? abcc_resolve_answer_mode(),
+				'source'       => 'regenerate',
 				// The button promises a new draft regardless of the global default.
-				'draft_only' => true,
+				'draft_only'   => true,
 			)
 		);
 		$job_id  = abcc_queue_generation_job( $payload );
@@ -474,7 +541,7 @@ function abcc_handle_regenerate_post() {
 
 		wp_send_json_success(
 			array(
-				'message' => __( 'Regeneration job queued successfully!', 'automated-blog-content-creator' ),
+				'message' => __( 'Your new draft is in the queue.', 'automated-blog-content-creator' ),
 				'job_id'  => $job_id,
 			)
 		);
@@ -684,19 +751,18 @@ function abcc_run_provider_health_check() {
 
 		$api_key = abcc_get_provider_api_key_for_health_check( $provider_id );
 
-		if ( '' === $api_key ) {
+		if ( '' === $api_key && ! abcc_provider_is_ready( $provider_id ) ) {
 			abcc_record_provider_no_key( $provider_id );
 			continue;
 		}
 
-		$valid = abcc_validate_provider_api_key_probe( $provider_id, $api_key );
+		$probe = abcc_probe_provider_connection( $provider_id, $api_key );
 
+		// An empty reason falls back to the writer's generic "Connection failed".
 		abcc_record_provider_validation(
 			$provider_id,
-			$valid,
-			$valid
-				? __( 'Validated automatically', 'automated-blog-content-creator' )
-				: __( 'Connection failed', 'automated-blog-content-creator' ),
+			$probe['ok'],
+			$probe['ok'] ? __( 'Validated automatically', 'automated-blog-content-creator' ) : $probe['reason'],
 			2 * DAY_IN_SECONDS
 		);
 	}
@@ -713,20 +779,34 @@ function abcc_get_provider_api_key_for_health_check( $provider_id ) {
 }
 
 /**
- * Validate a provider API key with a real connection test.
+ * Run the provider connection test and keep the reason it failed.
  *
+ * @since 4.6.0
  * @param string $provider_id Provider ID.
  * @param string $api_key     API key to test.
- * @return bool True if the key passes the provider connection test.
+ * @return array{ok: bool, reason: string} 'reason' is user-facing and '' on success.
  */
-function abcc_validate_provider_api_key_probe( $provider_id, $api_key ) {
-	if ( empty( $api_key ) ) {
-		return false;
+function abcc_probe_provider_connection( $provider_id, $api_key ) {
+	if ( empty( $api_key ) && ! abcc_provider_is_ready( $provider_id ) ) {
+		return array(
+			'ok'     => false,
+			'reason' => '',
+		);
 	}
 
 	$result = abcc_test_provider_connection( $provider_id, $api_key );
 
-	return ! is_wp_error( $result ) && ! empty( $result['success'] );
+	if ( ! is_wp_error( $result ) && ! empty( $result['success'] ) ) {
+		return array(
+			'ok'     => true,
+			'reason' => '',
+		);
+	}
+
+	return array(
+		'ok'     => false,
+		'reason' => is_wp_error( $result ) ? (string) $result->get_error_message() : (string) ( $result['error'] ?? '' ),
+	);
 }
 
 /**
@@ -778,6 +858,12 @@ function abcc_topic_args_from_request() {
 	}
 	if ( isset( $_POST['target_post_type'] ) ) {
 		$args['target_post_type'] = sanitize_key( wp_unslash( $_POST['target_post_type'] ) );
+	}
+	if ( isset( $_POST['source_notes'] ) ) {
+		$args['source_notes'] = sanitize_textarea_field( wp_unslash( $_POST['source_notes'] ) );
+	}
+	if ( isset( $_POST['answer_mode'] ) ) {
+		$args['answer_mode'] = sanitize_key( wp_unslash( $_POST['answer_mode'] ) );
 	}
 	// phpcs:enable WordPress.Security.NonceVerification.Missing
 
@@ -910,3 +996,62 @@ function abcc_handle_topic_run_now() {
 	wp_send_json_success( array( 'job_id' => (int) $job_id ) );
 }
 add_action( 'wp_ajax_abcc_topic_run_now', 'abcc_handle_topic_run_now' );
+
+/**
+ * AJAX: cost estimate for a length on a model, for the live display.
+ *
+ * Accepts a length ('char_limit') or a Composer source token ('source'),
+ * whose own length override is used.
+ *
+ * @since 4.6.0
+ * @return void
+ */
+function abcc_handle_estimate_cost() {
+	check_ajax_referer( 'abcc_estimate_cost_nonce', 'nonce' );
+
+	if ( ! abcc_current_user_can_prompt() ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	$model      = isset( $_POST['model'] ) ? sanitize_text_field( wp_unslash( $_POST['model'] ) ) : '';
+	$char_limit = isset( $_POST['char_limit'] ) ? absint( $_POST['char_limit'] ) : 0;
+
+	if ( isset( $_POST['source'] ) ) {
+		$source = abcc_resolve_composer_source( abcc_sanitize_composer_source( sanitize_text_field( wp_unslash( $_POST['source'] ) ) ) );
+		if ( ! is_wp_error( $source ) ) {
+			if ( 0 === $char_limit && ! empty( $source['char_limit'] ) ) {
+				$char_limit = (int) $source['char_limit'];
+			}
+			if ( '' === $model && ! empty( $source['model'] ) ) {
+				$model = (string) $source['model'];
+			}
+		}
+	}
+
+	if ( '' !== $model && ! abcc_is_valid_text_model( $model ) ) {
+		$model = '';
+	}
+	if ( $char_limit <= 0 ) {
+		$char_limit = (int) abcc_get_setting( 'openai_char_limit', 200 );
+	}
+	$char_limit = min( 4000, max( 100, $char_limit ) );
+
+	try {
+		$text = abcc_get_length_cost_text( $char_limit, $model );
+	} catch ( Throwable $e ) {
+		error_log( 'WP-AutoInsight cost estimate failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		wp_send_json_error( array( 'message' => __( 'Could not estimate the cost.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
+	wp_send_json_success(
+		array(
+			'summary' => $text['summary'],
+			'cost'    => $text['cost_text'],
+			'detail'  => $text['detail'],
+			'words'   => $text['words'],
+		)
+	);
+}
+add_action( 'wp_ajax_abcc_estimate_cost', 'abcc_handle_estimate_cost' );

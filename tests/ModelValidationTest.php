@@ -21,7 +21,7 @@ abcc_test(
 		abcc_assert_same( 'gpt-5.4-mini', $payload['model'] );
 
 		$payload = abcc_apply_composer_overrides( array( 'model' => 'gpt-5.4-mini' ), array( 'model' => 'claude-sonnet-4-6' ) );
-		abcc_assert_same( 'claude-sonnet-4-6', $payload['model'] );
+		abcc_assert_same( 'claude::claude-sonnet-4-6', $payload['model'] );
 	}
 );
 

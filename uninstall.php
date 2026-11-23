@@ -48,6 +48,7 @@ function abcc_uninstall_site() {
 		'abcc_topics_auto_paused',
 		'abcc_topics_last_sweep',
 		'abcc_draft_mode_notice',
+		'abcc_length_notice',
 		'abcc_version',
 		'abcc_onboarding_completed',
 	);
@@ -139,3 +140,5 @@ if ( is_multisite() ) {
 
 // Usermeta is network-global, so this runs once.
 delete_metadata( 'user', 0, 'abcc_draft_mode_notice_dismissed', '', true );
+delete_metadata( 'user', 0, 'abcc_length_notice_dismissed', '', true );
+delete_metadata( 'user', 0, 'abcc_review_notice_state', '', true );

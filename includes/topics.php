@@ -11,6 +11,8 @@
  * - _abcc_topic_post_status_override  '' (inherit) | draft | publish
  * - _abcc_topic_provider_override     '' (inherit) | provider/model key
  * - _abcc_topic_target_post_type     defaults to 'post'
+ * - _abcc_topic_source_notes         facts the article may use ('' = none)
+ * - _abcc_topic_answer_mode          '' (inherit) | on | off
  * - _abcc_topic_author_id            owner (cron user context)
  * - _abcc_topic_last_run             unix timestamp
  * - _abcc_topic_next_run             unix timestamp
@@ -151,7 +153,7 @@ function abcc_validate_topic_args( $args, $partial = false ) {
 		if ( '' !== $override_model && ! abcc_is_valid_text_model( $override_model ) ) {
 			return new WP_Error( 'abcc_topic_invalid_model', __( 'That model is not available. Pick one from the list.', 'automated-blog-content-creator' ) );
 		}
-		$clean['provider_override'] = $override_model;
+		$clean['provider_override'] = abcc_normalize_model_selection( $override_model );
 	}
 
 	if ( isset( $args['keywords'] ) ) {
@@ -178,6 +180,15 @@ function abcc_validate_topic_args( $args, $partial = false ) {
 
 	if ( isset( $args['author_id'] ) ) {
 		$clean['author_id'] = absint( $args['author_id'] );
+	}
+
+	if ( isset( $args['source_notes'] ) ) {
+		$clean['source_notes'] = abcc_sanitize_source_notes( $args['source_notes'] );
+	}
+
+	if ( isset( $args['answer_mode'] ) ) {
+		$answer_mode          = sanitize_key( $args['answer_mode'] );
+		$clean['answer_mode'] = in_array( $answer_mode, array( 'on', 'off' ), true ) ? $answer_mode : '';
 	}
 
 	return $clean;
@@ -218,6 +229,8 @@ function abcc_create_topic( $args ) {
 	update_post_meta( $topic_id, '_abcc_topic_keywords', $clean['keywords'] ?? array() );
 	update_post_meta( $topic_id, '_abcc_topic_target_post_type', $clean['target_post_type'] ?? 'post' );
 	update_post_meta( $topic_id, '_abcc_topic_author_id', isset( $clean['author_id'] ) ? $clean['author_id'] : get_current_user_id() );
+	update_post_meta( $topic_id, '_abcc_topic_source_notes', $clean['source_notes'] ?? '' );
+	update_post_meta( $topic_id, '_abcc_topic_answer_mode', $clean['answer_mode'] ?? '' );
 	update_post_meta( $topic_id, '_abcc_topic_last_run', 0 );
 	update_post_meta( $topic_id, '_abcc_topic_next_run', abcc_calculate_next_run( $clean['frequency'] ) );
 	update_post_meta( $topic_id, '_abcc_topic_consecutive_failures', 0 );
@@ -274,6 +287,8 @@ function abcc_update_topic( $topic_id, $args ) {
 		'keywords'             => '_abcc_topic_keywords',
 		'target_post_type'     => '_abcc_topic_target_post_type',
 		'author_id'            => '_abcc_topic_author_id',
+		'source_notes'         => '_abcc_topic_source_notes',
+		'answer_mode'          => '_abcc_topic_answer_mode',
 	);
 	foreach ( $meta_map as $arg_key => $meta_key ) {
 		if ( isset( $clean[ $arg_key ] ) ) {
@@ -387,16 +402,56 @@ function abcc_get_topic( $topic_id ) {
 		'active'               => 'publish' === $post->post_status,
 		'frequency'            => get_post_meta( $topic_id, '_abcc_topic_frequency', true ),
 		'post_status_override' => get_post_meta( $topic_id, '_abcc_topic_post_status_override', true ),
-		'provider_override'    => get_post_meta( $topic_id, '_abcc_topic_provider_override', true ),
+		'provider_override'    => abcc_get_live_model_selection( get_post_meta( $topic_id, '_abcc_topic_provider_override', true ) ),
 		'keywords'             => array_values( array_filter( (array) get_post_meta( $topic_id, '_abcc_topic_keywords', true ), 'strlen' ) ),
 		'target_post_type'     => get_post_meta( $topic_id, '_abcc_topic_target_post_type', true ),
 		'author_id'            => (int) get_post_meta( $topic_id, '_abcc_topic_author_id', true ),
+		'source_notes'         => (string) get_post_meta( $topic_id, '_abcc_topic_source_notes', true ),
+		'answer_mode'          => (string) get_post_meta( $topic_id, '_abcc_topic_answer_mode', true ),
 		'last_run'             => (int) get_post_meta( $topic_id, '_abcc_topic_last_run', true ),
 		'next_run'             => (int) get_post_meta( $topic_id, '_abcc_topic_next_run', true ),
 		'last_job_id'          => (int) get_post_meta( $topic_id, '_abcc_topic_last_job_id', true ),
 		'consecutive_failures' => (int) get_post_meta( $topic_id, '_abcc_topic_consecutive_failures', true ),
 	);
 }
+
+/**
+ * The model a topic's next run will use, as shown in the Topics table.
+ *
+ * An override the site can no longer call is skipped at run time, so the
+ * global model is shown for it.
+ *
+ * @since 4.6.0
+ * @param array $topic Topic row from abcc_get_topic().
+ * @return string Plain text; the caller escapes.
+ */
+function abcc_get_topic_model_label( $topic ) {
+	$override = isset( $topic['provider_override'] ) ? (string) $topic['provider_override'] : '';
+
+	if ( '' !== $override && abcc_is_valid_text_model( $override ) ) {
+		return abcc_get_model_display_name( $override );
+	}
+
+	return sprintf(
+		/* translators: %s: name of the site's global model */
+		__( '%s (global)', 'automated-blog-content-creator' ),
+		abcc_get_model_display_name( abcc_get_live_model_selection( abcc_get_setting( 'prompt_select', abcc_get_default_text_model() ) ) )
+	);
+}
+
+/**
+ * Let WordPress strip the one-time Topics notice flag from the address bar.
+ *
+ * @since 4.6.0
+ * @param string[] $args Removable query args.
+ * @return string[]
+ */
+function abcc_register_topic_notice_query_arg( $args ) {
+	$args[] = 'abcc_topic_notice';
+
+	return $args;
+}
+add_filter( 'removable_query_args', 'abcc_register_topic_notice_query_arg' );
 
 /**
  * Build a generation payload from a topic and queue it as a job.
@@ -422,6 +477,10 @@ function abcc_queue_topic_generation( $topic_id ) {
 		'post_type' => $topic['target_post_type'] ? $topic['target_post_type'] : 'post',
 		'source'    => 'topic',
 	);
+
+	if ( '' !== $topic['source_notes'] ) {
+		$payload_args['source_notes'] = $topic['source_notes'];
+	}
 
 	if ( ! empty( $topic['provider_override'] ) && abcc_is_valid_text_model( $topic['provider_override'] ) ) {
 		$payload_args['model'] = $topic['provider_override'];

@@ -78,3 +78,18 @@ abcc_test(
 		abcc_assert_false( false !== strpos( $html, '3 hours ago' ), 'Offset leaked into the age.' );
 	}
 );
+
+abcc_test(
+	'Provider Health says why a provider is not working and links to its key',
+	function () {
+		$GLOBALS['abcc_test_options']['perplexity_api_key'] = 'pplx-bad';
+		abcc_record_provider_validation( 'perplexity', false, 'Perplexity rejected the key. Check that it was copied in full and is still active.' );
+
+		$html = abcc_test_render_dashboard();
+
+		abcc_assert_true( false !== strpos( $html, 'Not working' ), 'The failed state is labelled.' );
+		abcc_assert_true( false !== strpos( $html, 'Perplexity rejected the key.' ), 'The stored reason is printed on the card.' );
+		abcc_assert_same( 1, substr_count( $html, 'class="abcc-health-reason"' ), 'Only the failed provider gets a reason line.' );
+		abcc_assert_true( 1 === preg_match( '/abcc-health-reason.*?href="[^"]*subtab=api-keys/s', $html ), 'The reason links to Connections > API Keys.' );
+	}
+);

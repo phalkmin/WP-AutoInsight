@@ -93,7 +93,13 @@ function abcc_get_seo_meta_fields( $seo_data ) {
  * @return array Title and SEO data.
  */
 function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site_info, $context = array() ) {
-	$context      = array_merge( (array) $context, array( 'source' => 'seo' ) );
+	$context      = array_merge(
+		(array) $context,
+		array(
+			'source' => 'seo',
+			'system' => abcc_build_auxiliary_system_prompt(),
+		)
+	);
 	$site_context = '';
 	if ( ! empty( $site_info['site_name'] ) ) {
 		$site_context = "This post is for a site called '{$site_info['site_name']}'";
@@ -108,6 +114,9 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
 	if ( ! empty( $context['brief'] ) ) {
 		$prompt .= 'The article follows this brief: ' . $context['brief'] . "\n\n";
 	}
+	if ( ! empty( $context['recent_titles'] ) ) {
+		$prompt .= trim( abcc_get_recent_titles_instruction( $context['recent_titles'] ) ) . "\n\n";
+	}
 	$prompt .= sprintf(
 		"Write the title, meta description and social excerpt in %s.\n\n",
 		abcc_resolve_content_language()
@@ -121,9 +130,10 @@ function abcc_generate_title_and_seo( $api_key, $keywords, $prompt_select, $site
         "social_excerpt": "string (max 200 chars)"
     }';
 
-	// Use a small token limit for this call - 300 tokens should be plenty for JSON.
-	$detailed = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, 300, $context );
-	$result   = is_array( $detailed['content'] ) && ! empty( $detailed['content'] ) ? $detailed['content'] : false;
+	// 300 tokens fit the JSON in English; languages that tokenize less densely need more.
+	$json_tokens = (int) ceil( 300 * max( 1, abcc_get_tokens_per_word() / 1.35 ) );
+	$detailed    = abcc_generate_content_detailed( $api_key, $prompt, $prompt_select, $json_tokens, $context );
+	$result      = is_array( $detailed['content'] ) && ! empty( $detailed['content'] ) ? $detailed['content'] : false;
 	if ( false === $result ) {
 		throw new Exception(
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- plain-text message from the error formatter.

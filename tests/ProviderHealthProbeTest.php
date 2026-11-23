@@ -15,12 +15,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 abcc_test(
 	'health probe returns false for an empty key',
 	function () {
-		if ( ! function_exists( 'abcc_validate_provider_api_key_probe' ) ) {
+		if ( ! function_exists( 'abcc_probe_provider_connection' ) ) {
 			require dirname( __DIR__ ) . '/includes/ajax-handlers.php';
 		}
 
 		abcc_assert_false(
-			abcc_validate_provider_api_key_probe( 'openai', '' ),
+			abcc_probe_provider_connection( 'openai', '' )['ok'],
 			'Empty key must not report connected.'
 		);
 	}
@@ -29,12 +29,12 @@ abcc_test(
 abcc_test(
 	'health probe returns false for an unknown provider (no optimistic true)',
 	function () {
-		if ( ! function_exists( 'abcc_validate_provider_api_key_probe' ) ) {
+		if ( ! function_exists( 'abcc_probe_provider_connection' ) ) {
 			require dirname( __DIR__ ) . '/includes/ajax-handlers.php';
 		}
 
 		abcc_assert_false(
-			abcc_validate_provider_api_key_probe( 'not-a-provider', 'sk-some-key' ),
+			abcc_probe_provider_connection( 'not-a-provider', 'sk-some-key' )['ok'],
 			'Unknown provider must report failed, not optimistic connected.'
 		);
 	}
@@ -43,13 +43,13 @@ abcc_test(
 abcc_test(
 	'health probe returns true when the real connection test succeeds',
 	function () {
-		if ( ! function_exists( 'abcc_validate_provider_api_key_probe' ) ) {
+		if ( ! function_exists( 'abcc_probe_provider_connection' ) ) {
 			require dirname( __DIR__ ) . '/includes/ajax-handlers.php';
 		}
 
 		// Stability's connection test succeeds for any non-empty key without HTTP.
 		abcc_assert_true(
-			abcc_validate_provider_api_key_probe( 'stability', 'sk-valid-key' ),
+			abcc_probe_provider_connection( 'stability', 'sk-valid-key' )['ok'],
 			'Successful connection test must report connected.'
 		);
 	}
@@ -58,7 +58,7 @@ abcc_test(
 abcc_test(
 	'health probe returns false when the connection test reports failure',
 	function () {
-		if ( ! function_exists( 'abcc_validate_provider_api_key_probe' ) ) {
+		if ( ! function_exists( 'abcc_probe_provider_connection' ) ) {
 			require dirname( __DIR__ ) . '/includes/ajax-handlers.php';
 		}
 
@@ -69,7 +69,7 @@ abcc_test(
 		);
 
 		abcc_assert_false(
-			abcc_validate_provider_api_key_probe( 'claude', 'sk-bad-key' ),
+			abcc_probe_provider_connection( 'claude', 'sk-bad-key' )['ok'],
 			'Failed connection test must report failed.'
 		);
 		abcc_assert_true(

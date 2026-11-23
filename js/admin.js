@@ -359,8 +359,30 @@ jQuery(document).ready(function ($) {
     }, 5000);
   });
 
+  // A key typed beside an edited endpoint still belongs to the saved host until the form is saved.
+  var abccCustomEndpointDirty = false;
+
+  function abccRequireCustomEndpointSave() {
+    abccCustomEndpointDirty = true;
+    $('.abcc-validate-key[data-provider="custom"]').prop("disabled", true);
+
+    var $status = $('.api-validation-status[data-provider="custom"]');
+    $status.removeClass("verified failed loading");
+    abcc.showStatus($status, abcc.i18n("saveEndpointFirst"), "info");
+  }
+
+  $(document).on(
+    "input change",
+    '#abcc_custom_endpoint_base_url, input[name="abcc_custom_endpoint[allow_local]"]',
+    abccRequireCustomEndpointSave
+  );
+
   // API Key Validation — validate a single provider and update its status span.
   function abccValidateProvider(provider) {
+    if (provider === "custom" && abccCustomEndpointDirty) {
+      return;
+    }
+
     const $status = $(
       '.api-validation-status[data-provider="' + provider + '"]',
     );
@@ -446,6 +468,7 @@ jQuery(document).ready(function ($) {
     const $wrap = $model.closest(".abcc-fallback-model");
 
     $model.empty();
+    $(".abcc-fallback-suggestion-status").text("");
 
     if (!provider || !map[provider]) {
       $model.prop("disabled", true);
@@ -458,6 +481,14 @@ jQuery(document).ready(function ($) {
     });
     $model.prop("disabled", false);
     $wrap.show();
+  });
+
+  // Fallback suggestion: fill both selects. Nothing is active until the form is saved.
+  $(document).on("click", ".abcc-fallback-use-suggestion", function () {
+    const $button = $(this);
+    $("#abcc_fallback_provider").val($button.attr("data-provider")).trigger("change");
+    $("#abcc_fallback_model").val($button.attr("data-model"));
+    $button.siblings(".abcc-fallback-suggestion-status").text(abcc.i18n("fallbackPicked"));
   });
 
   // Validate all providers at once (called after save).
@@ -504,6 +535,7 @@ jQuery(document).ready(function ($) {
       return;
     }
     $container.append(tpl.replace(/__INDEX__/g, index));
+    updateTemplateSelectors();
   });
 
   $(document).on("click", ".abcc-remove-group", function () {
@@ -605,7 +637,7 @@ jQuery(document).ready(function ($) {
           refreshJobLog();
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($status, abcc.i18n("status") + " " + job.statusLabel);
+              abcc.showStatus($status, job.progressLabel || abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
               abcc.showStatus(
@@ -634,6 +666,234 @@ jQuery(document).ready(function ($) {
         $btn.prop("disabled", false);
       },
     });
+  });
+
+  // Live cost estimate: any length, model or source input refreshes the
+  // estimate line inside the same .abcc-cost-scope. The server owns the math.
+  var abccCostTimers = [];
+  var abccCostRequestId = 0;
+
+  function abccRefreshCostEstimate($scope) {
+    var $target = $scope.find("[data-abcc-cost]").first();
+    if (!$target.length || typeof abccAdmin === "undefined" || !abccAdmin.estimateNonce) {
+      return;
+    }
+
+    var requestId = ++abccCostRequestId;
+    $scope.data("abccCostRequest", requestId);
+
+    var data = {
+      action: "abcc_estimate_cost",
+      nonce: abccAdmin.estimateNonce,
+    };
+    var $length = $scope.find("[data-abcc-cost-length]").first();
+    var $model = $scope.find("[data-abcc-cost-model]").first();
+    var $source = $scope.find("[data-abcc-cost-source]").first();
+
+    if ($length.length && parseInt($length.val(), 10) > 0) {
+      data.char_limit = parseInt($length.val(), 10);
+    }
+    if ($model.length && $model.val()) {
+      data.model = $model.val();
+    }
+    if ($source.length && $source.val()) {
+      data.source = $source.val();
+    }
+
+    $.post(ajaxurl, data).done(function (response) {
+      if (!response || !response.success || $scope.data("abccCostRequest") !== requestId) {
+        return;
+      }
+      var mode = $target.attr("data-abcc-cost");
+      $target.find(".abcc-cost-estimate__summary").text(mode === "cost" ? response.data.cost : response.data.summary);
+      $target.find(".abcc-cost-estimate__detail").text(response.data.detail);
+    });
+  }
+
+  $(document).on("input change", "[data-abcc-cost-length], [data-abcc-cost-model], [data-abcc-cost-source]", function () {
+    var $field = $(this);
+    var $scope = $field.closest(".abcc-cost-scope");
+    var displaySelector = $field.attr("data-abcc-words-display");
+
+    // The word count is plain arithmetic, so it follows the slider without a round trip.
+    if (displaySelector) {
+      var $display = $(displaySelector);
+      var template = $display.attr("data-template") || "%s";
+      $display.text(template.replace("%s", Math.max(1, Math.round(parseInt($field.val(), 10) * 0.75))));
+    }
+
+    if (!$scope.length) {
+      return;
+    }
+
+    $scope.data("abccCostRequest", ++abccCostRequestId);
+
+    var index = $scope.data("abccCostTimer");
+    if (typeof index === "undefined") {
+      index = abccCostTimers.length;
+      abccCostTimers.push(null);
+      $scope.data("abccCostTimer", index);
+    }
+    clearTimeout(abccCostTimers[index]);
+    abccCostTimers[index] = setTimeout(function () {
+      abccRefreshCostEstimate($scope);
+    }, 300);
+  });
+
+  // User-added models: typed IDs for native providers, catalog picks for OpenRouter.
+  $(".abcc-custom-models").closest("form").each(function () {
+    $(this).data("abccModelSettingsSnapshot", $(this).serialize());
+  });
+
+  function abccModelPost(action, data) {
+    return $.post(ajaxurl, $.extend({ action: action, nonce: abccAdmin.modelNonce }, data));
+  }
+
+  function abccModelFeedback($box, message, isError) {
+    $box
+      .find(".abcc-custom-model-feedback")
+      .text(message || "")
+      .toggleClass("abcc-error", !!isError);
+  }
+
+  function abccModelSettingsAreSaved($box) {
+    var $form = $box.closest("form");
+    var snapshot = $form.data("abccModelSettingsSnapshot");
+
+    if ($form.length && typeof snapshot === "string" && $form.serialize() !== snapshot) {
+      abccModelFeedback($box, abcc.i18n("saveBeforeModelChange"), true);
+      return false;
+    }
+
+    return true;
+  }
+
+  function abccAddModel($box, data) {
+    if (!abccModelSettingsAreSaved($box)) {
+      return;
+    }
+
+    abccModelFeedback($box, abcc.i18n("saving"), false);
+    abccModelPost("abcc_add_custom_model", data)
+      .done(function (response) {
+        if (response && response.success) {
+          window.location.reload();
+          return;
+        }
+        abccModelFeedback($box, (response && response.data && response.data.message) || abcc.i18n("errorOccurred"), true);
+      })
+      .fail(function () {
+        abccModelFeedback($box, abcc.i18n("networkError"), true);
+      });
+  }
+
+  $(document).on("click", ".abcc-custom-model-add", function () {
+    var $box = $(this).closest(".abcc-custom-models");
+    var modelId = $.trim($box.find(".abcc-custom-model-id").val());
+
+    if (!modelId) {
+      abccModelFeedback($box, abcc.i18n("modelIdRequired"), true);
+      return;
+    }
+
+    abccAddModel($box, {
+      provider: $box.attr("data-provider"),
+      model_id: modelId,
+      name: $box.find(".abcc-custom-model-name").val(),
+      context_window: $box.find(".abcc-custom-model-context").val(),
+      max_output: $box.find(".abcc-custom-model-output").val(),
+    });
+  });
+
+  $(document).on("click", ".abcc-openrouter-add", function () {
+    var $box = $(this).closest(".abcc-custom-models");
+    abccAddModel($box, { provider: $box.attr("data-provider"), model_id: $(this).attr("data-model-id") });
+  });
+
+  $(document).on("click", ".abcc-custom-model-remove", function () {
+    var $box = $(this).closest(".abcc-custom-models");
+
+    if (!abccModelSettingsAreSaved($box) || !window.confirm(abcc.i18n("confirmRemoveModel"))) {
+      return;
+    }
+
+    abccModelPost("abcc_remove_custom_model", { provider: $box.attr("data-provider"), model_id: $(this).attr("data-model-id") })
+      .done(function (response) {
+        if (response && response.success) {
+          window.location.reload();
+          return;
+        }
+        abccModelFeedback($box, (response && response.data && response.data.message) || abcc.i18n("errorOccurred"), true);
+      })
+      .fail(function () {
+        abccModelFeedback($box, abcc.i18n("networkError"), true);
+      });
+  });
+
+  var abccOpenRouterSearchTimer = null;
+
+  // Enter in these fields must not submit the surrounding settings form.
+  $(document).on("keydown", ".abcc-openrouter-search, .abcc-custom-model-fields input", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+    }
+  });
+
+  $(document).on("input", ".abcc-openrouter-search", function () {
+    var $input = $(this);
+    var $box = $input.closest(".abcc-custom-models");
+    var $results = $box.find(".abcc-openrouter-results");
+    var query = $.trim($input.val());
+
+    clearTimeout(abccOpenRouterSearchTimer);
+
+    if (query.length < 2) {
+      $results.empty();
+      abccModelFeedback($box, "", false);
+      return;
+    }
+
+    abccOpenRouterSearchTimer = setTimeout(function () {
+      abccModelFeedback($box, abcc.i18n("searching"), false);
+
+      abccModelPost("abcc_search_openrouter_models", { query: query })
+        .done(function (response) {
+          $results.empty();
+
+          if (!response || !response.success) {
+            abccModelFeedback($box, (response && response.data && response.data.message) || abcc.i18n("errorOccurred"), true);
+            return;
+          }
+          if (response.data.message) {
+            abccModelFeedback($box, response.data.message, true);
+            return;
+          }
+          if (!response.data.results.length) {
+            abccModelFeedback($box, abcc.i18n("noModelsFound"), false);
+            return;
+          }
+
+          abccModelFeedback($box, "", false);
+          $.each(response.data.results, function (i, result) {
+            var $item = $("<li>").append($("<span>").text(result.label + " "), $("<code>").text(result.id), " ");
+            if (result.listed) {
+              $item.append($("<em>").text(abcc.i18n("modelAdded")));
+            } else {
+              $item.append(
+                $("<button>")
+                  .attr("type", "button")
+                  .addClass("button button-small abcc-openrouter-add")
+                  .attr("data-model-id", result.id)
+                  .text(abcc.i18n("addModel"))
+              );
+            }
+            $results.append($item);
+          });
+        })
+        .fail(function () {
+          abccModelFeedback($box, abcc.i18n("networkError"), true);
+        });
+    }, 300);
   });
 
   function abccComposerFieldsVisible() {
@@ -670,6 +930,7 @@ jQuery(document).ready(function ($) {
       data.source = $("#abcc-composer-source").val();
       data.model = $("#abcc-composer-model").val();
       data.post_status = $("input[name='abcc-composer-status']:checked").val();
+      data.source_notes = $("#abcc-composer-notes").val() || "";
     }
 
     $btn.prop("disabled", true);
@@ -684,7 +945,7 @@ jQuery(document).ready(function ($) {
           abcc.showStatus($status, response.data.message);
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($status, abcc.i18n("status") + " " + job.statusLabel);
+              abcc.showStatus($status, job.progressLabel || abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
               const $link = $("<a>")
@@ -758,7 +1019,7 @@ jQuery(document).ready(function ($) {
           refreshJobLog();
           pollJob(response.data.job_id, {
             onUpdate: function (job) {
-              abcc.showStatus($statusCell, abcc.i18n("status") + " " + job.statusLabel);
+              abcc.showStatus($statusCell, job.progressLabel || abcc.i18n("status") + " " + job.statusLabel);
             },
             onSuccess: function (job) {
               abcc.showStatus($statusCell, abcc.i18n("doneRedirecting"), "success");
@@ -796,10 +1057,10 @@ jQuery(document).ready(function ($) {
       var keywords = $bulkKeywords.val().split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
       var count = keywords.length;
       $bulkStart.prop('disabled', count === 0);
-      $bulkStart.text(count === 0
-        ? (abccAdmin.i18n.generateNPosts || 'Generate 0 Posts').replace('%d', 0)
-        : (abccAdmin.i18n.generateNPosts || 'Generate %d Posts').replace('%d', count)
-      );
+      var label = count === 1
+        ? (abccAdmin.i18n.generateOnePost || 'Generate 1 Post')
+        : (abccAdmin.i18n.generateNPosts || 'Generate %d Posts').replace('%d', count);
+      $bulkStart.text(label);
     }
 
     $bulkKeywords.on('input', updateBulkCount);
@@ -844,8 +1105,10 @@ jQuery(document).ready(function ($) {
 
       var $progress = $('#abcc-bulk-progress');
       var $body     = $('#abcc-bulk-log-body');
-      var created   = 0;
-      var failed    = 0;
+      var created    = 0;
+      var failed     = 0;
+      var remaining  = [];
+      var unanswered = 0;
       $progress.show();
       $body.empty();
       $progress.find('.abcc-bulk-summary').remove();
@@ -877,11 +1140,21 @@ jQuery(document).ready(function ($) {
           window.removeEventListener('beforeunload', leaveWarning);
           $('#abcc-bulk-file-upload').val('');
 
+          // Created keywords leave the box so a second click cannot repeat them;
+          // failed and skipped ones stay for a retry.
+          $bulkKeywords.val(remaining.join('\n'));
+          updateBulkCount();
+
           var summary = (abccAdmin.i18n.bulkSummary || 'Done: %1$s created, %2$s failed')
             .replace('%1$s', created)
             .replace('%2$s', failed);
           if (stopped) {
             summary += ' ' + (abccAdmin.i18n.bulkStopped || 'Stopped after a configuration error.');
+          } else if (unanswered) {
+            // The server may have finished a post whose answer never arrived.
+            summary += ' ' + (abccAdmin.i18n.bulkCheckLogHint || 'Some requests got no answer. Check the Generation Log before running those keywords again.');
+          } else if (remaining.length) {
+            summary += ' ' + (abccAdmin.i18n.bulkRetryHint || 'The keywords that failed are still in the box, so you can try them again.');
           }
           var $summary = $('<p class="abcc-bulk-summary">').text(summary);
           if (abccAdmin.logUrl) {
@@ -893,6 +1166,7 @@ jQuery(document).ready(function ($) {
         var kw  = keywords[index];
         var $tr = bulkRows[index];
         if (stopped) {
+          remaining.push(kw);
           $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.skipped || 'Skipped');
           processNext(index + 1);
           return;
@@ -913,7 +1187,7 @@ jQuery(document).ready(function ($) {
             if (response.data && response.data.edit_url) {
               $tr.find('.abcc-bulk-result').html(
                 '<a href="' + abccEscapeHtml(response.data.edit_url) + '">' +
-                (abccAdmin.i18n.viewPost || 'View post') + '</a>'
+                abccEscapeHtml(abccAdmin.i18n.editPost || 'Edit post') + '</a>'
               );
             }
             if (response.data && response.data.image_failed) {
@@ -921,6 +1195,7 @@ jQuery(document).ready(function ($) {
             }
           } else {
             failed++;
+            remaining.push(kw);
             var msg = response.data && response.data.message ? response.data.message : abccAdmin.i18n.error;
             $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
             $tr.find('.abcc-bulk-result').text(msg);
@@ -930,6 +1205,8 @@ jQuery(document).ready(function ($) {
           }
         }).fail(function () {
           failed++;
+          unanswered++;
+          remaining.push(kw);
           $tr.find('.abcc-bulk-status').text(abccAdmin.i18n.failed || 'Failed');
           $tr.find('.abcc-bulk-result').text(abcc.i18n("networkError"));
         }).always(function () {

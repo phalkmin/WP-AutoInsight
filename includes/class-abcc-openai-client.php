@@ -47,9 +47,11 @@ class ABCC_OpenAI_Client {
 		$url = $this->base_url . '/' . ltrim( $endpoint, '/' );
 
 		$args = array(
-			'method'  => $method,
-			'headers' => $this->get_headers(),
-			'timeout' => 60,
+			'method'             => $method,
+			'headers'            => $this->get_headers(),
+			'timeout'            => 60,
+			'redirection'        => 0,
+			'reject_unsafe_urls' => true,
 		);
 
 		if ( ! empty( $data ) ) {
@@ -66,11 +68,8 @@ class ABCC_OpenAI_Client {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $code ) {
-			$error_data = json_decode( $body, true );
-
-			// Same status-class codes as abcc_call_provider_api() so OpenAI
-			// failures are distinguishable by the error formatter and the
-			// v4.5 fallback chain.
+			// Match the transport's status classes so the error formatter and
+			// fallback chain handle OpenAI failures consistently.
 			if ( 401 === $code || 403 === $code ) {
 				$error_code = 'abcc_provider_auth_error';
 			} elseif ( 402 === $code ) {
@@ -83,9 +82,10 @@ class ABCC_OpenAI_Client {
 				$error_code = 'abcc_provider_http_error';
 			}
 
+			$detail = abcc_extract_provider_error_detail( $body, $this->api_key );
 			return new WP_Error(
 				$error_code,
-				isset( $error_data['error']['message'] ) ? $error_data['error']['message'] : 'Unknown API error',
+				'' !== $detail ? $detail : 'Unknown API error',
 				array(
 					'status'   => $code,
 					'provider' => 'openai',
@@ -97,21 +97,10 @@ class ABCC_OpenAI_Client {
 	}
 
 	/**
-	 * Whether a model is a reasoning-tier model with restricted parameters.
-	 *
-	 * GPT-5.x and o-series models reject 'max_tokens' (they require
-	 * 'max_completion_tokens') and only accept default sampling values, so
-	 * temperature/top_p/penalties must be omitted entirely.
-	 *
-	 * @param string $model Model identifier.
-	 * @return bool
-	 */
-	private function is_reasoning_model( $model ) {
-		return 0 === strpos( $model, 'gpt-5' ) || preg_match( '/^o\d/', $model );
-	}
-
-	/**
 	 * Generate chat completions.
+	 *
+	 * Text generation goes through abcc_call_provider_api(); this stays for
+	 * the connection test and reads the same per-model flags as the transport.
 	 *
 	 * @param array $messages The messages array.
 	 * @param array $options Additional options.
@@ -119,7 +108,7 @@ class ABCC_OpenAI_Client {
 	 */
 	public function create_chat_completion( $messages, $options = array() ) {
 		$default_options = array(
-			'model'             => abcc_get_default_text_model(),
+			'model'             => abcc_get_model_id_from_selection( abcc_get_default_text_model() ),
 			'temperature'       => 0.7,
 			'max_tokens'        => 800,
 			'top_p'             => 1,
@@ -127,20 +116,29 @@ class ABCC_OpenAI_Client {
 			'presence_penalty'  => 0,
 		);
 
-		$options = array_merge( $default_options, $options );
+		$options   = array_merge( $default_options, $options );
+		$selection = abcc_parse_model_selection( $options['model'] );
+		if ( $selection['qualified'] && 'openai' !== $selection['provider'] ) {
+			return new WP_Error( 'abcc_unknown_model', 'Model selection does not belong to OpenAI' );
+		}
 
-		if ( $this->is_reasoning_model( $options['model'] ) ) {
-			// GPT-5.1+ (all gpt-5.x registry models) accept reasoning_effort
-			// 'none': no hidden reasoning tokens, so the whole budget goes to
-			// visible output. o-series models have no 'none' tier; their
-			// reasoning tokens are billed against the completion budget, so the
-			// floor must also cover them or the API returns an empty completion
-			// after burning the entire cap on reasoning.
-			$reasoning_off = 0 === strpos( $options['model'], 'gpt-5.' );
+		$options['model'] = $selection['model'];
+		$flags            = abcc_get_model_flags( 'openai', $options['model'] );
+		$budget           = max( (int) $options['max_tokens'], (int) $flags['min_output_tokens'] );
 
-			$options['max_completion_tokens'] = max( (int) $options['max_tokens'], $reasoning_off ? 1000 : 4000 );
-			$options['reasoning_effort']      = $reasoning_off ? 'none' : 'low';
-			unset( $options['max_tokens'], $options['temperature'], $options['top_p'], $options['frequency_penalty'], $options['presence_penalty'] );
+		if ( 'max_completion_tokens' === $flags['token_param'] ) {
+			$options['max_completion_tokens'] = $budget;
+			unset( $options['max_tokens'] );
+		} else {
+			$options['max_tokens'] = $budget;
+		}
+
+		if ( empty( $flags['temperature'] ) ) {
+			unset( $options['temperature'], $options['top_p'], $options['frequency_penalty'], $options['presence_penalty'] );
+		}
+
+		if ( '' !== (string) $flags['reasoning_effort'] ) {
+			$options['reasoning_effort'] = (string) $flags['reasoning_effort'];
 		}
 
 		$data = array_merge( $options, array( 'messages' => $messages ) );

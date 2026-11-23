@@ -41,24 +41,25 @@ $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 			<tr>
 				<th scope="row">
 					<label for="openai_char_limit"><?php esc_html_e( 'Content Length', 'automated-blog-content-creator' ); ?></label>
-					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Maximum length in tokens. Posts usually come out shorter than the ceiling: 200 ≈ up to 150 words; 800 ≈ up to 600; 2000 ≈ up to 1,500. Higher values cost more per post.', 'automated-blog-content-creator' ) ) ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'How long a post should be. The model is asked to aim for this many words and to finish inside it. Longer posts cost more: the estimate under the slider follows your choice.', 'automated-blog-content-creator' ) ) ); ?>
 				</th>
-				<td>
+				<td class="abcc-cost-scope">
 					<input type="range" id="openai_char_limit" name="openai_char_limit"
 						data-autosave-key="openai_char_limit"
+						data-abcc-cost-length
+						data-abcc-words-display="#abcc-char-limit-display"
 						min="100" max="4000" step="100"
-						value="<?php echo esc_attr( $char_limit ); ?>"
-						oninput="document.getElementById('abcc-char-limit-display').textContent = 'up to ≈' + Math.round(this.value * 0.75) + ' words';">
-					<span id="abcc-char-limit-display">
+						value="<?php echo esc_attr( $char_limit ); ?>">
+					<span id="abcc-char-limit-display" data-template="<?php /* translators: %s: approximate word count */ echo esc_attr__( 'about %s words', 'automated-blog-content-creator' ); ?>">
 						<?php
-						// 0.75 words-per-token matches the tooltip and {word_count}.
 						printf(
 							/* translators: %s: approximate word count */
-							esc_html__( 'up to ≈%s words', 'automated-blog-content-creator' ),
-							esc_html( (string) round( $char_limit * 0.75 ) )
+							esc_html__( 'about %s words', 'automated-blog-content-creator' ),
+							esc_html( (string) abcc_get_word_target( (int) $char_limit ) )
 						);
 						?>
 					</span>
+					<?php abcc_render_cost_estimate( (int) $char_limit, '', 'cost' ); ?>
 				</td>
 			</tr>
 			<tr>
@@ -95,6 +96,23 @@ $char_limit          = abcc_get_setting( 'openai_char_limit', 200 );
 							<?php checked( abcc_get_setting( 'openai_generate_seo', true ) ); ?>>
 						<?php esc_html_e( 'Generate SEO metadata automatically', 'automated-blog-content-creator' ); ?>
 					</label>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row">
+					<?php esc_html_e( 'Answer-focused structure', 'automated-blog-content-creator' ); ?>
+					<?php echo wp_kses_post( abcc_get_tooltip_html( __( 'Structures posts for AI answer engines. It does not promise rankings or citations, and search engines need no special markup for their AI features.', 'automated-blog-content-creator' ) ) ); ?>
+				</th>
+				<td>
+					<label>
+						<input type="checkbox" name="abcc_answer_engine_mode"
+							data-autosave-key="abcc_answer_engine_mode"
+							<?php checked( abcc_resolve_answer_mode() ); ?>>
+						<?php esc_html_e( 'Use question headings, key takeaways and a short FAQ', 'automated-blog-content-creator' ); ?>
+					</label>
+					<p class="description">
+						<?php esc_html_e( 'Question headings answered up front, three key takeaways and a short FAQ, all inside the post length. Best for how-to and reference posts; leave it off for opinion, news and announcements. Not applied to posts under about 400 words. Topics can override this.', 'automated-blog-content-creator' ); ?>
+					</p>
 				</td>
 			</tr>
 		</table>

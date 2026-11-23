@@ -166,7 +166,7 @@ function abcc_get_goal_icon( $goal_key ) {
  */
 function abcc_has_any_api_key() {
 	foreach ( abcc_get_provider_ids() as $provider ) {
-		if ( ! empty( abcc_get_provider_api_key( $provider ) ) ) {
+		if ( abcc_provider_is_ready( $provider ) ) {
 			return true;
 		}
 	}
@@ -233,6 +233,12 @@ function abcc_handle_onboarding_test_api() {
 	$api_key      = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$is_wp_config = isset( $_POST['wp_config'] ) && $_POST['wp_config'] === 'true';
 
+	// On multisite the custom endpoint's key belongs to the network admin.
+	if ( 'custom' === sanitize_key( $provider ) && ! abcc_current_user_can_manage_custom_endpoint() ) {
+		wp_send_json_error( array( 'message' => __( 'Only a network administrator can change the custom endpoint.', 'automated-blog-content-creator' ) ) );
+		return;
+	}
+
 	// Get API key from wp-config if needed
 	if ( $is_wp_config ) {
 		$constant_name = abcc_get_provider_constant_name( $provider );
@@ -275,7 +281,7 @@ function abcc_handle_onboarding_test_api() {
 	$current_provider = abcc_get_provider_for_model( abcc_get_setting( 'prompt_select' ) );
 	$first_model      = abcc_get_provider_default_model( $provider );
 	if ( ! empty( $first_model ) && empty( abcc_get_provider_api_key( $current_provider ) ) ) {
-		abcc_update_setting( 'prompt_select', $first_model );
+		abcc_update_setting( 'prompt_select', abcc_build_model_selection( $provider, $first_model ) );
 	}
 
 	wp_send_json_success( array( 'message' => __( 'Connection successful!', 'automated-blog-content-creator' ) ) );

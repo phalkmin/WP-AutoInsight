@@ -126,7 +126,7 @@ abcc_test(
 		$_POST = array();
 
 		abcc_assert_same(
-			abcc_get_provider_default_model( 'gemini' ),
+			abcc_build_model_selection( 'gemini', abcc_get_provider_default_model( 'gemini' ) ),
 			abcc_get_setting( 'prompt_select' ),
 			'A fresh install connecting Gemini must get a Gemini model.'
 		);

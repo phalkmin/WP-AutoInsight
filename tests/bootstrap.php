@@ -80,6 +80,8 @@ $GLOBALS['abcc_http_queue']        = array();
 $GLOBALS['abcc_http_last_request'] = null;
 $GLOBALS['abcc_test_post_meta']    = array();
 $GLOBALS['abcc_test_post_types']   = array();
+$GLOBALS['abcc_test_user_meta']    = array();
+$GLOBALS['abcc_test_current_screen'] = null;
 
 if ( ! class_exists( 'ABCC_Test_User' ) ) {
 	class ABCC_Test_User {
@@ -242,6 +244,17 @@ function get_role($name) {
 }
 function absint($value) { return abs((int) $value); }
 function get_current_user_id() { return $GLOBALS['abcc_test_current_user_id'] ?? 1; }
+// User meta mirrors core: a missing key reads as '' (single) or array().
+function get_user_meta($user_id, $key = '', $single = false) {
+	$meta = $GLOBALS['abcc_test_user_meta'][ (int) $user_id ] ?? array();
+	if ( '' === $key ) { return $meta; }
+	if ( ! array_key_exists( $key, $meta ) ) { return $single ? '' : array(); }
+	return $single ? $meta[ $key ] : array( $meta[ $key ] );
+}
+function update_user_meta($user_id, $key, $value) { $GLOBALS['abcc_test_user_meta'][ (int) $user_id ][ $key ] = $value; return true; }
+function delete_user_meta($user_id, $key) { unset( $GLOBALS['abcc_test_user_meta'][ (int) $user_id ][ $key ] ); return true; }
+// Tests set $GLOBALS['abcc_test_current_screen'] to an object with an ->id; null means no screen.
+function get_current_screen() { return $GLOBALS['abcc_test_current_screen'] ?? null; }
 function get_locale() { return $GLOBALS['abcc_test_locale'] ?? 'en_US'; }
 function is_wp_error($thing) { return $thing instanceof WP_Error; }
 if ( ! function_exists( 'wp_list_pluck' ) ) { function wp_list_pluck( $list, $field ) { return array_map( static function ( $i ) use ( $field ) { return is_array( $i ) ? ( isset( $i[ $field ] ) ? $i[ $field ] : null ) : ( isset( $i->$field ) ? $i->$field : null ); }, (array) $list ); } }
@@ -269,9 +282,13 @@ function get_bloginfo($key) {
 	return '';
 }
 function get_cat_name($id) { return 0 === (int) $id ? 'General' : 'Category ' . (int) $id; }
-function wp_trim_words($text, $num_words = 55) {
+// Mirror core: the $more text is appended only when words were dropped.
+function wp_trim_words($text, $num_words = 55, $more = null) {
 	$words = preg_split('/\s+/', trim(wp_strip_all_tags((string) $text)));
-	return implode(' ', array_slice($words, 0, $num_words));
+	if ( count( $words ) <= $num_words ) {
+		return implode(' ', $words);
+	}
+	return implode(' ', array_slice($words, 0, $num_words)) . ( null === $more ? '&hellip;' : $more );
 }
 function wp_kses_post($text) { return $text; }
 function wp_get_current_user() {
@@ -290,7 +307,9 @@ function wp_date( $format, $timestamp = null ) {
 	// Site timezone fixed at +3h in the harness.
 	return gmdate( $format, ( null === $timestamp ? time() : (int) $timestamp ) + 3 * HOUR_IN_SECONDS );
 }
-function abcc_debug_log($message) { return null; }
+function abcc_debug_log( $message ) {
+	$GLOBALS['abcc_test_debug_log'][] = (string) $message;
+}
 function abcc_handle_api_request_error($response, $api) { return null; }
 function get_attached_file($attachment_id) { return '/tmp/audio-' . (int) $attachment_id . '.mp3'; }
 function wp_get_attachment_url($attachment_id) { return 'https://example.test/wp-content/uploads/audio-' . (int) $attachment_id . '.mp3'; }
@@ -577,6 +596,48 @@ if ( ! function_exists( 'wp_remote_post' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wp_remote_get' ) ) {
+	// GET requests share the canned queue and the last-request record.
+	function wp_remote_get( $url, $args = array() ) {
+		$args['method'] = 'GET';
+		return wp_remote_post( $url, $args );
+	}
+}
+
+if ( ! function_exists( 'is_multisite' ) ) {
+	function is_multisite() {
+		return ! empty( $GLOBALS['abcc_test_multisite'] );
+	}
+}
+
+if ( ! function_exists( 'wp_parse_url' ) ) {
+	function wp_parse_url( $url, $component = -1 ) {
+		return parse_url( $url, $component ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+	}
+}
+
+if ( ! function_exists( 'untrailingslashit' ) ) {
+	function untrailingslashit( $value ) {
+		return rtrim( (string) $value, '/\\' );
+	}
+}
+
+if ( ! function_exists( 'esc_url_raw' ) ) {
+	// Mirrors core closely enough for the endpoint tests: only listed protocols survive.
+	function esc_url_raw( $url, $protocols = null ) {
+		$url       = trim( (string) $url );
+		$protocols = is_array( $protocols ) ? $protocols : array( 'http', 'https' );
+		$scheme    = strtolower( (string) parse_url( $url, PHP_URL_SCHEME ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+		return in_array( $scheme, $protocols, true ) ? $url : '';
+	}
+}
+
+if ( ! function_exists( 'home_url' ) ) {
+	function home_url( $path = '' ) {
+		return 'https://example.test' . $path;
+	}
+}
+
 if ( ! function_exists( 'wp_remote_request' ) ) {
 	// ABCC_OpenAI_Client uses wp_remote_request; share the same canned queue.
 	function wp_remote_request( $url, $args = array() ) {
@@ -668,6 +729,11 @@ require_once dirname(__DIR__) . '/includes/settings.php';
 require_once dirname(__DIR__) . '/includes/hooks.php';
 require_once dirname(__DIR__) . '/includes/fallback.php';
 require_once dirname(__DIR__) . '/includes/providers.php';
+require_once dirname(__DIR__) . '/includes/transport.php';
+require_once dirname(__DIR__) . '/includes/custom-models.php';
+require_once dirname(__DIR__) . '/includes/openrouter.php';
+require_once dirname(__DIR__) . '/includes/custom-endpoint.php';
+require_once dirname(__DIR__) . '/includes/usage.php';
 require_once dirname(__DIR__) . '/includes/api-keys.php';
 require_once dirname(__DIR__) . '/includes/token-handling.php';
 require_once dirname(__DIR__) . '/includes/scheduling.php';
@@ -684,6 +750,7 @@ require_once dirname(__DIR__) . '/gpt.php';
 require_once dirname(__DIR__) . '/includes/blocks.php';
 require_once dirname(__DIR__) . '/includes/audio.php';
 require_once dirname(__DIR__) . '/includes/class-abcc-job.php';
+require_once dirname(__DIR__) . '/includes/review-notice.php';
 require_once dirname(__DIR__) . '/includes/onboarding.php';
 require_once dirname(__DIR__) . '/includes/ajax-handlers.php';
 
@@ -770,6 +837,12 @@ if ( ! function_exists( 'esc_html' ) ) {
 if ( ! function_exists( 'esc_attr' ) ) {
 	function esc_attr( $text ) {
 		return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+if ( ! function_exists( 'esc_js' ) ) {
+	function esc_js( $text ) {
+		return str_replace( array( "\r", "\n" ), array( '', '\\n' ), addslashes( htmlspecialchars( (string) $text, ENT_COMPAT, 'UTF-8' ) ) );
 	}
 }
 
@@ -891,6 +964,7 @@ function abcc_test_reset_state() {
 	$GLOBALS['abcc_test_scheduled_events']     = array();
 	$GLOBALS['abcc_http_queue']                = array();
 	$GLOBALS['abcc_http_last_request']         = null;
+	$GLOBALS['abcc_test_debug_log']            = array();
 	$GLOBALS['abcc_test_last_json']            = null;
 	$GLOBALS['abcc_test_connectors']           = array();
 	$GLOBALS['abcc_test_current_user_caps']    = array();
@@ -905,6 +979,8 @@ function abcc_test_reset_state() {
 	$GLOBALS['abcc_test_mails']                = array();
 	$GLOBALS['abcc_test_mail_fails']           = false;
 	$GLOBALS['abcc_test_user_caps_by_id']      = array();
+	$GLOBALS['abcc_test_user_meta']            = array();
+	$GLOBALS['abcc_test_current_screen']       = null;
 	$GLOBALS['abcc_test_schedule']             = array(
 		'timestamp' => false,
 		'schedule'  => false,
@@ -914,8 +990,18 @@ function abcc_test_reset_state() {
 		$GLOBALS['abcc_test_doing_cron'],
 		$GLOBALS['abcc_test_schedule_fails'],
 		$GLOBALS['abcc_test_force_insert_error'],
-		$GLOBALS['abcc_test_force_insert_error_once']
+		$GLOBALS['abcc_test_force_insert_error_once'],
+		$GLOBALS['abcc_test_multisite']
 	);
+	if ( function_exists( 'abcc_flush_provider_registry_cache' ) ) {
+		abcc_flush_provider_registry_cache();
+	}
+}
+
+if ( ! function_exists( 'number_format_i18n' ) ) {
+	function number_format_i18n( $number, $decimals = 0 ) {
+		return number_format( (float) $number, (int) $decimals );
+	}
 }
 
 // Retirement dates are compared against the 2026-11-05 audit so date-gated

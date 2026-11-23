@@ -1,5 +1,68 @@
 == Full Changelog ==
 
+= 4.6.0 (Drive) =
+
+**Added**
+* Prompt v2: article prompts combine your audience, language, word target and template or topic brief with length-appropriate structure and rules against invented statistics, quotes, prices and firsthand experience. They request direct paragraphs without headings under about 400 words, about one section per 150 words from 400 to 900 words (three at 450, six at 900) and one more per 300 words above that, with an opening paragraph before the first heading and paragraphs of two or three sentences. Title and SEO calls have separate instructions. Custom templates keep working unchanged.
+* "Facts to use" on topics and single posts in the Composer. The model is asked to build on them and cite only supplied links.
+* Recent titles from the same topic or keyword group help the title and article calls choose a different angle.
+* Audience setting (Content tab), optional answer-focused structure (Settings > General, off by default, per-topic override, skipped under about 400 words), and template placeholders `{audience}`, `{site_description}`, `{section_count}`, `{format_block}`, `{source_notes}`, `{recent_titles}`.
+* Cost estimates beside Content Length, models on Connections, the Composer and per-group overrides update with the length or model. They cover the title/SEO call and article text, exclude featured images, truncation repair and fallback retries, show the pricing date, and say "cost unknown" when pricing is unavailable.
+* OpenRouter: one key for 300+ models, with a fixed ten-model shortlist and catalog search for other text models. The public catalog is cached for 24 hours and fetched without your key. Free models are labelled experimental and never chosen automatically. Estimates use catalog prices and note the credit-purchase fee separately; requests send your site address and plugin name. With a key saved, backup suggestions use a low-cost shortlist model from a different vendor than your primary.
+* Custom OpenAI-compatible endpoint (advanced): base URL, model ID, context window, max output and optional key, for Ollama, Groq, DeepSeek, Mistral, Together and similar services.
+* Custom model IDs for OpenAI, Claude, Gemini and Perplexity. IDs from newer generations (GPT-6+, Claude 5+, Gemini 3+) use that generation's parameter rules.
+* Rewrite with AI and Infographic now record their outcome and usage in the Generation Log.
+* New models: GPT-6 Luna, GPT-6.1 Terra and GPT-6.1 Sol; Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5; Gemini 3.5 Flash-Lite, 3.6 Flash and 3.8 Flash. Model definitions now include context windows, output limits and token prices dated 2026-11-05.
+* Retired models in saved settings or scheduled topics automatically use their replacements and disappear from pickers. Previous-generation models are labelled legacy.
+* Registry-driven text transport lets providers added through `abcc_provider_registry` generate text.
+* New filters: `abcc_generation_system_prompt`, `abcc_banned_phrases`, `abcc_tokens_per_word`, `abcc_post_cost_estimate`, `abcc_custom_endpoint_resolved_ips`, `abcc_model_flags`, `abcc_provider_request_body`.
+* A WordPress.org review request appears on plugin screens and generated-post lists after 5 successful posts and 14 days. It can be snoozed twice or dismissed permanently, and never appears within a day of a failure.
+* The Generation Log records the title, body word count and model, SEO, featured image, fallback, tokens and estimated cost for each job.
+
+**Changed**
+* Requires WordPress 7.0 or newer (was 6.8). Sites on older WordPress versions are not offered this update and stay on 4.5.3.
+* Content Length is now a word target instead of only a ceiling, so posts run longer and use more output tokens at the same setting. New installs default to 1200 (about 900 words). Upgrades with no saved length keep the old 200 setting (about 150 words) and see a one-time notice comparing both costs.
+* Requests and estimates share one token budget: a per-language ratio (about 1.35 tokens per word in English, more for Portuguese, German and non-Latin scripts), 30% headroom, a reasoning reserve, and the model's minimum and output limit.
+* Article format rules moved to the system message. `abcc_generation_prompt` still receives a string, now the brief without those rules; Rewrite and audio prompts are unchanged.
+* Per-model costs on Connections now use the live estimate at your current length instead of fixed "~$/post" figures.
+* Saved model choices now include their provider (`provider::model`). Existing choices keep working and are qualified when next saved, preventing gateway models from being sent to the wrong key.
+* Reasoning-only replies now explain that the model spent its output budget thinking instead of reporting an empty response. An out-of-credits reply (402) may use the configured backup.
+* Perplexity title and SEO calls now have an 800-token cap instead of 50 / 300; this is a ceiling, not a target.
+* Gemini 3 models send `thinkingLevel`; Gemini 2.5 keeps `thinkingBudget`.
+* Progress and status messages use plain language ("Starting…", "Your post is in the queue.", "Working on it… this can take a minute or two.") instead of job-queue terms, including Rewrite with AI, Infographic and post-from-audio in the editor.
+* Cost lines put the caveat on its own line ("Estimate for the title and article text. Images and retries cost extra. Prices checked DATE."). Bulk Generate and the Add Topic form now show a per-post estimate. The upgrade notice about post length is shorter and stays on the plugin's screens and the WordPress Dashboard.
+* Word counts read "about N words" instead of "up to ≈N words": the setting is a target, and models land a little above or below it.
+* Dashboard > Provider Health says why a provider is not working and links to Connections > API Keys. The reason is kept after the daily check.
+* The Topics table shows the model each topic uses, and saving a topic confirms with "Topic saved.". The Generation Log shows "Topic: NAME" in the Template column for topic runs and for regenerated topic posts. Editing a topic updates the cost line to that topic's model.
+* Bulk Generate starts on the Default Template and links each result as "Edit post". After a run, created keywords leave the box so a second click cannot repeat them; failed ones stay for a retry, and requests that got no answer point to the Generation Log first. The button reads "Generate 1 Post" for a single keyword.
+* Content > Keywords: the button is now "Save Groups and Templates", with a note that Writing Style saves by itself.
+
+**Security**
+* Custom endpoints require HTTPS for public hosts; WordPress re-checks those hosts on every request. Server and private-network addresses require "Local endpoint" (form validation on every request and DNS validation when saved). Mixed public/private DNS answers fail closed, and saved local hostnames are re-checked. URLs with credentials, queries or fragments are rejected; redirects are never followed; keyless endpoints must be local; and only network administrators can change the endpoint on multisite. Keys are never exported, auto-saved or logged.
+* Custom keys are bound to the endpoint's scheme, host and port. Rejected edits cannot save or validate a key against the previous endpoint, and a wp-config key cannot follow an origin change.
+* OpenRouter model definitions come from its catalog, not the add request; add, remove and search require `manage_options`.
+* "Reset All Settings" keeps the custom endpoint and key together so the key cannot be sent to a later address. On multisite, the setup wizard's key test cannot replace the custom endpoint key for a site administrator.
+
+**Fixed**
+* Title and SEO calls request more output tokens for Japanese, Chinese, Korean, Russian, Arabic and other languages that need them, preventing cut-off SEO data on models without a minimum output.
+* Sites without an image provider now see "No image provider is set up" instead of being told to check a nonexistent key when a featured image is missing.
+* Prompt text in Cyrillic, Greek, Arabic and scripts without spaces is now bounded like Latin text instead of being ignored by the word count.
+* A "request timeout" reply (HTTP 408) is temporary and may use the backup provider.
+* Claude or Gemini replies containing only hidden thinking now report that the budget was spent thinking instead of causing a parse error; the reasoning is never written to the debug log. Claude receives the JSON schema as an instruction for structured output, and Gemini 2.5's thinking budget stays within the model's output limit.
+* Regeneration preserves the original topic brief, facts and answer-mode choice. Truncation repair uses the provider that wrote the body, and provider refusals or safety blocks fail instead of becoming posts.
+* Pre-versioned upgrades keep the old length default, and retired OpenAI and Claude aliases use their successors. Failed jobs and successful SEO regeneration record usage; outdated cost responses cannot overwrite newer estimates.
+* Job-log usage no longer double-counts OpenAI reasoning tokens, pluralizes "call" correctly and states that it covers text calls only. The review notice stays visible when snoozing or dismissing it fails and stops after two snoozes.
+* A post body no longer opens with a heading that repeats the post title.
+* Saving Connections no longer turns on a backup provider you did not choose. "Nothing" stays selected, and the suggestion from your saved keys is a "Use this" link beside the field.
+* Saving Connections with a refused custom endpoint says "Your other settings were saved." instead of "Settings saved successfully!".
+* A redirect reply from a custom endpoint is reported as a redirect instead of a model problem. Error messages say "Content Length" like the settings screen and stop suggesting a backup provider when one is set. The fallback note appears once per job in the Generation Log.
+* A failed row in the Generation Log gives its advice once: the extra next-step line appears only when the error message does not already say where to go, and the usage line is left out when every call was refused before using tokens.
+* Free OpenRouter models are labelled "(free, experimental)" once instead of "(free) (free, experimental)", and their cost reads "free" instead of "≈$0.0000".
+* Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 are asked for low effort. Their hidden thinking counts against the output limit, and at the default effort it cut Claude Haiku 5.5 posts short, most often at the default length and with answer-focused structure on. Claude Haiku 5.5 also gets the same 4,000-token minimum output as Sonnet and Opus, so its thinking no longer cuts off posts written from a custom template.
+* Changing the custom endpoint's address clears the "Verified" status of the previous address.
+* Answer-focused posts in other languages no longer keep the two fixed section headings in English. The prompt now describes those headings instead of quoting them.
+* The Dashboard and Connections no longer scroll sideways at phone width. The setup wizard shows each provider's current default model (Gemini now starts on 3.5 Flash-Lite), and the dated Claude Sonnet 4.5 snapshot has its own name in model pickers.
+
 = 4.5.3 =
 
 **Fixed**
@@ -45,6 +108,9 @@
 * The stock default template text changed slightly ("number" was dropped from the list of things to include) and is refreshed on upgrade; custom templates are never touched.
 * Uninstall and deactivation clear queued job events, uninstall removes two pre-4.0 options, and export and reset tolerate extension settings that have no default.
 * README: the API-key security answer no longer claims database encryption, and the directory short description sits where WordPress.org reads it.
+
+**Changed**
+* Perplexity requests carry an `X-Pplx-Integration: wp-autoinsight` header so Perplexity can attribute the plugin's API traffic for integration support. No other provider, key or request body changes. (Community contribution.)
 
 **Security**
 * Job status and log are scoped to the job's creator or administrators.

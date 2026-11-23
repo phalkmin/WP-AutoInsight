@@ -216,3 +216,70 @@ abcc_test(
 		abcc_assert_same( gmdate( 'Y-m-d H:i', $ts + 3 * HOUR_IN_SECONDS ), $table->column_last_run( $row ) );
 	}
 );
+
+abcc_test(
+	'the Topics table names the model each topic will use',
+	function () {
+		abcc_update_setting( 'openai_api_key', 'sk-test' );
+		abcc_update_setting( 'prompt_select', 'openai::gpt-5.4-mini' );
+
+		abcc_assert_same( 'GPT-5.4 mini (global)', abcc_get_topic_model_label( array( 'provider_override' => '' ) ) );
+		abcc_assert_same( 'Claude Haiku 5.5', abcc_get_topic_model_label( array( 'provider_override' => 'claude::claude-haiku-5-5' ) ) );
+
+		// An override that names no known model is skipped at run time, so the global model is shown.
+		abcc_assert_same( 'GPT-5.4 mini (global)', abcc_get_topic_model_label( array( 'provider_override' => 'nowhere::no-such-model' ) ) );
+
+		abcc_assert_same( array( 'abcc_topic_notice' ), abcc_register_topic_notice_query_arg( array() ) );
+	}
+);
+
+abcc_test(
+	'the log names the topic instead of a content template for a topic run',
+	function () {
+		abcc_update_setting( 'openai_api_key', 'sk-test' );
+		abcc_update_setting( 'prompt_select', 'openai::gpt-5.4-mini' );
+
+		$topic_id = abcc_create_topic(
+			array(
+				'title'     => 'Home coffee brewing',
+				'prompt'    => 'Write about one brewing method.',
+				'frequency' => 'weekly',
+			)
+		);
+		abcc_assert_false( is_wp_error( $topic_id ) );
+
+		$job_id = abcc_queue_topic_generation( $topic_id );
+		abcc_assert_false( is_wp_error( $job_id ) );
+
+		abcc_assert_same( 'Topic: Home coffee brewing', abcc_get_job_template_label( $job_id, 'default' ) );
+
+		// Regenerating a topic's post keeps the topic in its payload under another source.
+		$regen_id = abcc_queue_generation_job(
+			abcc_build_generation_payload(
+				array(
+					'keywords' => array( 'coffee' ),
+					'topic_id' => $topic_id,
+					'prompt'   => 'Write about one brewing method.',
+					'source'   => 'regenerate',
+				)
+			)
+		);
+		abcc_assert_same( 'Topic: Home coffee brewing', abcc_get_job_template_label( $regen_id, 'default' ) );
+
+		// A job whose topic is gone still says it ran from a topic prompt.
+		$orphan_id = abcc_queue_generation_job(
+			abcc_build_generation_payload(
+				array(
+					'keywords' => array( 'coffee' ),
+					'topic_id' => 987654321,
+					'source'   => 'topic',
+				)
+			)
+		);
+		abcc_assert_same( 'Topic prompt', abcc_get_job_template_label( $orphan_id, 'default' ) );
+
+		// A job without a topic keeps its template name.
+		$plain_id = abcc_queue_generation_job( abcc_build_generation_payload( array( 'keywords' => array( 'coffee' ) ) ) );
+		abcc_assert_same( abcc_get_content_template_name( 'default' ), abcc_get_job_template_label( $plain_id, '' ) );
+	}
+);

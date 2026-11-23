@@ -43,3 +43,26 @@ abcc_test(
 		abcc_assert_true( abcc_should_offer_error_report( '' ) );
 	}
 );
+
+abcc_test(
+	'a redirect answer says redirects are not followed instead of blaming the model',
+	function () {
+		$redirect = abcc_format_generation_error( new WP_Error( 'abcc_provider_http_error', 'x', array( 'status' => 302 ) ), array( 'provider' => 'openai' ) );
+		abcc_assert_true( false !== strpos( $redirect, 'redirects are not followed' ), $redirect );
+		abcc_assert_false( false !== strpos( $redirect, 'model may no longer be available' ), $redirect );
+
+		$not_found = abcc_format_generation_error( new WP_Error( 'abcc_provider_http_error', 'x', array( 'status' => 404 ) ), array( 'provider' => 'openai' ) );
+		abcc_assert_true( false !== strpos( $not_found, 'model may no longer be available' ), $not_found );
+	}
+);
+
+abcc_test(
+	'length advice names the setting as the screen does',
+	function () {
+		foreach ( array( 'context_overflow', 'abcc_reasoning_only', 'abcc_provider_empty_completion' ) as $code ) {
+			$msg = abcc_format_generation_error( new WP_Error( $code, 'x' ), array( 'provider' => 'openai' ) );
+			abcc_assert_true( false !== strpos( $msg, 'Content Length' ), $code . ': ' . $msg );
+			abcc_assert_false( false !== strpos( $msg, 'character limit' ), $code . ': ' . $msg );
+		}
+	}
+);

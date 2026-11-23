@@ -88,6 +88,28 @@ function abcc_get_tooltip_html( $text ) {
 }
 
 /**
+ * Print the cost estimate line for a length on a model.
+ *
+ * js/admin.js refreshes it when an input in the same .abcc-cost-scope changes.
+ *
+ * @since 4.6.0
+ * @param int    $char_limit Content length setting.
+ * @param string $selection  Model selection; '' means the global model.
+ * @param string $mode       'summary' (words and cost) or 'cost' (cost only).
+ * @return void
+ */
+function abcc_render_cost_estimate( $char_limit, $selection = '', $mode = 'summary' ) {
+	$mode = 'cost' === $mode ? 'cost' : 'summary';
+	$text = abcc_get_length_cost_text( (int) $char_limit, (string) $selection );
+	?>
+	<p class="description abcc-cost-estimate" data-abcc-cost="<?php echo esc_attr( $mode ); ?>" aria-live="polite">
+		<span class="abcc-cost-estimate__summary"><?php echo esc_html( 'cost' === $mode ? $text['cost_text'] : $text['summary'] ); ?></span>
+		<span class="abcc-cost-estimate__detail"><?php echo esc_html( $text['detail'] ); ?></span>
+	</p>
+	<?php
+}
+
+/**
  * Returns the current primary tab slug.
  *
  * @return string
@@ -188,14 +210,16 @@ function abcc_handle_settings_page_actions() {
 				if ( isset( $_POST['abcc_group_name'] ) && is_array( $_POST['abcc_group_name'] ) ) {
 					// Per-group model overrides may only name a model the user can call.
 					$available_group_models = array();
-					foreach ( abcc_get_available_text_model_options() as $model_group ) {
-						$available_group_models = array_merge( $available_group_models, array_keys( (array) $model_group['options'] ) );
+					foreach ( abcc_get_available_text_model_options() as $group_provider_id => $model_group ) {
+						foreach ( array_keys( (array) $model_group['options'] ) as $group_model_id ) {
+							$available_group_models[] = abcc_build_model_selection( $group_provider_id, $group_model_id );
+						}
 					}
 
 					$group_models = array();
 					if ( isset( $_POST['abcc_group_model'] ) && is_array( $_POST['abcc_group_model'] ) ) {
 						foreach ( wp_unslash( $_POST['abcc_group_model'] ) as $index => $group_model ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-							$group_model = sanitize_text_field( (string) $group_model );
+							$group_model = abcc_get_live_model_selection( sanitize_text_field( (string) $group_model ) );
 							if ( in_array( $group_model, $available_group_models, true ) ) {
 								$group_models[ $index ] = $group_model;
 							}
@@ -243,6 +267,10 @@ function abcc_handle_settings_page_actions() {
 						abcc_sanitize_content_language( wp_unslash( $_POST['abcc_content_language'] ) )
 					);
 				}
+
+				if ( isset( $_POST['abcc_content_audience'] ) ) {
+					abcc_update_setting( 'abcc_content_audience', sanitize_text_field( wp_unslash( $_POST['abcc_content_audience'] ) ) );
+				}
 				break;
 
 			case 'connections':
@@ -253,6 +281,9 @@ function abcc_handle_settings_page_actions() {
 					$removed_provider = '';
 					if ( isset( $_POST['abcc_remove_key'] ) ) {
 						$removed_provider = sanitize_key( wp_unslash( $_POST['abcc_remove_key'] ) );
+						if ( 'custom' === $removed_provider && ! abcc_current_user_can_manage_custom_endpoint() ) {
+							$removed_provider = '';
+						}
 						if ( in_array( $removed_provider, abcc_get_provider_ids(), true ) ) {
 							abcc_delete_provider_saved_api_key( $removed_provider );
 						} else {
@@ -260,9 +291,38 @@ function abcc_handle_settings_page_actions() {
 						}
 					}
 
+					// Custom endpoint first: a host change drops the old key before a newly typed one is saved.
+					$custom_save_failed = false;
+					if ( isset( $_POST['abcc_custom_endpoint'] ) && is_array( $_POST['abcc_custom_endpoint'] ) && abcc_current_user_can_manage_custom_endpoint() ) {
+						$custom_had_key = '' !== (string) get_option( 'custom_api_key', '' );
+						// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- abcc_save_custom_endpoint() validates and sanitizes every field.
+						$custom_saved   = abcc_save_custom_endpoint( wp_unslash( $_POST['abcc_custom_endpoint'] ) );
+						$custom_new_key = isset( $_POST['custom_api_key'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['custom_api_key'] ) ) ) : '';
+						if ( $custom_had_key && '' === (string) get_option( 'custom_api_key', '' ) && '' === $custom_new_key ) {
+							add_settings_error( 'openai-settings', 'abcc_endpoint_key_cleared', __( 'The custom endpoint\'s address changed, so its saved key was removed. Enter the key for the new address.', 'automated-blog-content-creator' ), 'warning' );
+						}
+						if ( is_wp_error( $custom_saved ) ) {
+							$custom_save_failed = true;
+							add_settings_error(
+								'openai-settings',
+								$custom_saved->get_error_code(),
+								sprintf(
+									/* translators: %s: reason the endpoint was refused */
+									__( 'The custom endpoint was not saved. %s', 'automated-blog-content-creator' ),
+									$custom_saved->get_error_message()
+								),
+								'error'
+							);
+						}
+					}
+
 					// Save API keys for all providers using the registry.
 					foreach ( abcc_get_provider_ids() as $provider_id ) {
 						if ( $provider_id === $removed_provider ) {
+							continue;
+						}
+						// On multisite the custom endpoint and its key belong to the network admin.
+						if ( 'custom' === $provider_id && ( ! abcc_current_user_can_manage_custom_endpoint() || $custom_save_failed ) ) {
 							continue;
 						}
 						$key_field = $provider_id . '_api_key';
@@ -272,10 +332,13 @@ function abcc_handle_settings_page_actions() {
 						}
 					}
 
+					// Keys and the endpoint feed the registry; rebuild it before validating the model.
+					abcc_flush_provider_registry_cache();
+
 					// Save selected model.
 					$selected_model = isset( $_POST['selected_model'] ) ? sanitize_text_field( wp_unslash( $_POST['selected_model'] ) ) : '';
 					if ( ! empty( $selected_model ) ) {
-						abcc_update_setting( 'prompt_select', $selected_model );
+						abcc_update_setting( 'prompt_select', abcc_normalize_model_selection( $selected_model ) );
 					}
 					// Always re-validate: a removed key may have orphaned the primary model.
 					abcc_validate_selected_model();
@@ -284,15 +347,7 @@ function abcc_handle_settings_page_actions() {
 					if ( isset( $_POST['abcc_fallback_provider'] ) ) {
 						$fallback_provider = sanitize_key( wp_unslash( $_POST['abcc_fallback_provider'] ) );
 						$fallback_model    = isset( $_POST['abcc_fallback_model'] ) ? sanitize_text_field( wp_unslash( $_POST['abcc_fallback_model'] ) ) : '';
-						$fallback_chain    = ( '' !== $fallback_provider && '' !== $fallback_model )
-							? array(
-								array(
-									'provider' => $fallback_provider,
-									'model'    => $fallback_model,
-								),
-							)
-							: array();
-						abcc_update_setting( 'abcc_fallback_chain', abcc_sanitize_fallback_chain( $fallback_chain ) );
+						abcc_save_fallback_choice( $fallback_provider, $fallback_model );
 					}
 
 					// Perplexity options (also handled via auto-save, but accept form fallback).
@@ -303,7 +358,9 @@ function abcc_handle_settings_page_actions() {
 						abcc_update_setting( 'abcc_perplexity_recency_filter', sanitize_text_field( wp_unslash( $_POST['abcc_perplexity_recency_filter'] ) ) );
 					}
 
-					add_action( 'admin_footer', 'abcc_trigger_inline_api_validation' );
+					if ( ! $custom_save_failed ) {
+						add_action( 'admin_footer', 'abcc_trigger_inline_api_validation' );
+					}
 				} elseif ( 'scheduling' === $subtab ) {
 					$auto_create  = isset( $_POST['openai_auto_create'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_auto_create'] ) ) : '';
 					$email_notifs = isset( $_POST['openai_email_notifications'] );
@@ -380,6 +437,7 @@ function abcc_handle_settings_page_actions() {
 					abcc_update_setting( 'openai_char_limit', $char_limit );
 					abcc_update_setting( 'abcc_default_post_status', $post_status );
 					abcc_update_setting( 'openai_generate_seo', $generate_seo );
+					abcc_update_setting( 'abcc_answer_engine_mode', isset( $_POST['abcc_answer_engine_mode'] ) );
 
 				} elseif ( 'permissions' === $subtab ) {
 					$allowed_roles   = isset( $_POST['abcc_allowed_roles'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['abcc_allowed_roles'] ) ) : array();
@@ -425,6 +483,14 @@ function abcc_handle_settings_page_actions() {
 			$abcc_notice = __( 'Generation history deleted.', 'automated-blog-content-creator' );
 		} else {
 			$abcc_notice = __( 'Settings saved successfully!', 'automated-blog-content-creator' );
+
+			// A refused field already printed its own error; do not call the whole save a success.
+			foreach ( get_settings_errors( 'openai-settings' ) as $abcc_settings_error ) {
+				if ( 'error' === $abcc_settings_error['type'] ) {
+					$abcc_notice = __( 'Your other settings were saved.', 'automated-blog-content-creator' );
+					break;
+				}
+			}
 		}
 
 		add_action(
@@ -473,10 +539,12 @@ function abcc_openai_text_settings_page() {
 		'wpai-admin-scripts',
 		'abccAdmin',
 		array(
-			'nonce'       => wp_create_nonce( 'abcc_openai_generate_post' ),
-			'buttonNonce' => wp_create_nonce( 'abcc_admin_buttons' ),
-			'adminUrl'    => admin_url( 'post.php?' ),
-			'logUrl'      => add_query_arg(
+			'nonce'         => wp_create_nonce( 'abcc_openai_generate_post' ),
+			'buttonNonce'   => wp_create_nonce( 'abcc_admin_buttons' ),
+			'estimateNonce' => wp_create_nonce( 'abcc_estimate_cost_nonce' ),
+			'modelNonce'    => wp_create_nonce( 'abcc_custom_model_nonce' ),
+			'adminUrl'      => admin_url( 'post.php?' ),
+			'logUrl'        => add_query_arg(
 				array(
 					'page'   => 'automated-blog-content-creator-post',
 					'tab'    => 'content',
@@ -484,14 +552,24 @@ function abcc_openai_text_settings_page() {
 				),
 				admin_url( 'admin.php' )
 			),
-			'i18n'        => array(
+			'i18n'          => array(
 				'confirmRemoveKey'      => __( 'Remove this saved API key? Generation with this provider stops until you add a key again.', 'automated-blog-content-creator' ),
+				'confirmRemoveModel'    => __( 'Remove this model from your list? Anything still set to it will fail until you pick another model.', 'automated-blog-content-creator' ),
+				'addModel'              => __( 'Add', 'automated-blog-content-creator' ),
+				'modelAdded'            => __( 'In your list', 'automated-blog-content-creator' ),
+				'searching'             => __( 'Searching…', 'automated-blog-content-creator' ),
+				'noModelsFound'         => __( 'No models match that search.', 'automated-blog-content-creator' ),
+				'modelIdRequired'       => __( 'Enter the model ID first.', 'automated-blog-content-creator' ),
+				'saveBeforeModelChange' => __( 'Save your settings before adding or removing a model.', 'automated-blog-content-creator' ),
+				'saveEndpointFirst'     => __( 'Save the custom endpoint before validating its API key.', 'automated-blog-content-creator' ),
 				'savesAutomatically'    => __( 'Saves automatically', 'automated-blog-content-creator' ),
+				'fallbackPicked'        => __( 'Selected. Save your settings to turn it on.', 'automated-blog-content-creator' ),
 				/* translators: 1: number of posts created, 2: number of failed posts */
 				'bulkSummary'           => __( 'Done: %1$s created, %2$s failed', 'automated-blog-content-creator' ),
 				'viewLog'               => __( 'View log →', 'automated-blog-content-creator' ),
 				/* translators: %d: number of posts to generate */
 				'generateNPosts'        => __( 'Generate %d Posts', 'automated-blog-content-creator' ),
+				'generateOnePost'       => __( 'Generate 1 Post', 'automated-blog-content-creator' ),
 				'copied'                => __( 'Copied', 'automated-blog-content-creator' ),
 				/* translators: shown in auto-save indicator while saving */
 				'saving'                => __( 'Saving…', 'automated-blog-content-creator' ),
@@ -504,7 +582,6 @@ function abcc_openai_text_settings_page() {
 				'generating'            => __( 'Generating…', 'automated-blog-content-creator' ),
 				'done'                  => __( 'Done', 'automated-blog-content-creator' ),
 				'failed'                => __( 'Failed', 'automated-blog-content-creator' ),
-				'viewPost'              => __( 'View post', 'automated-blog-content-creator' ),
 				'editPost'              => __( 'Edit post', 'automated-blog-content-creator' ),
 				'postCreated'           => __( 'Post created!', 'automated-blog-content-creator' ),
 				'stillWorking'          => __( 'Still working… you can leave this page and check Content → Generation Log.', 'automated-blog-content-creator' ),
@@ -520,6 +597,8 @@ function abcc_openai_text_settings_page() {
 				'noImage'               => __( '(no featured image — open the post to retry)', 'automated-blog-content-creator' ),
 				'skipped'               => __( 'Skipped', 'automated-blog-content-creator' ),
 				'bulkStopped'           => __( 'Stopped early: fix the provider key or settings, then run the remaining keywords.', 'automated-blog-content-creator' ),
+				'bulkRetryHint'         => __( 'The keywords that failed are still in the box, so you can try them again.', 'automated-blog-content-creator' ),
+				'bulkCheckLogHint'      => __( 'Some requests got no answer, so their posts may still have been created. Check the Generation Log before running those keywords again.', 'automated-blog-content-creator' ),
 				'bulkLeaveWarning'      => __( 'A bulk run is still in progress. Leave anyway?', 'automated-blog-content-creator' ),
 				'selected'              => __( 'Selected:', 'automated-blog-content-creator' ),
 				'connectionError'       => __( 'Connection error', 'automated-blog-content-creator' ),
@@ -527,7 +606,7 @@ function abcc_openai_text_settings_page() {
 				'remove'                => __( 'Remove', 'automated-blog-content-creator' ),
 				'defaultTemplate'       => __( 'Default Template', 'automated-blog-content-creator' ),
 				'unnamedTemplate'       => __( 'Unnamed Template', 'automated-blog-content-creator' ),
-				'queueing'              => __( 'Queueing generation job…', 'automated-blog-content-creator' ),
+				'queueing'              => __( 'Starting…', 'automated-blog-content-creator' ),
 				'status'                => __( 'Status:', 'automated-blog-content-creator' ),
 				/* translators: %d: post ID */
 				'postCreatedId'         => __( 'Post created successfully. Post ID: %d', 'automated-blog-content-creator' ),
@@ -598,26 +677,24 @@ function abcc_validate_selected_model() {
 
 	// No model set yet (fresh install) — silently assign the first available, no notice.
 	if ( empty( $current_model ) ) {
-		$first_provider = reset( $available_models );
-		$first_model    = key( $first_provider['options'] );
-		abcc_update_setting( 'prompt_select', $first_model );
+		abcc_update_setting( 'prompt_select', abcc_get_first_available_model_selection( $available_models ) );
 		return;
 	}
 
-	// Verify the stored model still exists in available options.
-	$model_available = false;
-	foreach ( $available_models as $group ) {
-		if ( isset( $group['options'][ $current_model ] ) ) {
-			$model_available = true;
-			break;
-		}
-	}
+	// A retired model counts as its successor; never switch provider over a rename.
+	$live            = abcc_get_live_model_selection( $current_model );
+	$parsed          = abcc_parse_model_selection( $live );
+	$model_available = '' !== $parsed['provider'] && isset( $available_models[ $parsed['provider'] ]['options'][ $parsed['model'] ] );
 
 	if ( ! $model_available ) {
-		$first_provider = reset( $available_models );
-		$first_model    = key( $first_provider['options'] );
-		abcc_update_setting( 'prompt_select', $first_model );
+		abcc_update_setting( 'prompt_select', abcc_get_first_available_model_selection( $available_models ) );
 		add_action( 'admin_notices', 'abcc_model_changed_notice' );
+		return;
+	}
+
+	// Legacy bare IDs and retired IDs are rewritten the first time they are validated.
+	if ( $live !== $current_model ) {
+		abcc_update_setting( 'prompt_select', $live );
 	}
 }
 

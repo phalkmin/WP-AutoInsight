@@ -17,7 +17,7 @@ abcc_test(
 		abcc_assert_same( 'sk-keep', get_option( 'claude_api_key' ) );
 		abcc_assert_same( '4.5.2', get_option( 'abcc_version' ) );
 		abcc_assert_same( '1', get_option( 'abcc_onboarding_completed' ) );
-		abcc_assert_same( 200, (int) abcc_get_setting( 'openai_char_limit' ) );
+		abcc_assert_same( (int) abcc_get_setting_default( 'openai_char_limit' ), (int) abcc_get_setting( 'openai_char_limit' ) );
 		abcc_assert_same( 'draft', abcc_get_setting( 'abcc_default_post_status' ) );
 	}
 );

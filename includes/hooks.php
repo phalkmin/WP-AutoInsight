@@ -9,7 +9,10 @@
  * Shared `$context` shape (built by abcc_hook_safe_context()):
  *
  *   provider   string  Provider ID, e.g. 'openai', 'claude', 'gemini', 'perplexity'.
- *   model      string  Model ID, e.g. 'gpt-5.4-mini'.
+ *   model      string  Model selection as stored: 'provider::model' since 4.6.0
+ *                      (e.g. 'openai::gpt-5.4-mini'); bare IDs saved earlier
+ *                      pass through unchanged. abcc_parse_model_selection()
+ *                      splits either form.
  *   char_limit int     Requested tokens for this call.
  *   job_id     int     Job post ID when running from the queue; 0 when inline.
  *   source     string  Where the call came from. Post bodies carry the payload
@@ -20,6 +23,8 @@
  *   post_id    int     Only on abcc_post_inserted.
  *   brief      string  Topic jobs only: the topic prompt (bounded to 150 words),
  *                      carried so title and SEO calls follow it.
+ *   recent_titles array Titles of recent generated posts for the same topic
+ *                      or category, when there are any. Since 4.6.0.
  *
  * `api_key` is never present. Anything else the pipeline attached passes
  * through unchanged.
@@ -50,9 +55,37 @@
  * ---------------------------------------------------------------------------
  *
  * abcc_generation_prompt ( string $prompt, array $context ) : string
- *   The full prompt about to be sent, after templates, {language} and the
- *   global format requirements were applied.
- *   add_filter( 'abcc_generation_prompt', function ( $p, $ctx ) { return $p . "\nCite sources."; }, 10, 2 );
+ *   The user message about to be sent, always a string. For article bodies
+ *   this is the brief: the expanded template or topic prompt, with source
+ *   notes and recent titles. Since 4.6.0 the format rules for article bodies
+ *   travel in the system block instead (see abcc_generation_system_prompt);
+ *   Rewrite and audio prompts still carry them here.
+ *   add_filter( 'abcc_generation_prompt', function ( $p, $ctx ) { return $p . "\nMention our newsletter."; }, 10, 2 );
+ *
+ * abcc_generation_system_prompt ( string $system, array $context ) : string
+ *   The system block: persona, language, length, structure and grounding
+ *   rules plus the format rules for article bodies; a short block for title
+ *   and SEO calls; '' for calls that send none. Return '' to send no system
+ *   message. Models without a system role get it prepended to the user
+ *   message. Since 4.6.0.
+ *   add_filter( 'abcc_generation_system_prompt', function ( $s, $ctx ) { return 'article' === abcc_get_generation_operation( $ctx ) ? $s . "\nWrite in British English." : $s; }, 10, 2 );
+ *
+ * abcc_banned_phrases ( string[] $phrases, array $context ) : string[]
+ *   Phrases article bodies are told to avoid. $context carries word_count
+ *   and language. Since 4.6.0.
+ *
+ * abcc_tokens_per_word ( float $ratio, string $code, string $locale ) : float
+ *   Output tokens assumed per visible word for a language; drives the token
+ *   request and the cost estimate. Since 4.6.0.
+ *
+ * abcc_post_cost_estimate ( array $estimate, string $selection, int $words ) : array
+ *   The pre-run estimate for one post: words, cost (float, or null when no
+ *   price is known; never 0 for "unknown"), currency, includes[], excludes[],
+ *   pricing_date, pricing_source, model, notes[]. Since 4.6.0.
+ *
+ * abcc_custom_endpoint_resolved_ips ( array|null $ips, string $host ) : array|null
+ *   Addresses a custom endpoint host resolves to, checked when the endpoint
+ *   is saved. Return an array to skip the DNS lookup. Since 4.6.0.
  *
  * abcc_generation_result ( array $result, array $context ) : array
  *   The normalized result tuple before it is returned to the pipeline.
@@ -82,6 +115,18 @@
  *
  * abcc_fallback_backoff_us ( int $microseconds, int $attempt ) : int
  *   Sleep before a fallback attempt. Return 0 to disable. Since 4.5.0.
+ *
+ * abcc_model_flags ( array $flags, string $provider, string $model ) : array
+ *   Effective request flags for a model (token_param, system_role,
+ *   temperature, reasoning, min_output_tokens, max_output, context_window,
+ *   structured_output, timeout). Since 4.6.0.
+ *
+ * abcc_provider_request_body ( array $body, string $provider, string $model, array $opts ) : array
+ *   Decoded request body just before it is sent; $opts never carries the key. Since 4.6.0.
+ *
+ * abcc_retirement_now ( int $now ) : int
+ *   Unix time compared against a model's 'retires' date before the saved
+ *   selection is swapped for its 'successor'. Since 4.5.3.
  *
  * @package WP-AutoInsight
  * @since 4.5.0

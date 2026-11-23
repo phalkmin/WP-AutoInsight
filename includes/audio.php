@@ -162,7 +162,7 @@ function abcc_build_post_from_transcript( $transcript, $mode, $options = array()
 	// Resolve the key for the text model's provider so a Claude/Gemini model
 	// is not called with the OpenAI key.
 	$gen_key = abcc_check_api_key( $model );
-	if ( empty( $gen_key ) ) {
+	if ( empty( $gen_key ) && ! abcc_model_is_ready( $model ) ) {
 		return new WP_Error(
 			'abcc_audio_no_gen_key',
 			__( 'No API key configured for the selected content model. Add one under Connections.', 'automated-blog-content-creator' )
@@ -724,8 +724,8 @@ function abcc_enqueue_audio_scripts( $hook ) {
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'abcc_admin_buttons' ),
 			'i18n'    => array(
-				'transcribing'     => __( 'Transcribing audio...', 'automated-blog-content-creator' ),
-				'creating'         => __( 'Creating post...', 'automated-blog-content-creator' ),
+				'transcribing'     => __( 'Transcribing audio…', 'automated-blog-content-creator' ),
+				'creating'         => __( 'Creating post…', 'automated-blog-content-creator' ),
 				'error'            => __( 'An error occurred', 'automated-blog-content-creator' ),
 				'noTranscript'     => __( 'No transcript available', 'automated-blog-content-creator' ),
 				'timedOut'         => __( 'Request timed out. Try with a smaller file.', 'automated-blog-content-creator' ),

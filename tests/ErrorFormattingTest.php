@@ -120,24 +120,34 @@ abcc_test(
 );
 
 abcc_test(
-	'next-step hints exist for actionable codes and are empty otherwise',
+	'a next step is given only where the error message leaves the fix out',
 	function () {
-		$actionable = array(
+		// These messages already name the screen to open.
+		$self_explaining = array(
 			'abcc_no_api_key',
 			'abcc_provider_auth_error',
-			'abcc_provider_rate_limited',
-			'abcc_provider_server_error',
-			'http_request_failed',
+			'abcc_provider_http_error',
+			'abcc_unknown_provider',
+			'abcc_unknown_model',
+			'abcc_provider_cannot_comply',
+			'abcc_reasoning_only',
 			'context_overflow',
 		);
-		foreach ( $actionable as $code ) {
-			abcc_assert_true( '' !== abcc_get_generation_error_next_step( $code ), $code . ' needs a next step.' );
-			abcc_assert_same(
-				abcc_get_generation_error_next_step( $code ),
-				abcc_get_generation_error_next_step( new WP_Error( $code, 'x' ) ),
-				'WP_Error and string forms must agree for ' . $code
-			);
+		foreach ( $self_explaining as $code ) {
+			$message = abcc_format_generation_error( new WP_Error( $code, 'x', array( 'status' => 404 ) ), array( 'provider' => 'openai' ) );
+			abcc_assert_true( 1 === preg_match( '/(Connections|Settings) > /', $message ), $code . ' must name a screen: ' . $message );
+			abcc_assert_same( '', abcc_get_generation_error_next_step( $code ), $code . ' must not repeat the message.' );
 		}
+
+		// Transient failures get the one thing the message does not say.
+		foreach ( array( 'abcc_provider_rate_limited', 'abcc_provider_server_error', 'http_request_failed', 'abcc_provider_payment_required', 'abcc_job_never_started', 'abcc_ai_disabled' ) as $code ) {
+			$step = abcc_get_generation_error_next_step( $code );
+			abcc_assert_true( '' !== $step, $code . ' needs a next step.' );
+			abcc_assert_false( false !== strpos( $step, '→' ), $code . ' must use the same ">" as the stored message: ' . $step );
+			abcc_assert_same( $step, abcc_get_generation_error_next_step( new WP_Error( $code, 'x' ) ), 'WP_Error and string forms must agree for ' . $code );
+		}
+
+		abcc_assert_same( '', abcc_get_generation_error_next_step( 'abcc_provider_content_blocked' ) );
 		abcc_assert_same( '', abcc_get_generation_error_next_step( 'abcc_provider_parse_error' ) );
 		abcc_assert_same( '', abcc_get_generation_error_next_step( '' ) );
 		abcc_assert_same( '', abcc_get_generation_error_next_step( null ) );
@@ -150,9 +160,9 @@ abcc_test(
 		$job_id                                     = 4321;
 		$GLOBALS['abcc_test_post_types'][ $job_id ] = ABCC_Job::POST_TYPE;
 
-		abcc_mark_job_failed( $job_id, 'OpenAI rejected the API key.', false, 'abcc_provider_auth_error' );
+		abcc_mark_job_failed( $job_id, 'OpenAI is rate limiting requests.', false, 'abcc_provider_rate_limited' );
 
-		abcc_assert_same( 'abcc_provider_auth_error', get_post_meta( $job_id, '_abcc_job_error_code', true ) );
+		abcc_assert_same( 'abcc_provider_rate_limited', get_post_meta( $job_id, '_abcc_job_error_code', true ) );
 
 		$data = abcc_get_job_data( $job_id );
 		abcc_assert_true( is_array( $data ) && '' !== $data['nextStep'], 'Job data must carry the next-step hint.' );

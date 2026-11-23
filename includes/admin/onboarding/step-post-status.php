@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<label class="abcc-onboarding-radio">
 					<input type="radio" name="abcc_onboarding_status" value="draft" <?php checked( $abcc_status, 'draft' ); ?>>
 					<strong><?php esc_html_e( 'Save as drafts', 'automated-blog-content-creator' ); ?></strong>
-					<span><?php esc_html_e( 'Recommended for agencies — review before publishing.', 'automated-blog-content-creator' ); ?></span>
+					<span><?php esc_html_e( 'Recommended. You review each post before it goes live.', 'automated-blog-content-creator' ); ?></span>
 				</label>
 				<label class="abcc-onboarding-radio">
 					<input type="radio" name="abcc_onboarding_status" value="publish" <?php checked( $abcc_status, 'publish' ); ?>>

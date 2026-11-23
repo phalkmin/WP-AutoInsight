@@ -50,7 +50,7 @@ function abcc_add_create_post_button() {
 			}
 
 			$button.css('pointer-events', 'none');
-			abcc.showStatus($status, '<?php echo esc_js( __( 'Queueing generation job…', 'automated-blog-content-creator' ) ); ?>');
+			abcc.showStatus($status, '<?php echo esc_js( __( 'Starting…', 'automated-blog-content-creator' ) ); ?>');
 
 			$.ajax({
 				url: ajaxurl,
@@ -70,7 +70,7 @@ function abcc_add_create_post_button() {
 					}
 				},
 				error: function() {
-					abcc.setError($status, '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+					abcc.setError($status, '<?php echo esc_js( __( 'Could not reach the server. Check your connection.', 'automated-blog-content-creator' ) ); ?>');
 					$button.css('pointer-events', 'auto');
 				}
 			});
@@ -80,7 +80,7 @@ function abcc_add_create_post_button() {
 					nonce: '<?php echo esc_js( wp_create_nonce( 'abcc_openai_generate_post' ) ); ?>',
 					$status: $status,
 					onUpdate: function(job) {
-						abcc.showStatus($status, '<?php echo esc_js( __( 'Status:', 'automated-blog-content-creator' ) ); ?> ' + job.statusLabel);
+						abcc.showStatus($status, job.progressLabel || '<?php echo esc_js( __( 'Status:', 'automated-blog-content-creator' ) ); ?> ' + job.statusLabel);
 					},
 					onSuccess: function(job) {
 						if (job.post_id) {
@@ -96,7 +96,7 @@ function abcc_add_create_post_button() {
 						$button.css('pointer-events', 'auto');
 					},
 					onError: function(message) {
-						abcc.setError($status, message || '<?php echo esc_js( __( 'Network error occurred', 'automated-blog-content-creator' ) ); ?>');
+						abcc.setError($status, message || '<?php echo esc_js( __( 'Could not reach the server. Check your connection.', 'automated-blog-content-creator' ) ); ?>');
 						$button.css('pointer-events', 'auto');
 					},
 					onStall: function() {

@@ -35,7 +35,9 @@
 		$( '#abcc-topic-keywords' ).val( '' );
 		$( '#abcc-topic-frequency' ).val( 'daily' );
 		$( '#abcc-topic-status-override' ).val( '' );
-		$( '#abcc-topic-provider-override' ).val( '' );
+		$( '#abcc-topic-provider-override' ).val( '' ).trigger( 'change' );
+		$( '#abcc-topic-source-notes' ).val( '' );
+		$( '#abcc-topic-answer-mode' ).val( '' );
 		$( '#abcc-topic-form-title' ).text( abccTopics.i18n.addTopic );
 		$( '#abcc-topic-cancel' ).hide();
 		feedback( '', false );
@@ -59,6 +61,8 @@
 				frequency: $( '#abcc-topic-frequency' ).val(),
 				post_status_override: $( '#abcc-topic-status-override' ).val(),
 				provider_override: $( '#abcc-topic-provider-override' ).val(),
+				source_notes: $( '#abcc-topic-source-notes' ).val(),
+				answer_mode: $( '#abcc-topic-answer-mode' ).val(),
 			};
 			var action = 'abcc_topic_create';
 
@@ -72,7 +76,10 @@
 			post( action, data )
 				.done( function ( response ) {
 					if ( response.success ) {
-						window.location.reload();
+						// The reloaded page shows "Topic saved."; the flag rides in the URL, not in browser storage.
+						var url = new URL( window.location.href );
+						url.searchParams.set( 'abcc_topic_notice', 'saved' );
+						window.location.href = url.toString();
 					} else {
 						feedback( ( response.data && response.data.message ) || abccTopics.i18n.error, true );
 					}
@@ -95,7 +102,9 @@
 			$( '#abcc-topic-keywords' ).val( ( topic.keywords || [] ).join( '\n' ) );
 			$( '#abcc-topic-frequency' ).val( topic.frequency );
 			$( '#abcc-topic-status-override' ).val( topic.post_status_override );
-			$( '#abcc-topic-provider-override' ).val( topic.provider_override );
+			$( '#abcc-topic-provider-override' ).val( topic.provider_override ).trigger( 'change' );
+			$( '#abcc-topic-source-notes' ).val( topic.source_notes || '' );
+			$( '#abcc-topic-answer-mode' ).val( topic.answer_mode || '' );
 			$( '#abcc-topic-form-title' ).text( abccTopics.i18n.editTopic );
 			$( '#abcc-topic-cancel' ).show();
 			$( 'html, body' ).animate( { scrollTop: $( '#abcc-topic-form-wrap' ).offset().top - 50 }, 200 );

@@ -20,7 +20,7 @@ $composer_has_key  = ! empty( $composer_models ); // No connected provider => no
 $composer_resolved = abcc_resolve_composer_source( abcc_get_setting( 'abcc_composer_last_source', '' ) );
 $composer_ready    = ! is_wp_error( $composer_resolved );
 $composer_status   = abcc_get_setting( 'abcc_default_post_status', 'draft' );
-$composer_model    = abcc_get_setting( 'prompt_select', '' );
+$composer_model    = abcc_get_live_model_selection( abcc_get_setting( 'prompt_select', '' ) );
 
 // Scheduling status.
 $schedule_info   = abcc_get_openai_event_schedule();
@@ -44,6 +44,9 @@ $provider_cards = array();
 $health_rows    = get_option( 'abcc_provider_health', array() );
 foreach ( $providers as $provider_id ) {
 	$provider = abcc_get_provider( $provider_id );
+	if ( ! empty( $provider['custom_endpoint'] ) && ! abcc_provider_supports_text_generation( $provider_id ) ) {
+		continue;
+	}
 	$snapshot = abcc_get_provider_health_snapshot( $provider_id, $health_rows );
 
 	$provider_cards[] = array(
@@ -70,6 +73,15 @@ usort(
 
 $page_slug = 'automated-blog-content-creator-post';
 
+$abcc_api_keys_url = add_query_arg(
+	array(
+		'page'   => $page_slug,
+		'tab'    => 'connections',
+		'subtab' => 'api-keys',
+	),
+	admin_url( 'admin.php' )
+);
+
 // ── Capability grid (Zone 2) ───────────────────────────────────────────────
 $cap_topic_count  = count( array_filter( wp_list_pluck( $composer_topics, 'active' ) ) );
 $cap_images_on    = (bool) abcc_get_setting( 'openai_generate_images', true );
@@ -85,7 +97,7 @@ foreach ( $provider_cards as $card ) {
 <div class="abcc-dashboard">
 
 	<!-- Zone 1: Composer -->
-	<div class="abcc-composer" id="abcc-composer">
+	<div class="abcc-composer abcc-cost-scope" id="abcc-composer">
 		<div class="abcc-composer__header">
 			<span class="abcc-composer__lede"><?php esc_html_e( 'Next post will use', 'automated-blog-content-creator' ); ?></span>
 			<?php if ( $composer_has_key && $composer_ready ) : ?>
@@ -171,7 +183,7 @@ foreach ( $provider_cards as $card ) {
 			<div class="abcc-composer__fields" id="abcc-composer-fields" hidden>
 				<p class="abcc-composer__field">
 					<label for="abcc-composer-source"><?php esc_html_e( 'Source', 'automated-blog-content-creator' ); ?></label>
-					<select id="abcc-composer-source">
+					<select id="abcc-composer-source" data-abcc-cost-source>
 						<?php if ( ! empty( $composer_groups ) ) : ?>
 							<optgroup label="<?php esc_attr_e( 'Keyword groups', 'automated-blog-content-creator' ); ?>">
 								<?php foreach ( $composer_groups as $i => $g ) : ?>
@@ -204,11 +216,11 @@ foreach ( $provider_cards as $card ) {
 				</p>
 				<p class="abcc-composer__field">
 					<label for="abcc-composer-model"><?php esc_html_e( 'Model', 'automated-blog-content-creator' ); ?></label>
-					<select id="abcc-composer-model">
-						<?php foreach ( $composer_models as $group ) : ?>
+					<select id="abcc-composer-model" data-abcc-cost-model>
+						<?php foreach ( $composer_models as $group_provider_id => $group ) : ?>
 							<optgroup label="<?php echo esc_attr( $group['group'] ); ?>">
 								<?php foreach ( $group['options'] as $model_id => $model_label ) : ?>
-									<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $composer_model, $model_id ); ?>>
+									<option value="<?php echo esc_attr( abcc_build_model_selection( $group_provider_id, $model_id ) ); ?>" <?php selected( $composer_model, abcc_build_model_selection( $group_provider_id, $model_id ) ); ?>>
 										<?php echo esc_html( abcc_format_model_option_label( $model_id, $model_label ) ); ?>
 									</option>
 								<?php endforeach; ?>
@@ -223,7 +235,11 @@ foreach ( $provider_cards as $card ) {
 						<label><input type="radio" name="abcc-composer-status" value="publish" <?php checked( $composer_status, 'publish' ); ?>> <?php esc_html_e( 'Publish', 'automated-blog-content-creator' ); ?></label>
 					</span>
 				</p>
-				<p class="abcc-composer__note"><?php esc_html_e( 'Your Source choice sticks as the default for next time. Model and Save-as apply to this post only — your global settings are unchanged.', 'automated-blog-content-creator' ); ?></p>
+				<p class="abcc-composer__field abcc-composer__field--wide">
+					<label for="abcc-composer-notes"><?php esc_html_e( 'Facts to use (optional)', 'automated-blog-content-creator' ); ?></label>
+					<textarea id="abcc-composer-notes" rows="3" placeholder="<?php esc_attr_e( 'Product details, numbers, dates or links this post may rely on.', 'automated-blog-content-creator' ); ?>"></textarea>
+				</p>
+				<p class="abcc-composer__note"><?php esc_html_e( 'Your Source choice sticks as the default for next time. Model, Save-as and Facts apply to this post only — your global settings are unchanged.', 'automated-blog-content-creator' ); ?></p>
 			</div>
 
 			<div class="abcc-composer__actions">
@@ -232,6 +248,14 @@ foreach ( $provider_cards as $card ) {
 				</button>
 				<span class="abcc-composer__hint"><?php esc_html_e( 'One click runs with exactly what is shown.', 'automated-blog-content-creator' ); ?></span>
 				<span class="abcc-status" id="abcc-composer-status" style="display:none;"></span>
+			</div>
+			<div class="abcc-composer__estimate">
+				<?php
+				abcc_render_cost_estimate(
+					! empty( $composer_resolved['char_limit'] ) ? (int) $composer_resolved['char_limit'] : (int) abcc_get_setting( 'openai_char_limit', 200 ),
+					$composer_model
+				);
+				?>
 			</div>
 
 		<?php endif; ?>
@@ -555,7 +579,7 @@ foreach ( $provider_cards as $card ) {
 						</span>
 						<?php if ( $result_live && ABCC_Job::STATUS_SUCCESS === $job_status ) : ?>
 							<a href="<?php echo esc_url( (string) get_edit_post_link( $result ) ); ?>" class="abcc-activity-link">
-								<?php esc_html_e( 'View', 'automated-blog-content-creator' ); ?>
+								<?php esc_html_e( 'Edit', 'automated-blog-content-creator' ); ?>
 							</a>
 						<?php elseif ( $job_error && ABCC_Job::STATUS_FAILED === $job_status ) : ?>
 							<span class="abcc-activity-error">
@@ -582,7 +606,7 @@ foreach ( $provider_cards as $card ) {
 					$health_labels = array(
 						'connected' => __( 'Connected', 'automated-blog-content-creator' ),
 						'stale'     => __( 'Not verified recently', 'automated-blog-content-creator' ),
-						'failed'    => __( 'Not Working', 'automated-blog-content-creator' ),
+						'failed'    => __( 'Not working', 'automated-blog-content-creator' ),
 						'no_key'    => __( 'No key', 'automated-blog-content-creator' ),
 					);
 					$dot_class     = 'abcc-status-dot--' . str_replace( '_', '-', $card['health'] );
@@ -599,6 +623,19 @@ foreach ( $provider_cards as $card ) {
 						<span class="abcc-status-dot <?php echo esc_attr( $dot_class ); ?>"></span>
 						<span class="abcc-health-name"><?php echo esc_html( $card['name'] ); ?></span>
 						<span class="abcc-health-status"><?php echo esc_html( $health_labels[ $card['health'] ] ); ?></span>
+						<?php if ( 'failed' === $card['health'] ) : ?>
+							<span class="abcc-health-reason">
+								<?php
+								// Rows written before 4.6 hold only the generic label.
+								$abcc_health_reason = isset( $card['last_v']['message'] ) ? (string) $card['last_v']['message'] : '';
+								if ( '' === $abcc_health_reason || __( 'Connection failed', 'automated-blog-content-creator' ) === $abcc_health_reason ) {
+									$abcc_health_reason = __( 'The last connection check failed.', 'automated-blog-content-creator' );
+								}
+								echo esc_html( $abcc_health_reason );
+								?>
+								<a href="<?php echo esc_url( $abcc_api_keys_url ); ?>"><?php esc_html_e( 'Check it under Connections → API Keys', 'automated-blog-content-creator' ); ?></a>
+							</span>
+						<?php endif; ?>
 					</li>
 				<?php endforeach; ?>
 			</ul>

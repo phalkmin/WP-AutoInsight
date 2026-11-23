@@ -17,9 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @param int    $post_id Target post ID.
  * @param string $model   Model to use; '' falls back to the global prompt_select setting.
+ * @param int    $job_id  Optional. Job ID so the call's usage lands on the job.
  * @return true|WP_Error Returns true on success, WP_Error on failure.
  */
-function abcc_run_seo_regen( $post_id, $model = '' ) {
+function abcc_run_seo_regen( $post_id, $model = '', $job_id = 0 ) {
 	$post = get_post( (int) $post_id );
 	if ( ! $post ) {
 		return new WP_Error(
@@ -37,7 +38,7 @@ function abcc_run_seo_regen( $post_id, $model = '' ) {
 
 	$model   = ( '' !== $model ) ? $model : abcc_get_setting( 'prompt_select', abcc_get_default_text_model() );
 	$api_key = abcc_check_api_key( $model );
-	if ( empty( $api_key ) ) {
+	if ( empty( $api_key ) && ! abcc_model_is_ready( $model ) ) {
 		return new WP_Error(
 			'abcc_seo_regen_no_key',
 			__( 'No API key configured for the selected model.', 'automated-blog-content-creator' )
@@ -63,7 +64,7 @@ function abcc_run_seo_regen( $post_id, $model = '' ) {
 	);
 
 	try {
-		$seo = abcc_generate_title_and_seo( $api_key, $keywords, $model, $site_info );
+		$seo = abcc_generate_title_and_seo( $api_key, $keywords, $model, $site_info, (int) $job_id > 0 ? array( 'job_id' => (int) $job_id ) : array() );
 	} catch ( Exception $e ) {
 		// abcc_generate_title_and_seo() already formats the message through abcc_format_generation_error().
 		return new WP_Error( 'abcc_seo_regen_failed', $e->getMessage() );

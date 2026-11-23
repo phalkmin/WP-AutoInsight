@@ -214,15 +214,21 @@ abcc_test(
 );
 
 abcc_test(
-	'legacy body prompt goes through the shared expander',
+	'body path with no stored template sends the default brief plus the system block',
 	function () {
 		$GLOBALS['abcc_test_locale'] = 'pt_BR';
 
-		$prompt = abcc_build_legacy_content_prompt( 'Título', array( 'tokusatsu', 'anos 90' ), 800 );
+		abcc_test_queue_http_response( abcc_test_fake_generation( '<p>Corpo.</p>' ) );
+		abcc_generate_post_content( 'sk-test', array( 'tokusatsu', 'anos 90' ), 'gpt-4.1-mini-2025-04-14', 'Título', 800 );
 
-		abcc_assert_true( false !== strpos( $prompt, 'Portuguese' ), 'Legacy prompt must carry the language.' );
-		abcc_assert_same( 1, substr_count( $prompt, ABCC_CONTENT_FORMAT_REQUIREMENTS ), 'Format requirements appended exactly once, by the expander.' );
-		abcc_assert_false( false !== strpos( $prompt, '    - Use <h2>' ), 'The inline indented rule list must be gone.' );
-		abcc_assert_true( false !== strpos( $prompt, 'tokusatsu, anos 90' ) );
+		$body   = json_decode( $GLOBALS['abcc_http_last_request']['args']['body'], true );
+		$system = $body['messages'][0]['content'];
+		$brief  = $body['messages'][1]['content'];
+
+		abcc_assert_same( 'system', $body['messages'][0]['role'] );
+		abcc_assert_true( false !== strpos( $brief, 'Portuguese' ), 'The brief must carry the language.' );
+		abcc_assert_true( false !== strpos( $system, 'Portuguese' ), 'The system block must carry the language.' );
+		abcc_assert_same( 1, substr_count( $system . $brief, trim( ABCC_CONTENT_FORMAT_REQUIREMENTS ) ), 'Format rules are sent exactly once.' );
+		abcc_assert_true( false !== strpos( $brief, 'tokusatsu, anos 90' ) );
 	}
 );

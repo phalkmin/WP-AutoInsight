@@ -14,6 +14,8 @@ $current_model    = abcc_get_setting( 'prompt_select', '' );
 $model_options    = abcc_get_ai_model_options();
 $wp_connectors_on = abcc_wp_ai_client_available();
 $health_rows      = get_option( 'abcc_provider_health', array() );
+$abcc_char_limit  = (int) abcc_get_setting( 'openai_char_limit', 200 );
+$abcc_cost_legend = abcc_get_length_cost_text( $abcc_char_limit, $current_model );
 
 /**
  * Status span + Validate button for one provider.
@@ -39,8 +41,15 @@ $abcc_render_validate_control = static function ( $provider_id, $last_v ) {
 };
 
 
-// Build provider lists: text providers first, then image-only.
-$text_providers  = array_filter( abcc_get_provider_ids(), 'abcc_provider_supports_text_generation' );
+// Build provider lists: text providers first, then image-only. The custom
+// endpoint has its own card.
+$text_providers  = array_filter(
+	abcc_get_provider_ids(),
+	function ( $p ) {
+		$config = abcc_get_provider( $p );
+		return abcc_provider_supports_text_generation( $p ) && empty( $config['custom_endpoint'] );
+	}
+);
 $image_providers = array_filter(
 	abcc_get_provider_ids(),
 	function ( $p ) {
@@ -71,6 +80,17 @@ $image_providers = array_filter(
 				<?php esc_html_e( 'Learn more →', 'automated-blog-content-creator' ); ?>
 			</a>
 		</h2>
+
+		<p class="description">
+			<?php
+			printf(
+				/* translators: %s: word count */
+				esc_html__( 'Costs next to each model are estimates for one post at your current length (about %s words).', 'automated-blog-content-creator' ),
+				esc_html( number_format_i18n( $abcc_cost_legend['words'] ) )
+			);
+			echo ' ' . esc_html( $abcc_cost_legend['detail'] );
+			?>
+		</p>
 
 		<?php
 		foreach ( $text_providers as $provider_id ) :
@@ -109,15 +129,8 @@ $image_providers = array_filter(
 			}
 
 			// Models for this provider.
-			$provider_models = array();
-			foreach ( $model_options as $grp ) {
-				foreach ( $grp['options'] as $mid => $mdata ) {
-					if ( abcc_get_provider_for_model( $mid ) === $provider_id ) {
-						$provider_models[ $mid ] = $mdata;
-					}
-				}
-			}
-			$const = abcc_get_provider_constant_name( $provider_id );
+			$provider_models = isset( $model_options[ $provider_id ]['options'] ) ? (array) $model_options[ $provider_id ]['options'] : array();
+			$const           = abcc_get_provider_constant_name( $provider_id );
 			?>
 			<div class="abcc-provider-card">
 				<div class="abcc-provider-card__header">
@@ -272,38 +285,209 @@ $image_providers = array_filter(
 								);
 								?>
 								<label class="abcc-model-radio-label">
-									<input type="radio" name="selected_model" value="<?php echo esc_attr( $mid ); ?>"
-										<?php checked( $current_model, $mid ); ?>>
+									<input type="radio" name="selected_model" value="<?php echo esc_attr( abcc_build_model_selection( $provider_id, $mid ) ); ?>"
+										<?php checked( abcc_get_live_model_selection( $current_model ), abcc_build_model_selection( $provider_id, $mid ) ); ?>>
 									<span class="abcc-model-radio-name"><?php echo esc_html( abcc_format_model_option_label( $mid, $mdata ) ); ?></span>
 									<?php
 									if ( ! empty( $mdata['cost_warning'] ) ) :
 										?>
 										<span class="abcc-cost-warning description"><?php esc_html_e( 'Cost varies significantly per query — this model can be expensive.', 'automated-blog-content-creator' ); ?></span><?php endif; ?>
 									<span class="abcc-model-radio-cost">
-										<?php echo esc_html( $tier_labels[ $mdata['cost_tier'] ] ?? '' ); ?>
-										<?php if ( ! empty( $mdata['cost_per_post'] ) ) : ?>
-											&bull; ~$<?php echo esc_html( number_format( $mdata['cost_per_post'], 4 ) ); ?>/post
-										<?php endif; ?>
+										<?php
+										$abcc_model_cost = abcc_get_length_cost_text( $abcc_char_limit, abcc_build_model_selection( $provider_id, $mid ) );
+										if ( isset( $mdata['cost_tier'], $tier_labels[ $mdata['cost_tier'] ] ) ) {
+											echo esc_html( $tier_labels[ $mdata['cost_tier'] ] ) . ' &bull; ';
+										}
+										if ( null === $abcc_model_cost['cost'] ) {
+											esc_html_e( 'cost unknown', 'automated-blog-content-creator' );
+										} elseif ( 0.0 === (float) $abcc_model_cost['cost'] ) {
+											esc_html_e( 'free', 'automated-blog-content-creator' );
+										} else {
+											printf(
+												/* translators: %s: estimated cost of one post in US dollars */
+												esc_html__( '≈$%s per post', 'automated-blog-content-creator' ),
+												esc_html( abcc_format_cost_amount( $abcc_model_cost['cost'] ) )
+											);
+										}
+										?>
 									</span>
 								</label>
 							<?php endforeach; ?>
 						</div>
 					</div>
 				<?php endif; ?>
+
+				<?php if ( '' !== (string) abcc_get_provider_api_key( $provider_id ) && '' !== abcc_get_provider_transport( $provider_id ) && empty( $provider['single_model'] ) ) : ?>
+					<?php
+					$abcc_is_gateway    = ! empty( $provider['gateway'] );
+					$abcc_custom_models = abcc_get_custom_models( $provider_id );
+					?>
+					<details class="abcc-custom-models" data-provider="<?php echo esc_attr( $provider_id ); ?>" <?php echo ! empty( $abcc_custom_models ) ? 'open' : ''; ?>>
+						<summary>
+							<?php
+							if ( $abcc_is_gateway ) {
+								esc_html_e( 'Find another model in the catalog', 'automated-blog-content-creator' );
+							} else {
+								esc_html_e( 'Advanced: add a model by ID', 'automated-blog-content-creator' );
+							}
+							?>
+						</summary>
+
+						<?php if ( $abcc_is_gateway ) : ?>
+							<p class="description"><?php echo esc_html( abcc_get_openrouter_free_note() ); ?></p>
+							<p>
+								<label class="screen-reader-text" for="abcc-openrouter-search"><?php esc_html_e( 'Search OpenRouter models', 'automated-blog-content-creator' ); ?></label>
+								<input type="search" id="abcc-openrouter-search" class="regular-text abcc-openrouter-search" autocomplete="off"
+									placeholder="<?php esc_attr_e( 'Search by name or ID, e.g. llama or deepseek', 'automated-blog-content-creator' ); ?>">
+							</p>
+							<ul class="abcc-openrouter-results" aria-live="polite"></ul>
+						<?php else : ?>
+							<p class="description"><?php esc_html_e( 'For a model the provider released before this plugin listed it. The ID must match the provider\'s API exactly; a wrong ID fails with a "model not found" error. No price is known for models added here, so their cost shows as unknown.', 'automated-blog-content-creator' ); ?></p>
+							<p class="abcc-custom-model-fields">
+								<label><?php esc_html_e( 'Model ID', 'automated-blog-content-creator' ); ?>
+									<input type="text" class="regular-text abcc-custom-model-id" autocomplete="off" spellcheck="false"></label>
+								<label><?php esc_html_e( 'Display name', 'automated-blog-content-creator' ); ?>
+									<input type="text" class="abcc-custom-model-name" autocomplete="off"></label>
+								<label><?php esc_html_e( 'Context window (tokens)', 'automated-blog-content-creator' ); ?>
+									<input type="number" class="small-text abcc-custom-model-context" min="1024" step="1024" value="128000"></label>
+								<label><?php esc_html_e( 'Max output (tokens)', 'automated-blog-content-creator' ); ?>
+									<input type="number" class="small-text abcc-custom-model-output" min="256" step="256" value="8192"></label>
+								<button type="button" class="button abcc-custom-model-add"><?php esc_html_e( 'Add model', 'automated-blog-content-creator' ); ?></button>
+							</p>
+						<?php endif; ?>
+
+						<?php if ( ! empty( $abcc_custom_models ) ) : ?>
+							<ul class="abcc-custom-model-list">
+								<?php foreach ( $abcc_custom_models as $abcc_custom_id => $abcc_custom_def ) : ?>
+									<li>
+										<strong><?php echo esc_html( abcc_format_model_option_label( $abcc_custom_id, $abcc_custom_def ) ); ?></strong>
+										<code><?php echo esc_html( $abcc_custom_id ); ?></code>
+										<button type="button" class="button-link button-link-delete abcc-custom-model-remove" data-model-id="<?php echo esc_attr( $abcc_custom_id ); ?>">
+											<?php esc_html_e( 'Remove', 'automated-blog-content-creator' ); ?>
+										</button>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						<?php endif; ?>
+						<p class="abcc-custom-model-feedback" aria-live="polite"></p>
+					</details>
+				<?php endif; ?>
 			</div>
 		<?php endforeach; ?>
 
 		<?php
+		$abcc_custom          = abcc_get_custom_endpoint_settings();
+		$abcc_custom_provider = abcc_get_provider( 'custom' );
+		$abcc_custom_can_edit = abcc_current_user_can_manage_custom_endpoint();
+		$abcc_custom_ready    = abcc_provider_supports_text_generation( 'custom' );
+		$abcc_custom_snapshot = abcc_get_provider_health_snapshot( 'custom', $health_rows );
+		$abcc_custom_has_key  = '' !== (string) abcc_get_provider_saved_api_key( 'custom' );
+		$abcc_custom_constant = defined( 'CUSTOM_API' ) && '' !== (string) constant( 'CUSTOM_API' );
+		?>
+		<div class="abcc-provider-card abcc-custom-endpoint-card">
+			<div class="abcc-provider-card__header">
+				<strong class="abcc-provider-name"><?php esc_html_e( 'Custom OpenAI-compatible endpoint', 'automated-blog-content-creator' ); ?></strong>
+				<span class="description"><?php esc_html_e( '(advanced)', 'automated-blog-content-creator' ); ?></span>
+			</div>
+			<p class="description">
+				<?php esc_html_e( 'For Ollama, Groq, DeepSeek, Mistral, Together and other services that speak the OpenAI chat API. You are responsible for this provider\'s terms and for how it handles the prompts and posts sent to it.', 'automated-blog-content-creator' ); ?>
+			</p>
+
+			<?php if ( ! $abcc_custom_can_edit ) : ?>
+				<p><em><?php esc_html_e( 'Only a network administrator can change the custom endpoint.', 'automated-blog-content-creator' ); ?></em></p>
+				<?php if ( $abcc_custom_ready ) : ?>
+					<p><?php esc_html_e( 'Endpoint:', 'automated-blog-content-creator' ); ?> <code><?php echo esc_html( $abcc_custom['base_url'] ); ?></code></p>
+				<?php endif; ?>
+			<?php else : ?>
+				<table class="form-table abcc-provider-card__form">
+					<tr>
+						<th scope="row"><label for="abcc_custom_endpoint_base_url"><?php esc_html_e( 'Base URL', 'automated-blog-content-creator' ); ?></label></th>
+						<td>
+							<input type="url" id="abcc_custom_endpoint_base_url" name="abcc_custom_endpoint[base_url]" class="regular-text code"
+								value="<?php echo esc_attr( $abcc_custom['base_url'] ); ?>" autocomplete="off" spellcheck="false"
+								placeholder="https://api.example.com/v1">
+							<p class="description"><?php esc_html_e( 'The address that ends before /chat/completions. It must start with https:// unless it is a local endpoint. WordPress only allows public endpoints on ports 443 and 8080. Leave empty to turn the custom endpoint off.', 'automated-blog-content-creator' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Local endpoint', 'automated-blog-content-creator' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="abcc_custom_endpoint[allow_local]" value="1" <?php checked( $abcc_custom['allow_local'] ); ?>>
+								<?php esc_html_e( 'Allow an address on this server or its private network', 'automated-blog-content-creator' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( '"localhost" means the server WordPress runs on, not your own computer. A local endpoint may use http:// and may run without a key.', 'automated-blog-content-creator' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="abcc_custom_endpoint_model"><?php esc_html_e( 'Model ID', 'automated-blog-content-creator' ); ?></label></th>
+						<td>
+							<input type="text" id="abcc_custom_endpoint_model" name="abcc_custom_endpoint[model]" class="regular-text code"
+								value="<?php echo esc_attr( $abcc_custom['model'] ); ?>" autocomplete="off" spellcheck="false" placeholder="llama3.1">
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="abcc_custom_endpoint_context"><?php esc_html_e( 'Context window (tokens)', 'automated-blog-content-creator' ); ?></label></th>
+						<td>
+							<input type="number" id="abcc_custom_endpoint_context" name="abcc_custom_endpoint[context_window]" class="small-text"
+								min="1024" step="1024" value="<?php echo esc_attr( $abcc_custom['context_window'] ); ?>">
+							<label for="abcc_custom_endpoint_output" class="abcc-inline-label"><?php esc_html_e( 'Max output (tokens)', 'automated-blog-content-creator' ); ?></label>
+							<input type="number" id="abcc_custom_endpoint_output" name="abcc_custom_endpoint[max_output]" class="small-text"
+								min="256" step="256" value="<?php echo esc_attr( $abcc_custom['max_output'] ); ?>">
+							<p class="description"><?php esc_html_e( 'Check the model\'s documentation. Numbers that are too high make long posts fail; numbers that are too low cut them short.', 'automated-blog-content-creator' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="custom_api_key"><?php esc_html_e( 'API key', 'automated-blog-content-creator' ); ?></label></th>
+						<td>
+							<?php if ( $abcc_custom_constant ) : ?>
+								<strong><?php esc_html_e( 'API key set in wp-config.php.', 'automated-blog-content-creator' ); ?></strong>
+							<?php else : ?>
+								<input type="password" id="custom_api_key" name="custom_api_key" value="" class="regular-text" autocomplete="off"
+									placeholder="<?php echo esc_attr( $abcc_custom_has_key ? __( 'Saved — enter a new key to replace it', 'automated-blog-content-creator' ) : __( 'API key (optional for a local endpoint)', 'automated-blog-content-creator' ) ); ?>">
+								<?php if ( $abcc_custom_has_key ) : ?>
+									<button type="submit" name="abcc_remove_key" value="custom" class="button-link-delete abcc-remove-key">
+										<?php esc_html_e( 'Remove saved key', 'automated-blog-content-creator' ); ?>
+									</button>
+								<?php endif; ?>
+							<?php endif; ?>
+							<p class="description"><?php esc_html_e( 'The key is sent only to the address above. Redirects are not followed, so it cannot be passed on to another host.', 'automated-blog-content-creator' ); ?></p>
+						</td>
+					</tr>
+				</table>
+			<?php endif; ?>
+
+			<?php if ( $abcc_custom_ready ) : ?>
+				<?php $abcc_render_validate_control( 'custom', $abcc_custom_snapshot['last_check'] ); ?>
+				<p class="description"><?php esc_html_e( 'Validate checks three things in order: the endpoint answers, it accepts the key, and the model returns text.', 'automated-blog-content-creator' ); ?></p>
+				<?php if ( abcc_provider_is_ready( 'custom' ) ) : ?>
+					<div class="abcc-provider-models">
+						<strong><?php esc_html_e( 'Models:', 'automated-blog-content-creator' ); ?></strong>
+						<div class="abcc-model-radio-group">
+							<label class="abcc-model-radio-label">
+								<input type="radio" name="selected_model" value="<?php echo esc_attr( abcc_build_model_selection( 'custom', $abcc_custom['model'] ) ); ?>"
+									<?php checked( abcc_get_live_model_selection( $current_model ), abcc_build_model_selection( 'custom', $abcc_custom['model'] ) ); ?>>
+								<span class="abcc-model-radio-name"><?php echo esc_html( $abcc_custom['model'] ); ?></span>
+								<span class="abcc-model-radio-cost"><?php esc_html_e( 'cost unknown', 'automated-blog-content-creator' ); ?></span>
+							</label>
+						</div>
+					</div>
+				<?php elseif ( ! empty( $abcc_custom_provider['endpoint'] ) ) : ?>
+					<p class="description"><?php esc_html_e( 'Add the API key to use this endpoint. Only a local endpoint may run without one.', 'automated-blog-content-creator' ); ?></p>
+				<?php endif; ?>
+			<?php endif; ?>
+		</div>
+
+		<?php
 		// Fallback provider: one secondary slot, chosen from providers with a key
-		// other than the primary's. Suggested (not saved) when nothing is set.
-		$fallback_chain         = abcc_get_fallback_chain();
-		$fallback_saved         = ! empty( $fallback_chain[0] ) ? $fallback_chain[0] : array(
+		// other than the primary's. Nothing is preselected; a suggestion sits beside the field.
+		$fallback_chain   = abcc_get_fallback_chain();
+		$fallback_saved   = ! empty( $fallback_chain[0] ) ? $fallback_chain[0] : array(
 			'provider' => '',
 			'model'    => '',
 		);
-		$fallback_primary       = abcc_get_provider_for_model( $current_model );
-		$fallback_choices       = array();
-		$fallback_is_suggestion = false;
+		$fallback_primary = abcc_get_provider_for_model( $current_model );
+		$fallback_choices = array();
 
 		foreach ( $model_options as $fb_pid => $fb_group ) {
 			if ( $fb_pid === $fallback_primary ) {
@@ -319,14 +503,7 @@ $image_providers = array_filter(
 			);
 		}
 
-		if ( '' === $fallback_saved['provider'] && ! empty( $fallback_choices ) ) {
-			$fb_first               = array_keys( $fallback_choices )[0];
-			$fallback_saved         = array(
-				'provider' => $fb_first,
-				'model'    => abcc_get_provider_default_model( $fb_first ),
-			);
-			$fallback_is_suggestion = true;
-		}
+		$fallback_suggestion = abcc_get_fallback_suggestion( $fallback_primary, $fallback_choices );
 
 		$fallback_models_map = array();
 		foreach ( $fallback_choices as $fb_pid => $fb_choice ) {
@@ -365,8 +542,23 @@ $image_providers = array_filter(
 						</select>
 					</span>
 				</div>
-				<?php if ( $fallback_is_suggestion ) : ?>
-					<p class="description"><?php esc_html_e( 'Suggested from your saved keys — nothing is active until you save.', 'automated-blog-content-creator' ); ?></p>
+				<?php if ( ! empty( $fallback_suggestion ) ) : ?>
+					<p class="description abcc-fallback-suggestion">
+						<?php
+						printf(
+							/* translators: 1: provider name, 2: model name */
+							esc_html__( 'Suggested from your saved keys: %1$s, %2$s.', 'automated-blog-content-creator' ),
+							esc_html( $fallback_choices[ $fallback_suggestion['provider'] ]['name'] ),
+							esc_html( $fallback_choices[ $fallback_suggestion['provider'] ]['models'][ $fallback_suggestion['model'] ] )
+						);
+						?>
+						<button type="button" class="button-link abcc-fallback-use-suggestion"
+							data-provider="<?php echo esc_attr( $fallback_suggestion['provider'] ); ?>"
+							data-model="<?php echo esc_attr( $fallback_suggestion['model'] ); ?>">
+							<?php esc_html_e( 'Use this', 'automated-blog-content-creator' ); ?>
+						</button>
+						<span class="abcc-fallback-suggestion-status" aria-live="polite"></span>
+					</p>
 				<?php endif; ?>
 				<p class="description">
 					<?php esc_html_e( 'Fallback kicks in for rate limits, provider outages, and network errors. It does not retry invalid keys or prompts that are too long — those need your attention.', 'automated-blog-content-creator' ); ?>

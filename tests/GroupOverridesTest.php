@@ -146,6 +146,6 @@ abcc_test(
 		abcc_assert_same( 'claude-sonnet-4-6', $payload['model'], 'Group override applies when no per-call override.' );
 
 		$payload = abcc_apply_composer_overrides( $payload, array( 'model' => 'gpt-5.4' ) );
-		abcc_assert_same( 'gpt-5.4', $payload['model'], 'Per-call override wins.' );
+		abcc_assert_same( 'openai::gpt-5.4', $payload['model'], 'Per-call override wins.' );
 	}
 );

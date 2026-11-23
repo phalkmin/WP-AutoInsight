@@ -156,12 +156,12 @@ class ABCC_Plugin {
 			);
 		}
 
-		if ( version_compare( $wp_version, '6.8', '<' ) ) {
+		if ( version_compare( $wp_version, '7.0', '<' ) ) {
 			deactivate_plugins( plugin_basename( dirname( __DIR__ ) . '/auto-post.php' ) );
 			wp_die(
 				sprintf(
 					/* translators: %s: WordPress version */
-					esc_html__( 'WP-AutoInsight requires WordPress version 6.8 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-blog-content-creator' ),
+					esc_html__( 'WP-AutoInsight requires WordPress version 7.0 or higher. Your current WordPress version is %s. Please upgrade WordPress to activate this plugin.', 'automated-blog-content-creator' ),
 					esc_html( $wp_version )
 				),
 				'Plugin Activation Error',
@@ -214,14 +214,14 @@ class ABCC_Plugin {
 				array(
 					'i18n' => array(
 						/* translators: confirmation dialog when rewriting a post with AI */
-						'confirmRewrite'        => __( 'Rewrite this post with AI? The result replaces the editor content. WordPress may autosave a draft you own, so to discard it use Undo in the block editor, or reload without saving in the classic editor.', 'automated-blog-content-creator' ),
+						'confirmRewrite'        => __( 'Rewrite this post with AI? The new text replaces what is in the editor. To go back, use Undo in the block editor, or reload without saving in the classic editor.', 'automated-blog-content-creator' ),
 						/* translators: confirmation dialog when regenerating a post as a new draft */
 						'confirmRegenerate'     => __( 'Regenerate this post? A new draft will be created with the same parameters.', 'automated-blog-content-creator' ),
 						/* translators: confirmation dialog when creating an infographic */
 						'confirmInfographic'    => __( 'Create an infographic for this post?', 'automated-blog-content-creator' ),
 						/* translators: button label while AI rewrite is in progress */
-						'rewriting'             => __( 'Rewriting...', 'automated-blog-content-creator' ),
-						'analyzing'             => __( 'Analyzing content...', 'automated-blog-content-creator' ),
+						'rewriting'             => __( 'Rewriting…', 'automated-blog-content-creator' ),
+						'analyzing'             => __( 'Rewriting your post…', 'automated-blog-content-creator' ),
 						'rewriteApplied'        => __( 'Rewritten. Review the result before saving.', 'automated-blog-content-creator' ),
 						'rewriteNoEditor'       => __( 'Could not find the editor to apply the rewrite. Reload the page and try again.', 'automated-blog-content-creator' ),
 						'rewriteBtn'            => __( 'Rewrite with AI', 'automated-blog-content-creator' ),
@@ -231,14 +231,14 @@ class ABCC_Plugin {
 						'regenerateSuccess'     => __( 'Done! Opening new draft…', 'automated-blog-content-creator' ),
 						'regenerateBtn'         => __( 'Regenerate as New Draft', 'automated-blog-content-creator' ),
 						/* translators: button label while infographic is being created */
-						'creating'              => __( 'Creating...', 'automated-blog-content-creator' ),
-						'generatingInfographic' => __( 'Generating infographic...', 'automated-blog-content-creator' ),
+						'creating'              => __( 'Creating…', 'automated-blog-content-creator' ),
+						'generatingInfographic' => __( 'Creating your infographic… this can take a minute.', 'automated-blog-content-creator' ),
 						'infographicSuccess'    => __( 'Infographic saved to the Media Library (not inserted into the post).', 'automated-blog-content-creator' ),
 						'infographicBtn'        => __( 'Create Infographic', 'automated-blog-content-creator' ),
 						'view'                  => __( 'View', 'automated-blog-content-creator' ),
 						'edit'                  => __( 'Edit', 'automated-blog-content-creator' ),
-						'networkError'          => __( 'Network error occurred', 'automated-blog-content-creator' ),
-						'unknownError'          => __( 'Unknown error', 'automated-blog-content-creator' ),
+						'networkError'          => __( 'Could not reach the server. Check your connection.', 'automated-blog-content-creator' ),
+						'unknownError'          => __( 'Something went wrong. Please try again.', 'automated-blog-content-creator' ),
 						'stillWorking'          => __( 'Still working… you can leave this page and check Content → Generation Log.', 'automated-blog-content-creator' ),
 						'generationFailed'      => __( 'Generation failed. Check Content → Generation Log.', 'automated-blog-content-creator' ),
 					),
@@ -277,7 +277,7 @@ class ABCC_Plugin {
 					'queuing'       => __( 'Queuing…', 'automated-blog-content-creator' ),
 					'queued'        => __( 'Queued!', 'automated-blog-content-creator' ),
 					'error'         => __( 'Something went wrong.', 'automated-blog-content-creator' ),
-					'networkError'  => __( 'Network error occurred', 'automated-blog-content-creator' ),
+					'networkError'  => __( 'Could not reach the server. Check your connection.', 'automated-blog-content-creator' ),
 					'confirmDelete' => __( 'Delete this topic? Posts it already generated are kept.', 'automated-blog-content-creator' ),
 				),
 			)

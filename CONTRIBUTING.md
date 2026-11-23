@@ -7,7 +7,7 @@ Thank you for your interest in contributing to WP-AutoInsight! This project is a
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- **WordPress 6.8+** (Development environment)
+- **WordPress 7.0+** (Development environment)
 - **PHP 7.4+**
 - **Composer** (for dependencies and linting)
 

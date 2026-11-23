@@ -17,240 +17,211 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Call a text-generation provider API and return a normalized result tuple.
  *
- * Single transport + parse layer shared by the four text providers (Claude,
- * OpenAI, Gemini, Perplexity). Adapter direction: the public
- * abcc_*_generate_text() functions call THIS wrapper and convert the tuple
- * back to their legacy return shapes, so abcc_generate_content() and the
- * provider registry callbacks need zero changes.
+ * The registry names the transport, endpoint and auth; per-model flags shape
+ * the request (includes/transport.php). The abcc_*_generate_text() adapters
+ * convert the tuple to their legacy return shapes.
  *
- * Truncation signals (verified against provider docs, 2026-06):
- * - OpenAI / Perplexity: choices[0].finish_reason === 'length'
- * - Claude:              stop_reason === 'max_tokens'
- * - Gemini:              candidates[0].finishReason === 'MAX_TOKENS'
- *
- * Text-only in v4.2 — image generation stays on its own path.
+ * Truncation signals:
+ * - OpenAI-compatible: choices[0].finish_reason === 'length'
+ * - Anthropic:         stop_reason === 'max_tokens'
+ * - Gemini:            candidates[0].finishReason === 'MAX_TOKENS'
  *
  * @since 4.2.0
- * @param string $provider Provider ID (openai|claude|gemini|perplexity).
- * @param string $model    Model identifier.
- * @param string $prompt   Text prompt.
- * @param array  $opts     Options: api_key (string), max_tokens (int),
- *                         temperature (float, OpenAI only).
- * @return array{content: array, usage: array, truncated: bool, error: WP_Error|null, raw: array|null}
- *               On failure 'error' is a WP_Error and 'content' is []. Never throws.
+ * @since 4.6.0 Data-driven transport; new opts and the tokens / served_model keys.
+ * @param string $provider Provider ID.
+ * @param string $model    Model identifier or 'provider::model' selection.
+ * @param string $prompt   User prompt.
+ * @param array  $opts     api_key (string), max_tokens (int), temperature (float),
+ *                         system (string), operation (string), response_format
+ *                         (array{schema, name}), require_json (bool), timeout (int).
+ * @return array{content: array, usage: array, tokens: array, truncated: bool, error: WP_Error|null, raw: array|null, served_model: string}
+ *               On failure 'error' is a WP_Error and 'content' is []. 'served_model' is
+ *               the bare ID actually sent ('' when nothing was sent). Never throws.
  */
 function abcc_call_provider_api( $provider, $model, $prompt, $opts = array() ) {
 	$result = array(
-		'content'   => array(),
-		'usage'     => array(),
-		'truncated' => false,
-		'error'     => null,
-		'raw'       => null,
+		'content'      => array(),
+		'usage'        => array(),
+		'tokens'       => array(
+			'input'     => null,
+			'output'    => null,
+			'reasoning' => null,
+		),
+		'truncated'    => false,
+		'error'        => null,
+		'raw'          => null,
+		'served_model' => '',
 	);
 
-	$api_key          = isset( $opts['api_key'] ) ? (string) $opts['api_key'] : '';
-	$requested_tokens = isset( $opts['max_tokens'] ) ? (int) $opts['max_tokens'] : 800;
-	$available_tokens = abcc_calculate_available_tokens( $prompt, $requested_tokens, $model );
-	$label            = ucfirst( $provider );
+	$provider  = sanitize_key( (string) $provider );
+	$config    = abcc_get_provider( $provider );
+	$transport = abcc_get_provider_transport( $provider );
+	$selection = abcc_parse_model_selection( $model );
+
+	if ( ! $config || '' === $transport ) {
+		$result['error'] = new WP_Error( 'abcc_unknown_provider', sprintf( 'Unknown text provider: %s', $provider ) );
+		return $result;
+	}
+
+	$label = ! empty( $config['name'] ) ? (string) $config['name'] : ucfirst( $provider );
+
+	if ( $selection['qualified'] && $selection['provider'] !== $provider ) {
+		$result['error'] = new WP_Error(
+			'abcc_unknown_model',
+			sprintf( 'Model selection does not belong to %s', $label ),
+			array(
+				'provider'           => $provider,
+				'selection_provider' => $selection['provider'],
+			)
+		);
+		return $result;
+	}
+
+	$model = $selection['model'];
+
+	if ( '' === $model ) {
+		$result['error'] = new WP_Error( 'abcc_unknown_model', sprintf( 'No model given for %s', $label ), array( 'provider' => $provider ) );
+		return $result;
+	}
+
+	$live_model = abcc_resolve_retired_model( $provider, $model );
+	if ( $live_model !== $model ) {
+		abcc_debug_log( sprintf( '%s retired %s; sending %s instead.', $label, $model, $live_model ) );
+		$model = $live_model;
+	}
+	$result['served_model'] = $model;
+
+	$can_serve = abcc_provider_can_serve_request( $provider, $model, $opts );
+	if ( is_wp_error( $can_serve ) ) {
+		$result['error'] = $can_serve;
+		return $result;
+	}
+
+	$flags    = abcc_get_model_flags( $provider, $model );
+	$messages = abcc_build_provider_messages( $prompt, $opts, $flags );
+
+	// Reserve, floor and max_output clamp in one place, shared with the cost estimate.
+	$requested_tokens = abcc_resolve_output_budget( isset( $opts['max_tokens'] ) ? (int) $opts['max_tokens'] : 800, $provider, $model );
+	$available_tokens = abcc_calculate_available_tokens( trim( $messages['system'] . "\n" . $messages['user'] ), $requested_tokens, $model, $provider );
 
 	if ( $available_tokens <= 0 ) {
 		$result['error'] = new WP_Error( 'context_overflow', __( 'Prompt exceeds model context — reduce keywords or character limit.', 'automated-blog-content-creator' ) );
 		return $result;
 	}
 
-	// --- Transport: produce a decoded response body or an error. ---
-	if ( 'openai' === $provider ) {
-		// OpenAI rides the existing client (custom-endpoint support, model verification).
-		$client   = new ABCC_OpenAI_Client( $api_key );
-		$response = $client->create_chat_completion(
-			array(
-				array(
-					'role'    => 'user',
-					// Verbatim — wp_kses_post() would entity-encode quotes and
-					// strip tag-like text from legitimate prompt input.
-					'content' => $prompt,
-				),
-			),
-			array(
-				'model'       => $model,
-				'max_tokens'  => $available_tokens,
-				'temperature' => isset( $opts['temperature'] ) ? (float) $opts['temperature'] : 0.8,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			abcc_handle_api_request_error( $response, 'OpenAI' );
-			$result['error'] = $response;
-			return $result;
-		}
-
-		$data = $response;
-	} else {
-		switch ( $provider ) {
-			case 'claude':
-				$url     = 'https://api.anthropic.com/v1/messages';
-				$headers = array(
-					'Content-Type'      => 'application/json',
-					'x-api-key'         => $api_key,
-					'anthropic-version' => '2023-06-01',
-				);
-				$body    = array(
-					'model'      => $model,
-					'max_tokens' => $available_tokens,
-					'messages'   => array(
-						array(
-							'role'    => 'user',
-							'content' => $prompt,
-						),
-					),
-				);
-				break;
-
-			case 'gemini':
-				$url               = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent';
-				$headers           = array(
-					'Content-Type'   => 'application/json',
-					'x-goog-api-key' => $api_key,
-				);
-				$generation_config = array( 'maxOutputTokens' => $available_tokens );
-				$thinking_budget   = abcc_get_model_thinking_budget( 'gemini', $model );
-				if ( null !== $thinking_budget ) {
-					$generation_config['thinkingConfig']   = array( 'thinkingBudget' => $thinking_budget );
-					$generation_config['maxOutputTokens'] += $thinking_budget;
-				}
-
-				$body = array(
-					'contents'         => array(
-						array( 'parts' => array( array( 'text' => $prompt ) ) ),
-					),
-					'generationConfig' => $generation_config,
-				);
-				break;
-
-			case 'perplexity':
-				$url     = 'https://api.perplexity.ai/chat/completions';
-				$headers = array(
-					'Content-Type'       => 'application/json',
-					'Authorization'      => 'Bearer ' . $api_key,
-					'X-Pplx-Integration' => 'wp-autoinsight',
-				);
-				$body    = array(
-					'model'      => $model,
-					'max_tokens' => $available_tokens,
-					'messages'   => array(
-						array(
-							'role'    => 'user',
-							'content' => $prompt,
-						),
-					),
-				);
-
-				$recency = abcc_get_setting( 'abcc_perplexity_recency_filter', '' );
-				if ( ! empty( $recency ) ) {
-					$body['search_recency_filter'] = $recency;
-				}
-				break;
-
-			default:
-				$result['error'] = new WP_Error( 'abcc_unknown_provider', sprintf( 'Unknown text provider: %s', $provider ) );
-				return $result;
-		}
-
-		$response = wp_remote_post(
-			$url,
-			array(
-				'headers' => $headers,
-				'body'    => wp_json_encode( $body ),
-				'timeout' => 60,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			abcc_debug_log( $label . ' API Error: ' . $response->get_error_message() );
-			$result['error'] = $response;
-			return $result;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code < 200 || $code >= 300 ) {
-			abcc_debug_log( $label . ' API HTTP ' . $code . ': ' . wp_remote_retrieve_body( $response ) );
-
-			// Status class drives both the user-facing message and (from v4.5)
-			// whether the fallback chain should retry. 401 is a config problem
-			// the user must see; 429 and 5xx are transient and retryable.
-			if ( 401 === $code || 403 === $code ) {
-				$error_code = 'abcc_provider_auth_error';
-			} elseif ( 402 === $code ) {
-				$error_code = 'abcc_provider_payment_required';
-			} elseif ( 429 === $code ) {
-				$error_code = 'abcc_provider_rate_limited';
-			} elseif ( $code >= 500 ) {
-				$error_code = 'abcc_provider_server_error';
-			} else {
-				$error_code = 'abcc_provider_http_error';
-			}
-
-			$result['error'] = new WP_Error(
-				$error_code,
-				sprintf( '%s API returned HTTP %d', $label, $code ),
-				array(
-					'status'   => $code,
-					'provider' => $provider,
-				)
-			);
-			return $result;
-		}
-
-		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	$request = abcc_build_provider_request( $config, $provider, $model, $messages, $opts, $available_tokens, $flags );
+	$args    = array(
+		'headers' => $request['headers'],
+		'body'    => wp_json_encode( $request['body'] ),
+		'timeout' => $request['timeout'],
+	);
+	if ( null !== $request['redirection'] ) {
+		$args['redirection'] = $request['redirection'];
 	}
-
-	// --- Parse: extract text, usage, and the per-provider truncation signal. ---
-	$result['raw'] = is_array( $data ) ? $data : null;
-
-	switch ( $provider ) {
-		case 'claude':
-			$text                = $data['content'][0]['text'] ?? null;
-			$result['usage']     = isset( $data['usage'] ) && is_array( $data['usage'] ) ? $data['usage'] : array();
-			$result['truncated'] = isset( $data['stop_reason'] ) && 'max_tokens' === $data['stop_reason'];
-			break;
-
-		case 'gemini':
-			$parts  = isset( $data['candidates'][0]['content']['parts'] ) && is_array( $data['candidates'][0]['content']['parts'] )
-				? $data['candidates'][0]['content']['parts']
-				: array();
-			$finish = (string) ( $data['candidates'][0]['finishReason'] ?? '' );
-			$chunks = array();
-			foreach ( $parts as $part ) {
-				// Thought parts are hidden reasoning, never post content.
-				if ( ! empty( $part['thought'] ) || ! isset( $part['text'] ) || ! is_string( $part['text'] ) ) {
-					continue;
-				}
-				$chunks[] = $part['text'];
-			}
-			$text                = ! empty( $chunks ) ? implode( "\n", $chunks ) : ( 'MAX_TOKENS' === $finish ? '' : null );
-			$result['usage']     = isset( $data['usageMetadata'] ) && is_array( $data['usageMetadata'] ) ? $data['usageMetadata'] : array();
-			$result['truncated'] = 'MAX_TOKENS' === $finish;
-			break;
-
-		case 'openai':
-		case 'perplexity':
-			$text                = $data['choices'][0]['message']['content'] ?? null;
-			$result['usage']     = isset( $data['usage'] ) && is_array( $data['usage'] ) ? $data['usage'] : array();
-			$result['truncated'] = 'length' === ( $data['choices'][0]['finish_reason'] ?? '' );
-			break;
+	// Core re-checks the host on every request, so a name that later resolves
+	// to a private address is refused.
+	if ( ! empty( $request['reject_unsafe_urls'] ) ) {
+		$args['reject_unsafe_urls'] = true;
 	}
-
-	if ( null === $text || ! is_string( $text ) ) {
-		abcc_debug_log( 'Unexpected ' . $label . ' response structure: ' . wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
-		$result['error'] = new WP_Error( 'abcc_provider_parse_error', sprintf( 'Unexpected %s response structure', $label ) );
+	if ( '' === $request['url'] ) {
+		$result['error'] = new WP_Error( 'abcc_unknown_provider', sprintf( '%s has no endpoint configured', $label ) );
 		return $result;
 	}
 
-	// Reasoning models return their thinking in <think>; kses would keep the
-	// text and turn it into paragraphs. Strip closed and truncated blocks.
-	if ( 'perplexity' === $provider ) {
-		$text = preg_replace( '#<think>.*?</think>\s*#is', '', $text );
-		$text = preg_replace( '#^\s*<think>.*\z#is', '', $text );
+	$response = wp_remote_post( $request['url'], $args );
+
+	if ( is_wp_error( $response ) ) {
+		abcc_debug_log( $label . ' API Error: ' . $response->get_error_message() );
+		$result['error'] = $response;
+		return $result;
+	}
+
+	$code = wp_remote_retrieve_response_code( $response );
+	$body = wp_remote_retrieve_body( $response );
+
+	if ( $code < 200 || $code >= 300 ) {
+		$api_key = isset( $opts['api_key'] ) ? (string) $opts['api_key'] : '';
+		$detail  = abcc_extract_provider_error_detail( $body, $api_key );
+		abcc_debug_log( $label . ' API HTTP ' . $code . ( '' !== $detail ? ': ' . $detail : '' ) );
+
+		$result['error'] = new WP_Error(
+			abcc_classify_provider_http_status( $code ),
+			sprintf( '%s API returned HTTP %d', $label, $code ),
+			array(
+				'status'   => $code,
+				'provider' => $provider,
+				'model'    => $model,
+				'detail'   => $detail,
+			)
+		);
+		return $result;
+	}
+
+	$data = json_decode( $body, true );
+
+	// A gateway can answer 200 and carry the upstream provider's failure in the body.
+	$embedded = abcc_get_embedded_provider_error( $data, isset( $opts['api_key'] ) ? (string) $opts['api_key'] : '' );
+	if ( null !== $embedded ) {
+		abcc_debug_log( $label . ' API returned an error in a 2xx response: ' . $embedded['detail'] );
+
+		$result['error'] = new WP_Error(
+			$embedded['status'] >= 400 ? abcc_classify_provider_http_status( $embedded['status'] ) : 'abcc_provider_server_error',
+			sprintf( '%s API returned an error', $label ),
+			array(
+				'status'   => $embedded['status'] >= 400 ? $embedded['status'] : $code,
+				'provider' => $provider,
+				'model'    => $model,
+				'detail'   => $embedded['detail'],
+			)
+		);
+		return $result;
+	}
+
+	$result['raw'] = is_array( $data ) ? $data : null;
+
+	// A router ID (openrouter/auto) is answered by some other model; record that one.
+	if ( ! empty( $config['gateway'] ) && 0 === strpos( $model, 'openrouter/' ) && is_array( $data ) && ! empty( $data['model'] ) && is_string( $data['model'] ) ) {
+		$result['served_model'] = sanitize_text_field( $data['model'] );
+	}
+
+	$parsed              = abcc_parse_provider_response( $transport, $data );
+	$result['usage']     = $parsed['usage'];
+	$result['tokens']    = $parsed['tokens'];
+	$result['truncated'] = $parsed['truncated'];
+
+	if ( $parsed['blocked'] ) {
+		$result['error'] = new WP_Error(
+			'abcc_provider_content_blocked',
+			sprintf( '%s blocked the prompt or refused the response', $label ),
+			array(
+				'provider' => $provider,
+				'model'    => $model,
+				'reason'   => $parsed['block_reason'],
+			)
+		);
+		return $result;
+	}
+
+	// Reasoning but no text: usage is kept, the reasoning itself is never logged.
+	if ( $parsed['reasoning_only'] ) {
+		abcc_debug_log( $label . ' returned reasoning and no text. Usage: ' . wp_json_encode( $result['usage'] ) );
+		$result['error'] = new WP_Error(
+			'abcc_reasoning_only',
+			sprintf( '%s spent the output budget on reasoning and returned no text', $label ),
+			array(
+				'provider' => $provider,
+				'model'    => $model,
+			)
+		);
+		return $result;
+	}
+
+	$text = $parsed['text'];
+
+	if ( null === $text || ! is_string( $text ) ) {
+		abcc_debug_log( 'Unexpected ' . $label . ' response structure; response body omitted from the log.' );
+		$result['error'] = new WP_Error( 'abcc_provider_parse_error', sprintf( 'Unexpected %s response structure', $label ) );
+		return $result;
 	}
 
 	// HTTP 200 with no text: reasoning models can burn the whole completion
@@ -531,9 +502,11 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 	$response = wp_remote_post(
 		'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
 		array(
-			'headers' => $headers,
-			'body'    => wp_json_encode( $body ),
-			'timeout' => 60,
+			'headers'            => $headers,
+			'body'               => wp_json_encode( $body ),
+			'timeout'            => 60,
+			'redirection'        => 0,
+			'reject_unsafe_urls' => true,
 		)
 	);
 
@@ -545,23 +518,16 @@ function abcc_stability_generate_images( $prompt, $n, $stability_key, $image_siz
 
 	$response_code = wp_remote_retrieve_response_code( $response );
 	if ( $response_code !== 200 ) {
-		abcc_debug_log( 'Stability AI API Error: Response code ' . $response_code );
-		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
-		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
-		abcc_set_last_image_error(
-			sprintf(
-				'Stability AI HTTP %d: %s',
-				$response_code,
-				is_array( $decoded ) && isset( $decoded['message'] ) && is_string( $decoded['message'] ) ? $decoded['message'] : ''
-			)
-		);
+		$detail = abcc_extract_provider_error_detail( wp_remote_retrieve_body( $response ), $stability_key );
+		abcc_debug_log( 'Stability AI API Error: Response code ' . $response_code . ( '' !== $detail ? ': ' . $detail : '' ) );
+		abcc_set_last_image_error( sprintf( 'Stability AI HTTP %d: %s', $response_code, $detail ) );
 		return false;
 	}
 
 	$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 	if ( empty( $body['artifacts'] ) || ! is_array( $body['artifacts'] ) ) {
-		abcc_debug_log( 'Stability AI: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		abcc_debug_log( 'Stability AI: Unexpected response format; response body omitted from the log.' );
 		abcc_set_last_image_error( 'Stability AI: unexpected response format.' );
 		return false;
 	}
@@ -690,12 +656,14 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 	$response = wp_remote_post(
 		$endpoint,
 		array(
-			'headers' => array(
+			'headers'            => array(
 				'Content-Type'   => 'application/json',
 				'x-goog-api-key' => $api_key,
 			),
-			'body'    => wp_json_encode( $body ),
-			'timeout' => 90,
+			'body'               => wp_json_encode( $body ),
+			'timeout'            => 90,
+			'redirection'        => 0,
+			'reject_unsafe_urls' => true,
 		)
 	);
 
@@ -707,16 +675,9 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 
 	$response_code = wp_remote_retrieve_response_code( $response );
 	if ( 200 !== $response_code ) {
-		abcc_debug_log( 'Gemini Image API Error: Response code ' . $response_code );
-		abcc_debug_log( 'Response body: ' . wp_remote_retrieve_body( $response ) );
-		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
-		abcc_set_last_image_error(
-			sprintf(
-				'Gemini HTTP %d: %s',
-				$response_code,
-				is_array( $decoded ) && isset( $decoded['error']['message'] ) && is_string( $decoded['error']['message'] ) ? $decoded['error']['message'] : ''
-			)
-		);
+		$detail = abcc_extract_provider_error_detail( wp_remote_retrieve_body( $response ), $api_key );
+		abcc_debug_log( 'Gemini Image API Error: Response code ' . $response_code . ( '' !== $detail ? ': ' . $detail : '' ) );
+		abcc_set_last_image_error( sprintf( 'Gemini HTTP %d: %s', $response_code, $detail ) );
 		return false;
 	}
 
@@ -724,7 +685,7 @@ function abcc_gemini_generate_images( $api_key, $prompt, $model = 'gemini-2.5-fl
 
 	// Look for image data in response.
 	if ( empty( $body['candidates'][0]['content']['parts'] ) ) {
-		abcc_debug_log( 'Gemini Image: Unexpected response format: ' . wp_json_encode( $body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		abcc_debug_log( 'Gemini Image: Unexpected response format; response body omitted from the log.' );
 		abcc_set_last_image_error( 'Gemini: the response contained no image (it may have been blocked by safety filters).' );
 		return false;
 	}
